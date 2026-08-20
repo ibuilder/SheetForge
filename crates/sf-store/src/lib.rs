@@ -341,6 +341,26 @@ impl Store {
             .collect()
     }
 
+    /// The revision holding these exact bytes, if this project already has one.
+    ///
+    /// What makes reopening a file return you to your markups instead of silently creating a
+    /// second revision of the same drawing and appearing to lose them.
+    ///
+    /// # Errors
+    /// If the query fails or the row does not parse.
+    pub fn revision_by_hash(&self, hash: ContentHash) -> Result<Option<DocumentRevision>> {
+        self.conn
+            .query_row(
+                "SELECT id, project_id, source_document_id, revision_label, content_sha256,
+                        byte_len, page_count, imported_at, imported_by
+                 FROM document_revisions WHERE content_sha256 = ?1 ORDER BY id LIMIT 1",
+                params![hash.to_hex()],
+                read_revision,
+            )
+            .optional()?
+            .transpose()
+    }
+
     /// One revision by id.
     ///
     /// # Errors

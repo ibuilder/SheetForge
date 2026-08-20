@@ -36,6 +36,7 @@ async function start(): Promise<void> {
     info,
     // `guard` reports its own failures, so these are deliberately not awaited: a click handler
     // that returned a promise would leave the caller with nothing useful to do with it.
+    onOpenPdf: () => void guard(() => openPdf(chrome)),
     onCreateProject: () => void guard(() => createProject(chrome)),
     onOpenProject: () => void guard(() => openProject(chrome)),
     onImport: () => void guard(() => importDrawings(chrome)),
@@ -53,8 +54,8 @@ async function start(): Promise<void> {
     }
   } else {
     chrome.setStatus(
-      "Running in a browser tab: you can view and mark up a drawing, but nothing is saved. " +
-        "Install the SheetForge application to keep a project.",
+      "Running in a browser tab: nothing can be opened or saved from here. " +
+        "Install the SheetForge application to review drawings.",
     );
   }
 }
@@ -74,6 +75,24 @@ async function guard(action: () => Promise<void>): Promise<void> {
     if (chrome) chrome.textContent = errorMessage(error);
     // Kept for the diagnostic bundle. The host's own log has the detail; this is the renderer side.
     console.error("SheetForge:", errorMessage(error));
+  }
+}
+
+/**
+ * The primary action: pick a PDF and show it.
+ *
+ * No project needs to exist first — the host creates one behind the drawing and tells us which,
+ * so the status line can say where the markups are being kept rather than leaving somebody to
+ * wonder whether they are being kept at all.
+ */
+async function openPdf(chrome: Chrome): Promise<void> {
+  chrome.setStatus("Opening…");
+  const opened = await host.pdfOpen();
+  chrome.setProject(opened.project);
+  chrome.setRevisions(await host.documentList());
+  await openRevision(chrome, opened.revision);
+  if (opened.reopened) {
+    chrome.setStatus(`${opened.revision.name} — reopened, with the markups you made on it.`);
   }
 }
 
@@ -117,6 +136,7 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
   session?.viewer.destroy();
   session = undefined;
 
+  chrome.clearEmptyState();
   const bytes = await host.documentBytes(revision.id);
   const viewer = await createViewer({
     container: chrome.stage,

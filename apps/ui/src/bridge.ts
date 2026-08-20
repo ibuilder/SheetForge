@@ -157,6 +157,16 @@ export interface HostCalibration {
   is_verified: boolean;
 }
 
+/** What opening a drawing produced. */
+export interface OpenedDrawing {
+  /** The project it went into — possibly one that was just created for it. */
+  project: ProjectSummary;
+  /** The drawing. */
+  revision: RevisionSummary;
+  /** True when this file was already in the project and its markups came back with it. */
+  reopened: boolean;
+}
+
 /** The result of checking a project's integrity. */
 export interface VerifyReport {
   ok: boolean;
@@ -209,6 +219,8 @@ export const host = {
   projectClose: () => call<void>("project_close"),
   projectVerify: () => call<VerifyReport>("project_verify"),
 
+  /** The primary action: pick a PDF and show it, creating a project behind it if needed. */
+  pdfOpen: () => call<OpenedDrawing>("pdf_open"),
   documentImport: () => call<RevisionSummary[]>("document_import"),
   documentList: () => call<RevisionSummary[]>("document_list"),
   /** The drawing's bytes, as an `ArrayBuffer` — raw, not JSON. */

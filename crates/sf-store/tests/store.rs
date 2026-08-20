@@ -819,3 +819,30 @@ fn no_error_message_from_the_store_leaks_a_path() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Reopening a drawing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_drawing_is_found_again_by_its_content_hash() {
+    // What makes "open this PDF again" return the reviewer to their markups instead of quietly
+    // filing a second revision of the same bytes and appearing to have lost them.
+    let fixture = fixture();
+    let found = fixture
+        .store
+        .revision_by_hash(fixture.revision.content_sha256)
+        .unwrap()
+        .expect("the revision that was just inserted");
+    assert_eq!(found.id, fixture.revision.id);
+    assert_eq!(found, fixture.revision);
+}
+
+#[test]
+fn a_drawing_that_is_not_in_the_project_is_not_found() {
+    // The other half: a different file must not match, or opening a new drawing would silently
+    // show the markups from an unrelated one.
+    let fixture = fixture();
+    let other = ContentHash::from_bytes([0x11; 32]);
+    assert!(fixture.store.revision_by_hash(other).unwrap().is_none());
+}

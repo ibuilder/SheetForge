@@ -26,6 +26,8 @@ export interface Chrome {
   setProject(project: ProjectSummary): void;
   setRevisions(revisions: RevisionSummary[]): void;
   setActiveRevision(revision: RevisionSummary): void;
+  /** Remove the "no drawing open" placeholder before the viewer mounts. */
+  clearEmptyState(): void;
   setStatus(message: string): void;
   askForProjectName(): string | undefined;
 }
@@ -39,6 +41,7 @@ export interface Chrome {
  */
 export interface ChromeHandlers {
   info: AppInfo | undefined;
+  onOpenPdf: () => void;
   onCreateProject: () => void;
   onOpenProject: () => void;
   onImport: () => void;
@@ -57,8 +60,17 @@ function element<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function button(label: string, onClick: () => void, hint: string): HTMLButtonElement {
-  const node = element("button", { type: "button", class: "sf-action", title: hint }, label);
+function button(
+  label: string,
+  onClick: () => void,
+  hint: string,
+  primary = false,
+): HTMLButtonElement {
+  const node = element(
+    "button",
+    { type: "button", class: primary ? "sf-action sf-action--primary" : "sf-action", title: hint },
+    label,
+  );
   node.addEventListener("click", onClick);
   return node;
 }
@@ -73,10 +85,14 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
   const projectName = element("span", { class: "sf-project", "data-project": "" }, "No project open");
 
   const actions = element("div", { class: "sf-actions", role: "toolbar", "aria-label": "Project" });
+  // Opening a drawing is what someone launched this to do, so it is first, it is emphasised, and
+  // it needs nothing set up beforehand. Project management sits behind it for the people who want
+  // it, rather than in front of everyone who does not.
   actions.append(
-    button("New project", handlers.onCreateProject, "Create a project package on this device"),
-    button("Open project", handlers.onOpenProject, "Open an existing .sfproj folder"),
-    button("Add drawings", handlers.onImport, "Import PDF drawings into the open project"),
+    button("Open PDF…", handlers.onOpenPdf, "Open a drawing. A project is created for it automatically", true),
+    button("Add drawings", handlers.onImport, "Add more PDFs to the project that is open"),
+    button("Open project", handlers.onOpenProject, "Open a project folder you saved earlier"),
+    button("New project", handlers.onCreateProject, "Create an empty project in a location you choose"),
     button("Check integrity", handlers.onVerify, "Re-hash every drawing and verify the audit trail"),
   );
   header.append(title, projectName, actions);
@@ -94,6 +110,24 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
   sidebar.append(sheetsHeading, list);
 
   const stage = element("main", { class: "sf-stage", "aria-label": "Drawing" });
+
+  const empty = element("div", { class: "sf-empty" });
+  empty.append(
+    element("p", { class: "sf-empty-title" }, "No drawing open"),
+    element(
+      "p",
+      { class: "sf-empty-hint" },
+      "Open a PDF to start reviewing. SheetForge keeps your markups, scales and measurements in a project folder it creates alongside it.",
+    ),
+  );
+  const emptyAction = element(
+    "button",
+    { type: "button", class: "sf-action sf-action--primary" },
+    "Open PDF…",
+  );
+  emptyAction.addEventListener("click", handlers.onOpenPdf);
+  empty.append(emptyAction);
+  stage.append(empty);
 
   const status = element("p", {
     class: "sf-status",
@@ -186,6 +220,10 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       revisions = next;
       focusIndex = 0;
       renderList();
+    },
+
+    clearEmptyState() {
+      empty.remove();
     },
 
     setActiveRevision(revision) {

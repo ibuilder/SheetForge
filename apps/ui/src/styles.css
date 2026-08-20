@@ -102,6 +102,32 @@ body {
 
 .sf-action:hover { border-color: var(--sf-muted); }
 
+/* The one action somebody launched the application to take. Weight and a border carry it as well
+   as colour, so it still reads as primary in high contrast and to a colour-blind reviewer. */
+.sf-action--primary {
+  background: var(--sf-accent);
+  border-color: var(--sf-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.sf-action--primary:hover { filter: brightness(1.08); }
+
+/* Shown until a drawing is open, in place of an empty grey rectangle that says nothing about
+   what to do next. */
+.sf-empty {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  height: 100%;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+.sf-empty-title { font-size: 1.05rem; font-weight: 600; margin: 0; }
+.sf-empty-hint { color: var(--sf-muted); margin: 0; max-width: 44ch; }
+.sf-empty .sf-action { margin-top: 0.6rem; }
+
 :where(.sf-action, .sf-sheets):focus-visible {
   outline: 2px solid var(--sf-focus);
   outline-offset: 2px;
@@ -207,5 +233,6 @@ body {
    non-colour cue. */
 @media (forced-colors: active) {
   .sf-action { border-color: ButtonBorder; }
+  .sf-action--primary { forced-color-adjust: none; background: Highlight; color: HighlightText; }
   .sf-sheet--active { border-left-color: Highlight; forced-color-adjust: none; }
 }

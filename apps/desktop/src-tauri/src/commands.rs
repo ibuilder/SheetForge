@@ -228,6 +228,21 @@ pub struct NewCalibration {
     pub preset_label: Option<String>,
 }
 
+/// What opening a drawing produced: the project it went into, and the drawing itself.
+///
+/// Both, because opening a PDF may have *created* the project, and the interface has to show
+/// which one it is now working in.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenedDrawing {
+    /// The project the drawing now belongs to.
+    pub project: ProjectSummary,
+    /// The drawing.
+    pub revision: RevisionDto,
+    /// True when this file was already in the project and its markups came back with it.
+    pub reopened: bool,
+}
+
 /// The result of checking a project.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -475,68 +490,100 @@ pub async fn document_import(app: AppHandle) -> CommandResult<Vec<RevisionDto>> 
                 let path = file
                     .into_path()
                     .map_err(|_| CommandError::invalid_request("That file cannot be read."))?;
-                // The sheet number as the job knows it. A filename is the only name available at
-                // import; the title-block extractor corrects it later if it can.
-                let name = path
-                    .file_stem()
-                    .and_then(|stem| stem.to_str())
-                    .unwrap_or("Untitled")
-                    .to_owned();
-
-                let bytes = std::fs::read(&path).map_err(|error| {
-                    log::error!(
-                        "import read failed: {}",
-                        sf_audit::redact(&error.to_string())
-                    );
-                    CommandError::invalid_request("That file could not be read.")
-                })?;
-
-                let hash = package.import_source(&bytes)?;
-                let page_count = count_pages(&bytes);
-                let project_id = package
-                    .store()
-                    .project()?
-                    .ok_or_else(CommandError::no_project)?
-                    .id;
-
-                let document = SourceDocument::new(project_id, &name, None)?;
-                package.store().insert_source_document(&document)?;
-
-                let revision = DocumentRevision::new(
-                    project_id,
-                    document.id,
-                    None,
-                    hash,
-                    bytes.len() as u64,
-                    page_count,
-                    state.actor().clone(),
-                )?;
-                package.store().insert_revision(&revision)?;
-
-                audit(
-                    package,
-                    state.actor(),
-                    "document:import",
-                    Outcome::Allowed,
-                    Record::new()
-                        .subject("document-revision", &revision.id.to_string())
-                        .with("pages", &page_count.to_string())
-                        .with("sha256", &hash.short()),
-                );
-
-                imported.push(RevisionDto {
-                    id: revision.id.to_string(),
-                    source_document_id: document.id.to_string(),
-                    name: document.name.clone(),
-                    revision_label: revision.revision_label.clone(),
-                    page_count: revision.page_count,
-                    short_hash: hash.short(),
-                    imported_at: revision
-                        .imported_at
-                        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                });
+                let (revision, _) = file_drawing(package, state.actor(), &path)?;
+                imported.push(revision);
             }
             Ok(imported)
+        })
+    })
+    .await
+    .map_err(|_| CommandError::internal())?
+}
+
+/// Open a PDF, creating a project for it if none is open.
+///
+/// The primary action, and the reason it exists: a reviewer who has been handed a drawing wants to
+/// look at it, not to be asked where their project folder should live. The project is still
+/// created — it is what holds the markups, the scales and the audit trail, and none of those have
+/// anywhere to live in a bare PDF — but it is created behind the drawing rather than in front of
+/// it, in a predictable place the interface then names.
+///
+/// # Errors
+/// [`CommandError::cancelled`] if the dialog is dismissed, or a package error.
+#[tauri::command]
+pub async fn pdf_open(app: AppHandle) -> CommandResult<OpenedDrawing> {
+    let version = app.package_info().version.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.require(Capability::DocumentImport)?;
+
+        let chosen = app
+            .dialog()
+            .file()
+            .set_title("Open drawing")
+            .add_filter("PDF drawings", &["pdf"])
+            .blocking_pick_file()
+            .ok_or_else(CommandError::cancelled)?;
+
+        let path = chosen
+            .into_path()
+            .map_err(|_| CommandError::invalid_request("That file cannot be read."))?;
+
+        // No project open: make one named after the drawing. Opening a second drawing later adds
+        // it to the same project rather than starting another, which is what somebody reviewing a
+        // set expects.
+        if !state.is_open() {
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Drawings")
+                .to_owned();
+            let root = default_project_root(&app, &stem)?;
+
+            let package = if root.exists() {
+                // Reopening the same drawing after a restart lands here, and lands back on the
+                // markups made last time.
+                let mut existing = Package::open(&root)?;
+                // Also on this path, not only on creation: a policy that tightened the limits
+                // would otherwise be ignored for every project opened this way.
+                existing.set_limits(*state.limits());
+                existing
+            } else {
+                let project = Project::new(&stem, None, None, state.actor().clone())?;
+                if let Some(parent) = root.parent() {
+                    std::fs::create_dir_all(parent).map_err(|error| {
+                        log::error!(
+                            "could not create the project folder: {}",
+                            sf_audit::redact(&error.to_string())
+                        );
+                        CommandError::internal()
+                    })?;
+                }
+                let mut created = Package::create(&root, &project, &version)?;
+                created.set_limits(*state.limits());
+                audit(
+                    &mut created,
+                    state.actor(),
+                    "project:create",
+                    Outcome::Allowed,
+                    Record::new().subject("project", &project.id.to_string()),
+                );
+                created
+            };
+            state.set_package(Some(package));
+        }
+
+        with_open(&state, |package| {
+            let (revision, reopened) = file_drawing(package, state.actor(), &path)?;
+            let project = package
+                .store()
+                .project()?
+                .ok_or_else(CommandError::no_project)?;
+            Ok(OpenedDrawing {
+                project: ProjectSummary::of(package, &project),
+                revision,
+                reopened,
+            })
         })
     })
     .await
@@ -906,6 +953,129 @@ pub async fn export_save(
     })
     .await
     .map_err(|_| CommandError::internal())?
+}
+
+/// File one PDF into the open package and record it as a revision.
+///
+/// Shared by `document_import` and `pdf_open` so the two cannot drift: the size check, the format
+/// sniff, the content addressing and the audit entry happen once, in one place.
+///
+/// If the project already holds a revision with these exact bytes, that revision is returned
+/// instead of a second one being created — which is what makes reopening the same file return you
+/// to the markups you made on it.
+fn file_drawing(
+    package: &mut Package,
+    actor: &ActorId,
+    path: &std::path::Path,
+) -> CommandResult<(RevisionDto, bool)> {
+    let name = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("Untitled")
+        .to_owned();
+
+    let bytes = std::fs::read(path).map_err(|error| {
+        log::error!(
+            "import read failed: {}",
+            sf_audit::redact(&error.to_string())
+        );
+        CommandError::invalid_request("That file could not be read.")
+    })?;
+
+    let hash = package.import_source(&bytes)?;
+
+    if let Some(existing) = package.store().revision_by_hash(hash)? {
+        let document = package
+            .store()
+            .source_documents(existing.project_id)?
+            .into_iter()
+            .find(|doc| doc.id == existing.source_document_id);
+        return Ok((
+            RevisionDto {
+                id: existing.id.to_string(),
+                source_document_id: existing.source_document_id.to_string(),
+                name: document.map_or(name, |doc| doc.name),
+                revision_label: existing.revision_label.clone(),
+                page_count: existing.page_count,
+                short_hash: hash.short(),
+                imported_at: existing
+                    .imported_at
+                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            },
+            true,
+        ));
+    }
+
+    let page_count = count_pages(&bytes);
+    let project_id = package
+        .store()
+        .project()?
+        .ok_or_else(CommandError::no_project)?
+        .id;
+
+    let document = SourceDocument::new(project_id, &name, None)?;
+    package.store().insert_source_document(&document)?;
+
+    let revision = DocumentRevision::new(
+        project_id,
+        document.id,
+        None,
+        hash,
+        bytes.len() as u64,
+        page_count,
+        actor.clone(),
+    )?;
+    package.store().insert_revision(&revision)?;
+
+    audit(
+        package,
+        actor,
+        "document:import",
+        Outcome::Allowed,
+        Record::new()
+            .subject("document-revision", &revision.id.to_string())
+            .with("pages", &page_count.to_string())
+            .with("sha256", &hash.short()),
+    );
+
+    Ok((
+        RevisionDto {
+            id: revision.id.to_string(),
+            source_document_id: document.id.to_string(),
+            name: document.name.clone(),
+            revision_label: revision.revision_label.clone(),
+            page_count: revision.page_count,
+            short_hash: hash.short(),
+            imported_at: revision
+                .imported_at
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        },
+        false,
+    ))
+}
+
+/// Where a project goes when the user did not choose a location.
+///
+/// Under the OS documents directory rather than beside the PDF: writing into whatever folder
+/// somebody's drawings happen to live in — often a synced share, sometimes read-only — is a
+/// surprise, and a predictable location is one they can find later without being told twice.
+fn default_project_root(app: &AppHandle, name: &str) -> CommandResult<std::path::PathBuf> {
+    use tauri::Manager;
+    let documents = app
+        .path()
+        .document_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|_| CommandError::internal())?;
+
+    // The name came from a filename and is about to become one again.
+    let safe = if sf_security::check_name(name).is_ok() {
+        name.to_owned()
+    } else {
+        "SheetForge project".to_owned()
+    };
+    Ok(documents
+        .join("SheetForge")
+        .join(format!("{safe}.{}", sf_package::EXTENSION)))
 }
 
 /// How many pages a PDF claims, read from its page tree without rendering anything.
