@@ -253,6 +253,27 @@ pub fn contained_path(root: &Path, relative: &str) -> Result<PathBuf> {
         });
     }
 
+    // Absolute and drive-qualified forms are rejected here, textually, rather than being left to
+    // `Path::components` — because `components` is *platform-dependent*, and this is a container
+    // format that travels between platforms.
+    //
+    // On Windows, `C:\Windows\System32\config\SAM` parses as a prefix plus a root and is caught as
+    // an escape. On Linux the same string parses as a single, oddly-named file: no prefix, no
+    // root, nothing to catch. A package crafted on one platform would then mean something
+    // different when opened on the other, which is exactly the divergence an attacker looks for.
+    // So the check is on the text, and it is the same everywhere.
+    let bytes = relative.as_bytes();
+    let drive_qualified = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    if relative.starts_with('/') || drive_qualified {
+        return Err(SecurityError::PathEscape);
+    }
+    // For the same reason, `/` is the only separator inside a package. A backslash anywhere is
+    // either a Windows path in disguise — including a UNC prefix — or a name Windows cannot
+    // represent. Both are refused.
+    if relative.contains('\\') {
+        return Err(SecurityError::PathEscape);
+    }
+
     let candidate = Path::new(relative);
     for component in candidate.components() {
         match component {
@@ -305,10 +326,11 @@ pub fn check_name(name: &str) -> Result<()> {
             reason: "it is longer than 255 characters",
         });
     }
-    if name
-        .chars()
-        .any(|c| matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*') || (c as u32) < 0x20)
-    {
+    // Separators are on the list too: a single path *component* containing one is either a path in
+    // disguise or a name that means something different on another platform.
+    if name.chars().any(|c| {
+        matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*' | '\\' | '/') || (c as u32) < 0x20
+    }) {
         return Err(SecurityError::UnusableName {
             reason: "it contains a character Windows reserves",
         });
@@ -622,6 +644,27 @@ mod tests {
             contained_path(&root(), r"\\fileserver\share\x.pdf"),
             Err(SecurityError::PathEscape)
         );
+    }
+
+    #[test]
+    fn windows_path_syntax_is_refused_identically_on_every_platform() {
+        // The regression this exists for. `Path::components` disagrees across platforms about what
+        // these strings are, so the check cannot be delegated to it: a package crafted on Windows
+        // must not mean something different when opened on Linux, where `C:\...` is not an
+        // absolute path at all but one oddly-named file.
+        for attempt in [
+            r"C:\Windows\System32\config\SAM",
+            r"c:/Windows/System32",
+            r"\\fileserver\share\x.pdf",
+            r"sources\..\..\secrets.txt",
+            r"sources\a.pdf",
+        ] {
+            assert_eq!(
+                contained_path(&root(), attempt),
+                Err(SecurityError::PathEscape),
+                "{attempt} must be refused on every platform, not only on Windows",
+            );
+        }
     }
 
     #[test]
