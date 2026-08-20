@@ -1,0 +1,66 @@
+# Dependency policy, enforced in CI. See docs/adr/0008-open-source-license-and-sbom-policy.md.
+#
+# The rule this file exists for: no copyleft anywhere in the shipped tree. A permissive
+# distribution with one AGPL component is not a permissive distribution.
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "deny"
+# Security vulnerabilities always fail the build.
+#
+# "Unmaintained" is scoped to crates this workspace depends on directly, because those are the
+# ones we can actually do something about. Tauri's Linux stack still binds GTK3, whose gtk-rs
+# bindings are flagged unmaintained (RUSTSEC-2024-0411 and neighbours) — that is upstream's
+# migration to make, and failing every build here would train people to ignore this check, which
+# is the outcome that actually costs us a real advisory later.
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+version = 2
+# Everything we are prepared to ship. Anything not on this list fails the build rather than
+# prompting a review, because "we will look at it later" is how an AGPL transitive dependency
+# reaches a release.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CC0-1.0",
+    "MPL-2.0",
+    "Unlicense",
+    "BSL-1.0",
+    # The Mozilla CA root store, vendored by the updater's TLS stack. Permissive despite the
+    # unfamiliar name — it is a data licence, and the data is a list of certificate authorities.
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+# MPL-2.0 is file-level copyleft rather than project-level: using an MPL crate unmodified does not
+# affect this project's licensing. Modifying one would, and that would need a decision.
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# The workspace crates depend on each other by path and carry no version requirement, which is a
+# wildcard by the letter of the rule and not by its intent — the rule exists to stop a wildcard on
+# a *published* crate, where it means "any future version, sight unseen".
+allow-wildcard-paths = true
+# Prohibited outright rather than reviewed. See ADR-0002.
+deny = [
+    { crate = "mupdf", reason = "AGPL-3.0; incompatible with a permissive distribution" },
+    { crate = "mupdf-sys", reason = "AGPL-3.0; incompatible with a permissive distribution" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

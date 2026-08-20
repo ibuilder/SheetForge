@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+# Binary assets, so git neither diffs nor mangles them.
+*.png binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# Generated; keep them out of diffs and out of language statistics.
+package-lock.json linguist-generated=true -diff
+Cargo.lock linguist-generated=true -diff

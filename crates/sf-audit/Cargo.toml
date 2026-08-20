@@ -1,0 +1,23 @@
+[package]
+name = "sf-audit"
+description = "SheetForge audit trail: hash-chained, tamper-evident events."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Internal to the application, not a crates.io library. Marked explicitly so a stray
+# `cargo publish` cannot push an application internal, and so the path dependencies
+# between these crates are understood as what they are rather than as wildcards.
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true

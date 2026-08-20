@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SheetForge — construction PDF review, markup and takeoff</title>
+<meta name="description" content="Free, open-source construction drawing review: PDF markup as structured records, calibrated takeoff with full provenance, revision compare and BCF interchange. Windows, macOS, Linux, iOS and Android. Works offline.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/icon.png" type="image/png">
+
+<meta property="og:title" content="SheetForge">
+<meta property="og:description" content="Free, open-source construction drawing review, markup and calibrated takeoff. Works offline.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ibuilder.github.io/SheetForge/">
+<meta property="og:image" content="https://ibuilder.github.io/SheetForge/assets/icon.png">
+
+<style>
+/*
+ * One page, one stylesheet, no build step and no framework — a documentation landing page that
+ * needs a toolchain to change is a landing page that stops getting changed.
+ *
+ * Nothing here carries meaning by colour alone: every accented element also has a label, a border
+ * or a heading doing the same job.
+ */
+:root {
+  --bg: #ffffff;
+  --panel: #f6f8fa;
+  --ink: #0d1725;
+  --muted: #55636f;
+  --line: #d8dee4;
+  --accent: #b4531a;
+  --accent-ink: #ffffff;
+  --focus: #1d6fd0;
+  --measure: 68rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --ink: #e6edf3;
+    --muted: #9aa7b4;
+    --line: #2b3440;
+    --accent: #e08a4a;
+    --accent-ink: #16202c;
+    --focus: #6aa9f0;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap { margin: 0 auto; max-width: var(--measure); padding: 0 1.25rem; }
+
+a { color: var(--accent); text-underline-offset: 0.15em; }
+a:focus-visible, .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 3px; }
+
+h1, h2, h3 { line-height: 1.2; letter-spacing: -0.015em; }
+
+/* ---- masthead ---- */
+header.hero { border-bottom: 1px solid var(--line); padding: 4.5rem 0 3.5rem; text-align: center; }
+.hero img { border-radius: 22%; height: 88px; width: 88px; }
+.hero h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); margin: 1.1rem 0 0.35rem; }
+.tagline { color: var(--muted); font-size: clamp(1.05rem, 2.4vw, 1.3rem); margin: 0 auto; max-width: 40ch; }
+.platforms {
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  margin-top: 1.1rem;
+  text-transform: uppercase;
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 0.7rem; justify-content: center; margin-top: 1.9rem; }
+.btn {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  display: inline-block;
+  font-weight: 600;
+  padding: 0.6rem 1.15rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* A banner, not a colour: the text says "early" so the styling is not carrying the message. */
+.notice {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  margin: 2.5rem auto 0;
+  max-width: 48rem;
+  padding: 0.9rem 1.1rem;
+  font-size: 0.93rem;
+  text-align: left;
+}
+.notice strong { display: block; }
+
+/* ---- sections ---- */
+section { padding: 3.5rem 0; }
+section + section { border-top: 1px solid var(--line); }
+section > .wrap > h2 { font-size: 1.7rem; margin: 0 0 0.4rem; }
+.lede { color: var(--muted); margin: 0 0 2rem; max-width: 60ch; }
+
+.grid { display: grid; gap: 1.1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 1.15rem 1.25rem;
+}
+.card h3 { font-size: 1.02rem; margin: 0 0 0.4rem; }
+.card p { color: var(--muted); font-size: 0.93rem; margin: 0; }
+
+/* ---- comparison ---- */
+.scroller { overflow-x: auto; }
+table { border-collapse: collapse; font-size: 0.92rem; min-width: 40rem; width: 100%; }
+th, td { border-bottom: 1px solid var(--line); padding: 0.6rem 0.7rem; text-align: left; vertical-align: top; }
+thead th { border-bottom-width: 2px; font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; }
+tbody th { font-weight: 500; }
+td.y::before { content: "Yes"; font-weight: 600; }
+td.n::before { content: "No"; color: var(--muted); }
+td.p::before { content: "Partly"; color: var(--muted); }
+
+/* ---- code ---- */
+pre {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-x: auto;
+  padding: 1rem 1.1rem;
+}
+code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; }
+pre code { font-size: 0.85rem; }
+
+/* ---- docs list ---- */
+.docs { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); list-style: none; margin: 0; padding: 0; }
+.docs a { display: block; border: 1px solid var(--line); border-radius: 8px; color: inherit; padding: 0.85rem 1rem; text-decoration: none; }
+.docs a:hover { border-color: var(--muted); }
+.docs strong { color: var(--accent); display: block; }
+.docs span { color: var(--muted); font-size: 0.88rem; }
+
+/* Present for assistive technology, absent visually — the surrounding heading already says
+   what the table is. */
+.visually-hidden {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.88rem; padding: 2.5rem 0; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-content: space-between; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+@media (forced-colors: active) {
+  .btn.primary { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .notice { border-left-color: Highlight; }
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <img src="assets/icon.png" alt="" width="88" height="88">
+    <h1>SheetForge</h1>
+    <p class="tagline">Construction drawing review, markup and calibrated takeoff. Free, open source, and it works with the network off.</p>
+    <p class="platforms">Windows · macOS · Linux · iOS · Android</p>
+
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/ibuilder/SheetForge/releases">Download</a>
+      <a class="btn" href="docs/guides/editing-pdfs.md">Marking up drawings</a>
+      <a class="btn" href="docs/guides/takeoffs.md">Takeoffs</a>
+      <a class="btn" href="https://github.com/ibuilder/SheetForge">Source</a>
+    </div>
+
+    <p class="notice">
+      <strong>Version 0.1 — early.</strong>
+      The core is built and tested; the shell is young. Release binaries are not yet code-signed,
+      so your operating system will warn on install. What is verified and what is not is listed in
+      <a href="docs/status.md">the status page</a>, gaps included.
+    </p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>A markup is a record, not ink</h2>
+    <p class="lede">
+      That single decision is what separates a review desk from a document annotator. A revision
+      cloud carries who raised it, against which revision of which sheet, in which discipline, what
+      it measures, who owns it and when it is due. The shape on screen is one projection of that
+      record; CSV, XFDF, BCF and a flattened PDF are others.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h3>The redline vocabulary</h3>
+        <p>Clouds with real scalloped arcs, callouts, stamps, symbols, issue pins — and highlight
+           and strikeout that select actual glyphs, so a selection across three lines draws three
+           bands rather than one block over the margins.</p>
+      </div>
+      <div class="card">
+        <h3>Takeoff you can defend</h3>
+        <p>Every quantity keeps the raw page magnitude it came from, so re-calibrating a page
+           re-derives every measurement on it. An uncalibrated measurement reads as underived, not
+           as zero.</p>
+      </div>
+      <div class="card">
+        <h3>Scale per page, never per document</h3>
+        <p>A plan sheet and the enlarged detail beside it are different scales. A document-wide
+           factor produces confidently wrong numbers on half the set.</p>
+      </div>
+      <div class="card">
+        <h3>Slip-sheets that do not lie</h3>
+        <p>Two issues are aligned before they are compared, because plot origins drift. Each markup
+           gets a verdict — unchanged, relocated, or needs a human — instead of being silently
+           reapplied over content that has since changed.</p>
+      </div>
+      <div class="card">
+        <h3>Specifications as links</h3>
+        <p>A CSI spec book parses into addressable sections and clauses, so <code>07 84 00
+           §1.2.A</code> is something you can click rather than a string somebody typed.</p>
+      </div>
+      <div class="card">
+        <h3>A trail that resists editing</h3>
+        <p>Every act is a hash-chained audit entry. Altering one breaks every digest after it, and
+           verification names the first failure. Tamper-evident — and honest about not being
+           tamper-proof.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>How it compares</h2>
+    <p class="lede">
+      Bluebeam Revu is the tool this industry runs on, and it is a good one. It is also per-seat and
+      increasingly subscription-gated, which puts it out of reach of the subcontractors, small
+      consultancies and public-sector teams handed the same drawings.
+    </p>
+
+    <div class="scroller">
+      <table>
+        <caption class="visually-hidden">Feature comparison</caption>
+        <thead>
+          <tr><th scope="col">&nbsp;</th><th scope="col">SheetForge</th><th scope="col">Bluebeam Revu</th><th scope="col">General PDF editors</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Licence</th><td>Apache-2.0, free</td><td>Per-seat subscription</td><td>Per-seat subscription</td></tr>
+          <tr><th scope="row">Platforms</th><td>Win · macOS · Linux · iOS · Android</td><td>Windows (iPad viewer)</td><td>Varies</td></tr>
+          <tr><th scope="row">Markups as structured records</th><td class="y"></td><td class="y"></td><td class="n"></td></tr>
+          <tr><th scope="row">Calibrated takeoff with provenance</th><td class="y"></td><td class="y"></td><td class="n"></td></tr>
+          <tr><th scope="row">Revision compare and slip-sheet migration</th><td class="y"></td><td class="y"></td><td class="n"></td></tr>
+          <tr><th scope="row">BCF round-trip to the coordination model</th><td class="y"></td><td class="p"></td><td class="n"></td></tr>
+          <tr><th scope="row">CSI specification parsing and citation</th><td class="y"></td><td class="n"></td><td class="n"></td></tr>
+          <tr><th scope="row">Tamper-evident audit trail</th><td class="y"></td><td class="n"></td><td class="n"></td></tr>
+          <tr><th scope="row">Works fully offline</th><td class="y"></td><td class="y"></td><td>Varies</td></tr>
+          <tr><th scope="row">Editing the PDF's own content</th><td class="n"></td><td class="p"></td><td class="y"></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:1.5rem;color:var(--muted);max-width:60ch">
+      The last row is the honest one. SheetForge does not rewrite the text and graphics inside
+      somebody else's drawing, and it is not going to. On a construction job the issued PDF is the
+      governing document; editing it is a liability, not a feature.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Your drawings stay yours</h2>
+    <p class="lede">
+      No account, no cloud, no telemetry. The only outbound connection in the product is the update
+      check, and it can be turned off.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3>A project is a folder</h3>
+        <p>Drawings, markups, scales and the audit trail in one <code>.sfproj</code> directory you
+           can see, back up and hand to somebody. Delete it and it is gone; there is no other copy.</p>
+      </div>
+      <div class="card">
+        <h3>The issued bytes are untouched</h3>
+        <p>Source PDFs are stored byte-identical and addressed by SHA-256. A package whose drawings
+           were altered on disk fails its integrity check rather than opening with different
+           drawings than the markups were made against.</p>
+      </div>
+      <div class="card">
+        <h3>The webview cannot reach your disk</h3>
+        <p>No filesystem plugin, no shell, no generic bridge, and no command that accepts a path.
+           File pickers run on the native side and only an opaque id crosses back.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Build it yourself</h2>
+    <p class="lede">Needs Node 20.11+, Rust 1.82+ and your platform's Tauri prerequisites.</p>
+<pre><code>git clone https://github.com/ibuilder/SheetForge.git
+cd SheetForge
+npm install
+npm run desktop:dev</code></pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Documentation</h2>
+    <ul class="docs">
+      <li><a href="docs/guides/editing-pdfs.md"><strong>Marking up drawings</strong><span>The toolset, the review workflow, exports and slip-sheeting</span></a></li>
+      <li><a href="docs/guides/takeoffs.md"><strong>Takeoffs</strong><span>Calibration, measurement, and numbers that survive a challenge</span></a></li>
+      <li><a href="docs/architecture.md"><strong>Architecture</strong><span>The five decisions everything else follows from</span></a></li>
+      <li><a href="docs/adr/"><strong>Decision records</strong><span>What was decided, what it costs, what would reverse it</span></a></li>
+      <li><a href="docs/SECURITY.md"><strong>Security</strong><span>The threat model, and the limits stated plainly</span></a></li>
+      <li><a href="docs/PRIVACY.md"><strong>Privacy</strong><span>What is collected: nothing</span></a></li>
+      <li><a href="docs/status.md"><strong>Status</strong><span>What is verified, and what is not</span></a></li>
+      <li><a href="docs/roadmap.md"><strong>Roadmap</strong><span>What is next, and what is deliberately not coming</span></a></li>
+      <li><a href="docs/mobile.md"><strong>Mobile</strong><span>Building and running on iOS and Android</span></a></li>
+      <li><a href="docs/CONTRIBUTING.md"><strong>Contributing</strong><span>How to help, and the one rule with no exceptions</span></a></li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Apache-2.0. Built on <a href="https://github.com/MassingCloud/massing-pdf">massing-pdf</a>, <a href="https://mozilla.github.io/pdf.js/">pdf.js</a> and <a href="https://tauri.app">Tauri</a>.</span>
+    <span>“SheetForge” has not had trademark clearance — <a href="docs/adr/0009-trademark-and-brand-clearance-status.md">see the record</a>.</span>
+  </div>
+</footer>
+
+</body>
+</html>

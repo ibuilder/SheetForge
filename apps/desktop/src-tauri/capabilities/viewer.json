@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "viewer",
+  "description": "The baseline the interface needs to exist: core window and event access, plus the platform facts the diagnostics panel reports. Notably absent: any filesystem, shell or HTTP permission. Note that Tauri's ACL governs core and plugin commands; SheetForge's own commands are gated on the Rust side by the capability model in sf-security, which is where 'may this person delete somebody else's markup' is decided.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "os:allow-platform",
+    "os:allow-version"
+  ]
+}

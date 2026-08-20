@@ -1,0 +1,79 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SheetForge",
+  "version": "0.1.0",
+  "identifier": "app.sheetforge.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev -w @sheetforge/ui",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build -w @sheetforge/ui",
+    "frontendDist": "../../ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "SheetForge",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 880,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost blob: data:; media-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; manifest-src 'self'",
+      "dangerousDisableAssetCspModification": false,
+      "capabilities": ["viewer", "exporter", "updates"],
+      "assetProtocol": {
+        "enable": false,
+        "scope": []
+      }
+    },
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Construction PDF review, markup and takeoff.",
+    "longDescription": "SheetForge opens construction drawing sets, records markups as structured project records rather than as ink, measures against a calibrated scale with full provenance, and keeps everything in a local project package that works with the network off.",
+    "copyright": "Licensed under the Apache License 2.0.",
+    "publisher": "SheetForge contributors",
+    "licenseFile": "../../../LICENSE",
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "languages": ["English"]
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1NTBEN0IyODFFRDcxQTAKUldTZ2NlMkJzdGRRTlFDejlhSGRhTmNhc01maUxOcjdCemdZZWYzTC83UW9hR21Ub1Z2K0JWOHYK",
+      "endpoints": [
+        "https://github.com/ibuilder/SheetForge/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

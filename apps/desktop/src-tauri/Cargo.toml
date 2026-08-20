@@ -1,0 +1,46 @@
+[package]
+name = "sheetforge"
+description = "SheetForge — construction PDF review, markup and takeoff."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Internal to the application, not a crates.io library. Marked explicitly so a stray
+# `cargo publish` cannot push an application internal, and so the path dependencies
+# between these crates are understood as what they are rather than as wildcards.
+publish = false
+
+[lib]
+# The mobile entry point needs a library target, and `sheetforge` is taken by the binary, so the
+# library carries the `_lib` suffix Tauri's own templates use.
+name = "sheetforge_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+sf-audit.workspace = true
+sf-domain.workspace = true
+sf-package.workspace = true
+sf-security.workspace = true
+sf-store.workspace = true
+
+chrono.workspace = true
+log = "0.4"
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-os = "2"
+tauri-plugin-process = "2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"

@@ -1,0 +1,34 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One pull request for the Tauri family: they release together and updating one without the
+      # others produces a version-mismatch failure that looks like a bug in our code.
+      tauri:
+        patterns: ["tauri", "tauri-*"]
+      rust-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      tauri-js:
+        patterns: ["@tauri-apps/*"]
+      # pdfjs-dist and pdf-lib are peer dependencies of the drawing engine. Bumping them without
+      # the engine can put two copies of the pdf.js worker on the page, which fails confusingly.
+      pdf:
+        patterns: ["pdfjs-dist", "pdf-lib"]
+      dev:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

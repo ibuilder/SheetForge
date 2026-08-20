@@ -1,0 +1,46 @@
+# Build output
+/target/
+node_modules/
+dist/
+dist-demo/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/target/
+
+# Generated at build time from the capability files
+apps/desktop/src-tauri/schemas/
+
+# Signing material. Never commit any of these — the release private key lives in the CI secret
+# store and on nothing else. See docs/runbooks/release.md.
+*.key
+*.key.pub
+*.p12
+*.pfx
+*.pem
+*.jks
+*.keystore
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Test and tooling output
+playwright-report/
+test-results/
+coverage/
+*.log
+
+# Never commit real project documents. Fixtures must be synthetic, open-licensed or explicitly
+# authorised — see CONTRIBUTING.md.
+tests/fixtures/private/
+*.sfproj/
+
+# Built documentation site
+_site/

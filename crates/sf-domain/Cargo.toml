@@ -1,0 +1,24 @@
+[package]
+name = "sf-domain"
+description = "SheetForge domain model: entities, invariants and state transitions. No I/O, no framework."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Internal to the application, not a crates.io library. Marked explicitly so a stray
+# `cargo publish` cannot push an application internal, and so the path dependencies
+# between these crates are understood as what they are rather than as wildcards.
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono.workspace = true
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true

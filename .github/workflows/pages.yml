@@ -1,0 +1,48 @@
+name: Documentation site
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "docs/**", "README.md", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one mid-flight — a half-deployed site is worse than
+# a stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --foreground-scripts
+      # Renders the repository's own Markdown through one shell, so the docs on the site and the
+      # docs a contributor reads are the same files and cannot drift.
+      - run: npm run site:build
+      # A rename that orphans a cross-reference fails the build rather than shipping a 404.
+      - run: npm run site:check
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

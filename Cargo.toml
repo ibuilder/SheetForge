@@ -1,0 +1,59 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sf-domain",
+    "crates/sf-audit",
+    "crates/sf-store",
+    "crates/sf-package",
+    "crates/sf-security",
+    "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "Apache-2.0"
+repository = "https://github.com/ibuilder/SheetForge"
+authors = ["SheetForge contributors"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# The product name is a proper noun, not an identifier; backticking it everywhere reads worse.
+doc_markdown = "allow"
+module_name_repetitions = "allow"
+
+[workspace.dependencies]
+sf-domain = { path = "crates/sf-domain" }
+sf-audit = { path = "crates/sf-audit" }
+sf-store = { path = "crates/sf-store" }
+sf-package = { path = "crates/sf-package" }
+sf-security = { path = "crates/sf-security" }
+
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+hex = "0.4"
+rusqlite = { version = "0.40", features = ["bundled", "chrono", "uuid"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+uuid = { version = "1", features = ["v7", "serde", "std"] }
+
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+[profile.dev]
+# Debug builds of a PDF pipeline are unusably slow without this; deps are optimised, our
+# own crates stay debuggable.
+[profile.dev.package."*"]
+opt-level = 2

@@ -1,0 +1,211 @@
+/*
+ * The chrome around the drawing engine.
+ *
+ * Two rules govern everything here. First, the drawing is the subject: the interface is a neutral
+ * frame and never competes with the sheet for attention, which is why the palette is greys and one
+ * accent. Second, nothing means anything by colour alone — an active sheet carries a bar *and* an
+ * accessible selected state, because a redline reviewer may well be colour-blind and a drawing
+ * office is full of people who are.
+ *
+ * The engine ships its own stylesheet and owns everything inside `.sf-stage`.
+ */
+
+:root {
+  --sf-bg: #f5f6f8;
+  --sf-panel: #ffffff;
+  --sf-ink: #0d1725;
+  --sf-muted: #5b6b7d;
+  --sf-line: #d7dee6;
+  --sf-accent: #b4531a;
+  --sf-focus: #1d6fd0;
+  --sf-header-h: 3rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sf-bg: #10151c;
+    --sf-panel: #171e27;
+    --sf-ink: #e8edf3;
+    --sf-muted: #93a3b4;
+    --sf-line: #2a3543;
+    --sf-accent: #e08a4a;
+    --sf-focus: #6aa9f0;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: var(--sf-bg);
+  color: var(--sf-ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* The application is a window, not a document: the sheet scrolls, the frame does not. */
+  overflow: hidden;
+}
+
+.sf-root {
+  display: grid;
+  grid-template-rows: var(--sf-header-h) 1fr auto;
+  height: 100vh;
+  /* Respect the notch and the home indicator on iOS, where this same bundle runs. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.sf-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0.75rem;
+  background: var(--sf-panel);
+  border-bottom: 1px solid var(--sf-line);
+}
+
+.sf-title {
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.sf-project {
+  color: var(--sf-muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sf-actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.sf-action {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--sf-line);
+  border-radius: 5px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.6rem;
+  white-space: nowrap;
+  /* A comfortable touch target on a tablet on site, without inflating the desktop toolbar. */
+  min-height: 2rem;
+}
+
+.sf-action:hover { border-color: var(--sf-muted); }
+
+:where(.sf-action, .sf-sheets):focus-visible {
+  outline: 2px solid var(--sf-focus);
+  outline-offset: 2px;
+}
+
+.sf-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 15rem) 1fr;
+  min-height: 0;
+}
+
+.sf-sidebar {
+  background: var(--sf-panel);
+  border-right: 1px solid var(--sf-line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sf-sidebar-heading {
+  color: var(--sf-muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  margin: 0;
+  padding: 0.7rem 0.75rem 0.4rem;
+  text-transform: uppercase;
+}
+
+.sf-sheets {
+  list-style: none;
+  margin: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 0 0.5rem;
+}
+
+.sf-sheet {
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.sf-sheet:hover { background: color-mix(in srgb, var(--sf-focus) 8%, transparent); }
+
+.sf-sheet--active {
+  background: color-mix(in srgb, var(--sf-accent) 12%, transparent);
+  border-left-color: var(--sf-accent);
+  /* The bar and the background are reinforced by aria-selected on the element itself, so the
+     active sheet is announced rather than only shown. */
+  font-weight: 600;
+}
+
+.sf-sheet-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sf-sheet-meta {
+  color: var(--sf-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-sheets-empty {
+  color: var(--sf-muted);
+  font-size: 0.82rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.sf-stage {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.sf-status {
+  background: var(--sf-panel);
+  border-top: 1px solid var(--sf-line);
+  color: var(--sf-muted);
+  font-size: 0.78rem;
+  margin: 0;
+  overflow: hidden;
+  padding: 0.35rem 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A phone or a narrow tablet: the sheet index becomes a strip above the drawing rather than
+   stealing a third of the width from it. */
+@media (max-width: 720px) {
+  .sf-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .sf-sidebar { border-bottom: 1px solid var(--sf-line); border-right: none; max-height: 9rem; }
+  .sf-title { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* Windows High Contrast: system colours replace the palette, and the active sheet keeps a
+   non-colour cue. */
+@media (forced-colors: active) {
+  .sf-action { border-color: ButtonBorder; }
+  .sf-sheet--active { border-left-color: Highlight; forced-color-adjust: none; }
+}

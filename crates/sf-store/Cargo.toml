@@ -1,0 +1,33 @@
+[package]
+name = "sf-store"
+description = "SheetForge local project store: SQLite schema, migrations and repositories."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Internal to the application, not a crates.io library. Marked explicitly so a stray
+# `cargo publish` cannot push an application internal, and so the path dependencies
+# between these crates are understood as what they are rather than as wildcards.
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sf-audit.workspace = true
+sf-domain.workspace = true
+
+chrono.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# The tamper-detection tests reach past the store on purpose, to prove the file itself defends
+# the audit trail rather than only this crate's methods doing so.
+rusqlite.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true

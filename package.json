@@ -1,0 +1,40 @@
+{
+  "name": "sheetforge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SheetForge — open-source construction PDF review, markup and takeoff for Windows, macOS, Linux, iOS and Android.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "workspaces": [
+    "apps/ui"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @sheetforge/ui",
+    "build": "npm run build -w @sheetforge/ui",
+    "typecheck": "npm run typecheck -w @sheetforge/ui",
+    "lint": "npm run lint -w @sheetforge/ui",
+    "test": "npm run test -w @sheetforge/ui",
+    "test:e2e": "npm run test:e2e -w @sheetforge/ui",
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "check:licences": "node scripts/check-licences.mjs",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "rs:fmt": "cargo fmt --all --check",
+    "rs:lint": "cargo clippy --workspace --all-targets -- -D warnings",
+    "rs:test": "cargo test --workspace",
+    "site:build": "node scripts/build-site.mjs",
+    "site:check": "node scripts/check-site-links.mjs",
+    "site": "npm run site:build && npm run site:check"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.0",
+    "marked": "^18.0.10"
+  },
+  "allowScripts": {
+    "github:MassingCloud/massing-pdf#36794b3c54fcfd62e3a0d2d5984cfc45cac83340": true
+  }
+}
