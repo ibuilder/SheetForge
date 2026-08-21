@@ -112,6 +112,60 @@ body {
 }
 .sf-action--primary:hover { filter: brightness(1.08); }
 
+/* ---- menus ---- */
+
+.sf-menu { position: relative; }
+
+.sf-menu-trigger::after { content: ""; }
+
+/* `display` on a class beats the user-agent's `[hidden] { display: none }`, so without this the
+   menu is permanently open — which is exactly what the browser test caught. */
+.sf-menu-list[hidden] { display: none; }
+
+.sf-menu-list {
+  background: var(--sf-panel);
+  border: 1px solid var(--sf-line);
+  border-radius: 7px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  display: flex;
+  flex-direction: column;
+  min-width: 15rem;
+  padding: 0.3rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  /* Above the drawing engine's own panels, which establish stacking contexts of their own. */
+  z-index: 40;
+}
+
+.sf-menu-item {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sf-menu-item:hover:not(:disabled) { background: color-mix(in srgb, var(--sf-focus) 14%, transparent); }
+.sf-menu-item:focus-visible { outline: 2px solid var(--sf-focus); outline-offset: -2px; }
+.sf-menu-item:disabled { color: var(--sf-muted); cursor: default; opacity: 0.65; }
+
+.sf-menu-sep { border: 0; border-top: 1px solid var(--sf-line); margin: 0.3rem 0.2rem; }
+
+.sf-menu-empty {
+  color: var(--sf-muted);
+  font-size: 0.82rem;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  white-space: nowrap;
+}
+
 /* Shown until a drawing is open, in place of an empty grey rectangle that says nothing about
    what to do next. */
 .sf-empty {
@@ -260,4 +314,38 @@ body {
   .sf-action { border-color: ButtonBorder; }
   .sf-action--primary { forced-color-adjust: none; background: Highlight; color: HighlightText; }
   .sf-sheet--active { border-left-color: Highlight; forced-color-adjust: none; }
+}
+
+/* ---- toolbar icons ----
+   The engine renders its buttons with a Unicode glyph as text; `icons.ts` swaps in a Lucide SVG
+   afterwards. These rules make the result sit correctly in a button that was laid out for a
+   character, and inherit colour so armed and disabled states keep working untouched. */
+
+.sf-icon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* The engine sizes its buttons around a glyph's line box; centring the SVG inside keeps the
+     existing button metrics rather than forcing a toolbar relayout. */
+  margin: auto;
+}
+
+/* Deleting a markup is the one destructive control in the row, and a row of identical grey icons
+   makes it as easy to hit as any other. Colour is reinforced by the icon's own shape and by the
+   button's existing label, so nothing is carried by hue alone. */
+.sf-stage [data-id="edit.delete"] .sf-icon,
+.sf-stage [data-id="migration.discard"] .sf-icon,
+.sf-stage [data-id="compare.clearClouds"] .sf-icon {
+  stroke: #c0392b;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sf-stage [data-id="edit.delete"] .sf-icon,
+  .sf-stage [data-id="migration.discard"] .sf-icon,
+  .sf-stage [data-id="compare.clearClouds"] .sf-icon {
+    stroke: #ff8a80;
+  }
 }

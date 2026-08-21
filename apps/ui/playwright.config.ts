@@ -21,7 +21,11 @@ export default defineConfig({
   webServer: {
     command: "npm run build && npm run preview -- --port 4173 --strictPort",
     url: "http://127.0.0.1:4173",
-    reuseExistingServer: !process.env["CI"],
+    // Never reuse. The command builds first, and reusing a server skips the build — which means
+    // the suite quietly tests whatever bundle happened to be there last time. That cost an hour
+    // once already: a CSS fix appeared not to work because the test was running against the old
+    // dist. A slow, honest suite beats a fast one that lies.
+    reuseExistingServer: false,
     // The build is part of the command, so the first start is slow by design.
     timeout: 180_000,
   },

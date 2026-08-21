@@ -186,3 +186,57 @@ test.describe("opening a drawing", () => {
     await expect(toolbar).toBeVisible();
   });
 });
+
+test.describe("getting work back out", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+  });
+
+  test("export is a named menu, not a glyph to hunt for", async ({ page }) => {
+    // The complaint this replaces: the export actions existed only as unlabelled icons among about
+    // fifty others in the engine's toolbar, which is the same as not existing.
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    const header = page.getByRole("toolbar", { name: "Project" });
+    await header.getByRole("button", { name: /^Export/ }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+
+    // Built from the engine's registry, so these are the real actions rather than a static list
+    // that can fall out of step with what the engine actually offers.
+    await expect(menu.getByRole("menuitem", { name: "marked-up PDF…" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "takeoff (CSV)…" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "XFDF…", exact: true })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "BCF topics…" })).toBeVisible();
+    // Imports live here too, below a separator: they are the same kind of act in the other
+    // direction, and a reviewer looking for "bring markups in" looks where they sent them out.
+    await expect(menu.getByRole("menuitem", { name: "Import XFDF…" })).toBeVisible();
+  });
+
+  test("the menu closes on Escape and returns focus", async ({ page }) => {
+    await page.goto("/");
+    const trigger = page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ });
+    await trigger.click();
+    await expect(page.getByRole("menu")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toBeHidden();
+    // Losing focus to the document body after Escape strands a keyboard user.
+    await expect(trigger).toBeFocused();
+  });
+
+  test("project housekeeping is reachable but not competing for attention", async ({ page }) => {
+    await page.goto("/");
+    // Three controls in the header, not five: open, export, project.
+    const header = page.getByRole("toolbar", { name: "Project" });
+    await expect(header.getByRole("button")).toHaveCount(3);
+
+    await header.getByRole("button", { name: /^Project/ }).click();
+    const menu = page.getByRole("menu");
+    for (const name of [/Add drawings/, /Open project/, /New project/, /Check integrity/]) {
+      await expect(menu.getByRole("menuitem", { name })).toBeVisible();
+    }
+  });
+});

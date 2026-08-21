@@ -38,6 +38,19 @@ is the native shell around it. Pinned to a commit rather than a range, so a buil
 | `thiserror` | MIT or Apache-2.0 | <https://github.com/dtolnay/thiserror> |
 | `log` | MIT or Apache-2.0 | <https://github.com/rust-lang/log> |
 
+## Icons
+
+| Component | Licence | Source |
+|---|---|---|
+| [Lucide](https://lucide.dev) (`lucide-static`) | ISC | <https://github.com/lucide-icons/lucide> |
+
+The toolbar icon set. Only the icons the interface actually uses are imported, so only those are
+bundled. Lucide is a fork of [Feather](https://github.com/feathericons/feather) (MIT); both notices
+are preserved in the installed package.
+
+The engine ships Unicode glyphs as its default icons; SheetForge replaces them at runtime — see
+`apps/ui/src/icons.ts` for why that is done in the host rather than upstream.
+
 ## Build and test
 
 | Component | Licence |

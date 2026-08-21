@@ -3,19 +3,43 @@
  *
  * The engine brings its own toolbar, panels and markup list. What it does not have — because it is
  * a library and has no opinion about where documents come from — is a project. This module is that
- * shell: which project is open, which drawings are in it, which one is on screen, and one status
- * line that says what just happened.
+ * shell: which project is open, which drawings are in it, which one is on screen, whether the work
+ * is saved, and one status line that says what just happened.
  *
- * Built with plain DOM rather than a framework. The interface has one screen and perhaps twenty
- * interactive elements; a framework here would add a dependency, a build step and a render model
- * to a surface that is smaller than the engine's own toolbar.
+ * ## Why so few buttons
  *
- * Keyboard access is not decoration: a reviewer works a set with one hand on the keyboard. Every
- * control is a real `<button>`, the drawing list is a single tab stop with arrow-key navigation,
- * and the status line is a live region so a change is announced rather than merely displayed.
+ * An earlier version put five equal-weight buttons up here, four of which were project bookkeeping.
+ * That is backwards. Opening a drawing and getting the result back out are what somebody came to
+ * do; the rest is housekeeping they need occasionally. So the header is three controls — **Open
+ * PDF**, **Export**, **Project** — and the last two are menus with words in them.
+ *
+ * The export menu is built from the engine's own action registry rather than a hand-written list,
+ * so an exporter added to the engine appears here without anyone remembering to add it. The engine
+ * also offers these as icons in its toolbar, but a glyph among fifty others is discoverable by
+ * nobody, which is why they are named here.
+ *
+ * Built with plain DOM rather than a framework. One screen, perhaps thirty interactive elements; a
+ * framework would add a dependency, a build step and a render model to a surface smaller than the
+ * engine's own toolbar.
+ *
+ * Keyboard access is not decoration — a reviewer works a set with one hand on the keyboard. Every
+ * control is a real `<button>`, menus follow the usual arrow/Escape/Home/End conventions, the
+ * drawing list is a single tab stop with arrow-key navigation, and the status line is a live region.
  */
 
 import type { AppInfo, ProjectSummary, RevisionSummary } from "./bridge";
+
+/** One entry in a menu. */
+export interface MenuItem {
+  id: string;
+  label: string;
+  /** Greyed out with a reason, rather than hidden — a menu that changes shape is hard to learn. */
+  enabled: boolean;
+  /** Why it is unavailable, shown on hover. */
+  reason?: string;
+  /** Starts a visual group above this item. */
+  separatorBefore?: boolean;
+}
 
 /** What `main` needs from the chrome once it is mounted. */
 export interface Chrome {
@@ -49,6 +73,13 @@ export interface ChromeHandlers {
   onImport: () => void;
   onSelectRevision: (revision: RevisionSummary) => void;
   onVerify: () => void;
+  /**
+   * The export and import actions the engine currently offers, read when the menu opens so that
+   * "enabled" reflects the document actually on screen rather than the one that was there when the
+   * chrome was built.
+   */
+  exportItems: () => MenuItem[];
+  onExport: (id: string) => void;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -77,6 +108,117 @@ function button(
   return node;
 }
 
+/**
+ * A dropdown menu.
+ *
+ * Hand-rolled rather than a `<select>` or a library: a `<select>` cannot carry disabled items with
+ * explanations or separators, and this is about sixty lines. `items()` is called on open rather
+ * than at build time, because whether "Export marked-up PDF" is available depends on whether there
+ * is anything to export *now*.
+ */
+function menu(
+  label: string,
+  hint: string,
+  items: () => MenuItem[],
+  onChoose: (id: string) => void,
+): HTMLElement {
+  const wrap = element("div", { class: "sf-menu" });
+  const trigger = element(
+    "button",
+    {
+      type: "button",
+      class: "sf-action sf-menu-trigger",
+      title: hint,
+      "aria-haspopup": "menu",
+      "aria-expanded": "false",
+    },
+    label,
+  );
+  const list = element("div", { class: "sf-menu-list", role: "menu", hidden: "" });
+  wrap.append(trigger, list);
+
+  let entries: HTMLButtonElement[] = [];
+
+  const close = (returnFocus = false): void => {
+    list.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    if (returnFocus) trigger.focus();
+  };
+
+  const open = (): void => {
+    list.replaceChildren();
+    entries = [];
+    const current = items();
+    if (current.length === 0) {
+      list.append(element("p", { class: "sf-menu-empty" }, "Open a drawing first."));
+    }
+    for (const item of current) {
+      if (item.separatorBefore) list.append(element("hr", { class: "sf-menu-sep" }));
+      const entry = element(
+        "button",
+        {
+          type: "button",
+          class: "sf-menu-item",
+          role: "menuitem",
+          ...(item.enabled ? {} : { disabled: "", title: item.reason ?? "Not available yet" }),
+        },
+        item.label,
+      );
+      if (item.enabled) {
+        entry.addEventListener("click", () => {
+          close();
+          onChoose(item.id);
+        });
+        entries.push(entry);
+      }
+      list.append(entry);
+    }
+    list.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    entries[0]?.focus();
+  };
+
+  trigger.addEventListener("click", () => (list.hidden ? open() : close()));
+
+  wrap.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !list.hidden) {
+      event.preventDefault();
+      close(true);
+      return;
+    }
+    if (list.hidden) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        open();
+      }
+      return;
+    }
+    const index = entries.indexOf(document.activeElement as HTMLButtonElement);
+    const move: Record<string, number> = {
+      ArrowDown: index + 1,
+      ArrowUp: index - 1,
+      Home: 0,
+      End: entries.length - 1,
+    };
+    const next = move[event.key];
+    if (next !== undefined && entries.length > 0) {
+      event.preventDefault();
+      entries[Math.min(Math.max(next, 0), entries.length - 1)]?.focus();
+    }
+  });
+
+  // Clicking elsewhere or tabbing out dismisses it — the behaviour every menu has, and whose
+  // absence is immediately noticeable.
+  document.addEventListener("click", (event) => {
+    if (!list.hidden && !wrap.contains(event.target as Node)) close();
+  });
+  wrap.addEventListener("focusout", (event) => {
+    if (!wrap.contains(event.relatedTarget as Node)) close();
+  });
+
+  return wrap;
+}
+
 /** Build the chrome into `root` and return the handle to drive it. */
 export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome {
   root.replaceChildren();
@@ -87,15 +229,35 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
   const projectName = element("span", { class: "sf-project", "data-project": "" }, "No project open");
 
   const actions = element("div", { class: "sf-actions", role: "toolbar", "aria-label": "Project" });
-  // Opening a drawing is what someone launched this to do, so it is first, it is emphasised, and
-  // it needs nothing set up beforehand. Project management sits behind it for the people who want
-  // it, rather than in front of everyone who does not.
   actions.append(
-    button("Open PDF…", handlers.onOpenPdf, "Open a drawing. A project is created for it automatically", true),
-    button("Add drawings", handlers.onImport, "Add more PDFs to the project that is open"),
-    button("Open project", handlers.onOpenProject, "Open a project folder you saved earlier"),
-    button("New project", handlers.onCreateProject, "Create an empty project in a location you choose"),
-    button("Check integrity", handlers.onVerify, "Re-hash every drawing and verify the audit trail"),
+    button(
+      "Open PDF…",
+      handlers.onOpenPdf,
+      "Open a drawing. A project is created for it automatically",
+      true,
+    ),
+    menu(
+      "Export ▾",
+      "Get the markups, the takeoff or the marked-up drawing back out",
+      handlers.exportItems,
+      handlers.onExport,
+    ),
+    menu(
+      "Project ▾",
+      "Add drawings, switch project, or check this one",
+      () => [
+        { id: "import", label: "Add drawings…", enabled: true },
+        { id: "open", label: "Open project…", enabled: true, separatorBefore: true },
+        { id: "new", label: "New project…", enabled: true },
+        { id: "verify", label: "Check integrity", enabled: true, separatorBefore: true },
+      ],
+      (id) => {
+        if (id === "import") handlers.onImport();
+        else if (id === "open") handlers.onOpenProject();
+        else if (id === "new") handlers.onCreateProject();
+        else handlers.onVerify();
+      },
+    ),
   );
   header.append(title, projectName, actions);
 
@@ -233,15 +395,15 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       renderList();
     },
 
-    clearEmptyState() {
-      empty.remove();
-    },
-
     setActiveRevision(revision) {
       activeId = revision.id;
       const index = revisions.findIndex((candidate) => candidate.id === revision.id);
       if (index >= 0) focusIndex = index;
       renderList();
+    },
+
+    clearEmptyState() {
+      empty.remove();
     },
 
     setStatus(message) {

@@ -17,12 +17,15 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { HostAdapter } from "./adapter";
 import type { AppInfo, RevisionSummary } from "./bridge";
 import { errorMessage, hasHost, host, isCommandError } from "./bridge";
-import { mountChrome, type Chrome } from "./chrome";
+import { mountChrome, type Chrome, type MenuItem } from "./chrome";
+import { applyIcons } from "./icons";
 import "./styles.css";
 
 interface Session {
   viewer: Viewer;
   revision: RevisionSummary;
+  /** Stops the icon observer. Called before the viewer is destroyed, or it outlives its DOM. */
+  stopIcons: () => void;
 }
 
 let session: Session | undefined;
@@ -42,6 +45,8 @@ async function start(): Promise<void> {
     onImport: () => void guard(() => importDrawings(chrome)),
     onSelectRevision: (revision) => void guard(() => openRevision(chrome, revision)),
     onVerify: () => void guard(() => verify(chrome)),
+    exportItems,
+    onExport: (id) => void guard(() => runExport(id)),
   });
 
   if (info) {
@@ -76,6 +81,65 @@ async function guard(action: () => Promise<void>): Promise<void> {
     // Kept for the diagnostic bundle. The host's own log has the detail; this is the renderer side.
     console.error("SheetForge:", errorMessage(error));
   }
+}
+
+/**
+ * The Export menu, built from the engine's own action registry.
+ *
+ * Read from the live viewer rather than hard-coded, for two reasons. An exporter added to the
+ * engine turns up here without anyone remembering to add it — the failure mode of a hand-written
+ * list is that it silently falls behind. And each action reports whether it is available *now*, so
+ * "Export takeoff" greys out on a document with no measurements instead of failing after the click.
+ *
+ * The engine offers the same actions as icons in its own toolbar. Repeating them here with words is
+ * the point: a glyph among fifty others is discoverable by nobody.
+ */
+function exportItems(): MenuItem[] {
+  const viewer = session?.viewer;
+  if (!viewer) {
+    return [
+      { id: "export.pdf", label: "Marked-up PDF…", enabled: false, reason: "Open a drawing first" },
+      { id: "export.takeoff", label: "Takeoff (CSV)…", enabled: false, reason: "Open a drawing first" },
+      { id: "export.csv", label: "Markup list (CSV)…", enabled: false, reason: "Open a drawing first" },
+    ];
+  }
+
+  // The engine groups its input/output actions under "io". Ordering is ours, because the registry
+  // order is registration order and this is the order somebody reaches for them in.
+  const preferred = [
+    "export.pdf",
+    "export.csv",
+    "export.takeoff",
+    "export.xfdf",
+    "export.bcf",
+    "export.bcfzip",
+    "export.json",
+    "import.xfdf",
+    "import.json",
+  ];
+  const byId = new Map(viewer.actionList.filter((a) => a.group === "io").map((a) => [a.id, a]));
+  const ordered = [
+    ...preferred.map((id) => byId.get(id)).filter((a) => a !== undefined),
+    // Anything the engine has that this list has not heard of still appears, at the end.
+    ...viewer.actionList.filter((a) => a.group === "io" && !preferred.includes(a.id)),
+  ];
+
+  return ordered.map((action, index) => ({
+    id: action.id,
+    // The engine labels these for a tooltip beside an icon ("Export marked-up PDF"); in a menu
+    // headed "Export" the verb is redundant, and the ellipsis says a dialog is coming.
+    label: `${action.label.replace(/^Export /, "").replace(/^Import /, "Import ")}…`,
+    enabled: action.enabled?.(viewer) ?? true,
+    reason: "Nothing to export from this drawing yet",
+    separatorBefore: action.id.startsWith("import.") && !ordered[index - 1]?.id.startsWith("import."),
+  }));
+}
+
+/** Run one of them. The engine produces the bytes; the host writes them where the user says. */
+async function runExport(id: string): Promise<void> {
+  const viewer = session?.viewer;
+  if (!viewer) return;
+  await viewer.runAction(id);
 }
 
 /**
@@ -133,6 +197,7 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
   // The previous viewer owns a pdf.js document, its worker tasks and a tile cache. Dropping the
   // reference without destroying it leaks all three, and on a large set that is the difference
   // between opening twenty sheets and running out of memory on the eighth.
+  session?.stopIcons();
   session?.viewer.destroy();
   session = undefined;
 
@@ -188,7 +253,9 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
 
   await viewer.load(new Uint8Array(bytes));
   chrome.setSaveState("saved");
-  session = { viewer, revision };
+  // After load, so the icons cover tools that register while a document is opening.
+  const stopIcons = applyIcons(chrome.stage);
+  session = { viewer, revision, stopIcons };
   chrome.setActiveRevision(revision);
   chrome.setStatus(
     `${revision.name}${revision.revisionLabel ? ` rev ${revision.revisionLabel}` : ""} — ` +
