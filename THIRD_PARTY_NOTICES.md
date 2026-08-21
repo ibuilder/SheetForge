@@ -60,6 +60,9 @@ The engine ships Unicode glyphs as its default icons; SheetForge replaces them a
 | ESLint, `typescript-eslint` | MIT |
 | Playwright | Apache-2.0 |
 | `happy-dom` | MIT |
+| `@axe-core/playwright`, `axe-core` | MPL-2.0 |
+| `tesseract.js`, `tesseract.js-core` | Apache-2.0 |
+| `lucide-static` | ISC |
 | `tempfile` | MIT or Apache-2.0 |
 
 Not shipped in the binary.

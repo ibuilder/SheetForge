@@ -265,13 +265,12 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
   const sheetsHeading = element("h2", { class: "sf-sidebar-heading", id: "sf-sheets-heading" }, "Drawings");
   // One tab stop for the whole list, arrow keys within it — the pattern a long sheet index needs,
   // and the one the engine's own lists use, so the two behave alike.
-  const list = element("ul", {
-    class: "sf-sheets",
-    role: "listbox",
-    tabindex: "0",
-    "aria-labelledby": "sf-sheets-heading",
-  });
-  sidebar.append(sheetsHeading, list);
+  const list = element("ul", { class: "sf-sheets", "aria-labelledby": "sf-sheets-heading" });
+  // The empty message lives outside the list, not inside it. A `listbox` whose only child is a
+  // presentational element is an accessibility error — `aria-required-children` — and a screen
+  // reader announces a list of options containing nothing selectable. Found by the axe suite.
+  const sheetsEmpty = element("p", { class: "sf-sheets-empty" }, "No drawings yet.");
+  sidebar.append(sheetsHeading, list, sheetsEmpty);
 
   const stage = element("main", { class: "sf-stage", "aria-label": "Drawing" });
 
@@ -319,12 +318,19 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
 
   function renderList(): void {
     list.replaceChildren();
+
+    // An empty list is not a listbox: there is nothing to choose and nothing to arrow through, so
+    // taking a tab stop for it would strand a keyboard user on an empty control.
     if (revisions.length === 0) {
-      list.append(
-        element("li", { class: "sf-sheets-empty", role: "presentation" }, "No drawings yet."),
-      );
+      list.removeAttribute("role");
+      list.removeAttribute("tabindex");
+      list.removeAttribute("aria-activedescendant");
+      sheetsEmpty.hidden = false;
       return;
     }
+    list.setAttribute("role", "listbox");
+    list.setAttribute("tabindex", "0");
+    sheetsEmpty.hidden = true;
     revisions.forEach((revision, index) => {
       const selected = revision.id === activeId;
       const item = element("li", {

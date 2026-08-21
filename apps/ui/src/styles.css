@@ -249,6 +249,7 @@ body {
 .sf-sheets-empty {
   color: var(--sf-muted);
   font-size: 0.82rem;
+  margin: 0;
   padding: 0.4rem 0.75rem;
 }
 

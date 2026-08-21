@@ -38,9 +38,11 @@ The README calls this early. This page says exactly how early, because "producti
 | OCR runs entirely from bundled files, with nothing off-origin | Browser test recognises real pixels with every non-origin request blocked | `apps/ui/e2e/ocr.spec.ts` |
 | A dropped drawing opens, and the interface never sees a path | Browser test pushes the host's drop event through a faithful IPC stub | `apps/ui/e2e/open-drawing.spec.ts` |
 | The XLSX summary is a workbook Excel will actually open | 18 unit tests over the written parts, unpacked and inspected with a separate zip reader | `apps/ui/test/xlsx.test.ts` |
+| No serious WCAG 2.1 A/AA violations, including in forced colours | axe over the whole page — the drawing engine's interface included, not excluded | `apps/ui/e2e/accessibility.spec.ts` |
+| Every header control is reachable and visible by keyboard alone | Real tab presses, then a computed-style check for a focus indicator | `apps/ui/e2e/accessibility.spec.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
 
-**Totals: 204 Rust tests, 42 TypeScript unit tests, 10 browser tests.** The Rust figure includes
+**Totals: 204 Rust tests, 42 TypeScript unit tests, 20 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -64,7 +66,8 @@ Listed because omitting them would make the table above dishonest.
 | **Built and run on Windows only** | macOS, Linux, iOS and Android are configured and compile in CI, but have not been run by a human | 0.2 |
 | **Binaries are unsigned** | SmartScreen and Gatekeeper will warn | 0.2 |
 | **No third-party security review** | No audit, no penetration test | 1.0 |
-| **Accessibility is implemented, not verified** | Keyboard operation and semantics are built in and partly tested upstream; no screen-reader testing has been done here | 1.0 |
+| **No screen-reader testing** | Automated rule checking now runs on every build — axe over WCAG 2.1 A and AA, keyboard operation driven with real key presses, forced-colours and reduced-motion emulated — and it found a real ARIA defect on its first run. But automated tools catch perhaps a third of real barriers, and nobody who uses a screen reader has tried this | 1.0 |
+| **Spatial accuracy on a drawing is a visual task** | No amount of markup makes placing a measurement on a sheet non-visual. Stated rather than solved | — |
 | **OCR accuracy is not measured against real sheets** | The browser test proves the engine loads and reads clean lettering. How it copes with a dyeline scan of a 1974 drawing is unmeasured here, and the engine's own benchmark says the answer is "poorly on small text" | 0.3 |
 | **Migrations are tested at one version** | There is one schema version, so cross-version migration is untested by construction | when there are two |
 | **The SBOM is not signed** | CI now produces a CycloneDX bill of materials over the resolved dependency tree on every run and keeps it for 90 days. Signing it, and attaching it to releases, is still outstanding | 0.3 |

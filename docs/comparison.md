@@ -43,7 +43,6 @@ Things Bluebeam has, that construction people actually use, that we should build
 
 | Gap | Why it matters | Priority |
 |---|---|---|
-| **OCR wired to a provider** | Half the drawings on a refurbishment job are scans. Without OCR, search, spec parsing and title-block extraction all return nothing on them. The engine has the whole pipeline — tiling, coordinate mapping, provider interface — and no provider is configured, so the feature is dark | **0.2 — highest** |
 | **Page assembly** — extract, delete, rotate, reorder, insert, split | Sending one sheet from a 200-sheet set is a daily act. This is *document assembly*, not content editing: it never rewrites a content stream, so it does not violate our immutability rule — a new revision is written, the original stays untouched | 0.3 |
 | **Batch operations across a set** | Bluebeam's Batch menu is a genuine differentiator: batch header/footer, batch link, batch summary. Reviewing a set means doing things to 200 sheets at once | 0.3 |
 | **Encrypted / password-protected PDFs** | They arrive. Today we refuse them without a useful message; we should prompt and open | 0.3 |
@@ -51,6 +50,16 @@ Things Bluebeam has, that construction people actually use, that we should build
 | **Compare across a whole set**, not two sheets | Slip-sheeting a 200-sheet reissue one sheet at a time is not a workflow | 0.4 |
 | **Tool chests / company tool sets that travel** | Partly present. What is missing is import/export so an organisation can standardise | 0.3 |
 | **Digital signatures (verification)** | Reading and *verifying* an existing signature is legitimate and useful. Creating legally-operative ones is not — see below | 0.4 |
+
+---
+
+### Closed since this was written
+
+| Gap | How |
+|---|---|
+| **OCR** | Tesseract and its English model bundled, running on the device with nothing leaving the machine. Weak on small title-block lettering — a better on-device engine is still wanted |
+| **Markup summary to XLSX** | Three sheets: register, takeoff with provenance, roll-up by cost code |
+| **Drag-and-drop** | Handled in Rust, so the interface never sees a path |
 
 ---
 
