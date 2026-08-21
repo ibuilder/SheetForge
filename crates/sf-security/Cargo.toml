@@ -20,4 +20,7 @@ serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+# Property tests over the hostile-input boundary: see tests/hostile_input.rs for why this surface
+# needs generated inputs rather than only the cases somebody thought of.
+proptest = "1"
 tempfile.workspace = true

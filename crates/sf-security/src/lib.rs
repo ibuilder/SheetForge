@@ -275,6 +275,7 @@ pub fn contained_path(root: &Path, relative: &str) -> Result<PathBuf> {
     }
 
     let candidate = Path::new(relative);
+    let mut named_something = false;
     for component in candidate.components() {
         match component {
             Component::Normal(part) => {
@@ -282,6 +283,7 @@ pub fn contained_path(root: &Path, relative: &str) -> Result<PathBuf> {
                     reason: "it is not valid Unicode",
                 })?;
                 check_name(name)?;
+                named_something = true;
             }
             // Everything else is either an escape or an absolute anchor.
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
@@ -290,6 +292,15 @@ pub fn contained_path(root: &Path, relative: &str) -> Result<PathBuf> {
             // `./` is harmless and is simply skipped.
             Component::CurDir => {}
         }
+    }
+
+    // `.` and `./` walk to the package directory itself. Nothing inside a package should ever name
+    // the package, and a caller that then opens the result for writing is asking the platform to
+    // replace a directory with a file. Found by a property test rather than by imagination.
+    if !named_something {
+        return Err(SecurityError::UnusableName {
+            reason: "it names the project folder rather than a file inside it",
+        });
     }
 
     let joined = root.join(candidate);

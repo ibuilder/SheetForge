@@ -100,6 +100,30 @@ jobs:
           # licenses: the no-copyleft rule from ADR-0008. sources: only crates.io.
           command: check advisories bans licenses sources
 
+  sbom:
+    name: Bill of materials
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # Installed first so the SBOM covers the *resolved* tree — the transitive dependencies that
+      # actually ship — rather than the ranges the manifests ask for.
+      - run: npm ci --foreground-scripts
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: sheetforge-sbom.cyclonedx.json
+          output-file: sheetforge-sbom.cyclonedx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sheetforge-sbom.cyclonedx.json
+          retention-days: 90
+
   desktop:
     name: Desktop build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

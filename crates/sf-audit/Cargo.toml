@@ -15,6 +15,11 @@ publish = false
 [lints]
 workspace = true
 
+[dev-dependencies]
+# The audit trail's whole claim is that *any* tampering is detected, which is a property over all
+# edits rather than the four an example test happens to try. See tests/tamper.rs.
+proptest = "1"
+
 [dependencies]
 hex.workspace = true
 serde.workspace = true

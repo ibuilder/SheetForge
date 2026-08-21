@@ -19,6 +19,10 @@ The README calls this early. This page says exactly how early, because "producti
 | Tampering with the audit trail is detected | 18 unit tests, including a forged entry that fixes its own hash | `sf-audit` |
 | The audit trail cannot be updated or deleted, even by raw SQL | Store integration test against a real file | `sf-store/tests/store.rs` |
 | A committed write survives an abrupt close | Store integration test (leaked connection, no checkpoint) | `sf-store/tests/store.rs` |
+| A committed write survives the process being killed | A real child process is spawned, commits, and is terminated with no chance to clean up | `sf-store/tests/crash.rs` |
+| No generated path escapes the project package | Property test over thousands of adversarial strings; found and fixed a real defect | `sf-security/tests/hostile_input.rs` |
+| Any tampering with the audit trail is detected | Property test over generated chains and generated edits, including re-signing the forged entry | `sf-audit/tests/tamper.rs` |
+| Re-calibrating equals measuring at the new scale from the start | Property test over generated kinds, magnitudes and scale factors | `sf-domain/tests/invariants.rs` |
 | A drawing altered on disk fails verification | Package test | `sf-package` |
 | A missing drawing reports as missing, not as corrupt | Package test | `sf-package` |
 | An engine record round-trips verbatim, including unknown fields | UI mapping test | `apps/ui/test/mapping.test.ts` |
@@ -34,7 +38,9 @@ The README calls this early. This page says exactly how early, because "producti
 | OCR runs entirely from bundled files, with nothing off-origin | Browser test recognises real pixels with every non-origin request blocked | `apps/ui/e2e/ocr.spec.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
 
-**Totals: 169 Rust tests, 24 TypeScript unit tests, 7 browser tests.** Clippy clean at `-D warnings` with pedantic lints
+**Totals: 204 Rust tests, 24 TypeScript unit tests, 7 browser tests.** The Rust figure includes
+property tests that generate thousands of inputs each — path containment, format sniffing, audit
+tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
 `exactOptionalPropertyTypes`; ESLint clean on type-checked rules.
 
@@ -50,16 +56,16 @@ Listed because omitting them would make the table above dishonest.
 |---|---|---|
 | **The IPC seam is stubbed, not driven** | The browser suite mocks `invoke` at the Tauri boundary, so everything above it is real code and everything below it — the commands, the dialogs — is covered only by Rust tests and by hand. A test that drives the packaged application has not been written | 0.2 |
 | **The native file dialogs are not driven by any test** | They sit below the stub. Exercised by hand only | 0.2 |
-| **No fuzzing of hostile PDF input** | Bounds are unit-tested; the parser is not fuzzed. Largest security gap | 0.2 |
+| **The PDF parser itself is not fuzzed** | Path containment, format sniffing, size arithmetic and the audit chain now have property tests generating thousands of inputs each, and one found a real defect. pdf.js itself — the actual parser — is upstream and is not fuzzed by us | 0.3 |
 | **No performance measurement** | No published budget for time-to-first-page, tile latency or memory on a large set. Nothing here claims performance | 0.2 |
-| **Crash recovery is simulated, not real** | The durability test leaks a connection; it does not kill the process or cut power | 0.2 |
+| **Power loss is untested** | A committed write is now proven to survive the process being *killed* — a real child process, `TerminateProcess`/`SIGKILL`, no destructors. That proves SQLite committed, not that the platter did; testing the latter honestly needs hardware or a fault injector | 0.4 |
 | **Built and run on Windows only** | macOS, Linux, iOS and Android are configured and compile in CI, but have not been run by a human | 0.2 |
 | **Binaries are unsigned** | SmartScreen and Gatekeeper will warn | 0.2 |
 | **No third-party security review** | No audit, no penetration test | 1.0 |
 | **Accessibility is implemented, not verified** | Keyboard operation and semantics are built in and partly tested upstream; no screen-reader testing has been done here | 1.0 |
 | **OCR accuracy is not measured against real sheets** | The browser test proves the engine loads and reads clean lettering. How it copes with a dyeline scan of a 1974 drawing is unmeasured here, and the engine's own benchmark says the answer is "poorly on small text" | 0.3 |
 | **Migrations are tested at one version** | There is one schema version, so cross-version migration is untested by construction | when there are two |
-| **No SBOM** | Licence policy is enforced in CI; a signed bill of materials is not produced | 0.2 |
+| **The SBOM is not signed** | CI now produces a CycloneDX bill of materials over the resolved dependency tree on every run and keeps it for 90 days. Signing it, and attaching it to releases, is still outstanding | 0.3 |
 
 ## What this means for you
 

@@ -15,6 +15,11 @@ publish = false
 [lints]
 workspace = true
 
+[dev-dependencies]
+# Measurement bugs do not crash; they produce a plausible number that is wrong by a factor. These
+# assert the arithmetic is self-consistent over generated inputs. See tests/invariants.rs.
+proptest = "1"
+
 [dependencies]
 chrono.workspace = true
 hex.workspace = true
