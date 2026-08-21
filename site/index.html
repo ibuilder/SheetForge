@@ -116,6 +116,21 @@ section > .wrap > h2 { font-size: 1.7rem; margin: 0 0 0.4rem; }
   border-radius: 9px;
   padding: 1.15rem 1.25rem;
 }
+.sheet { margin: 1.6rem 0; }
+.sheet img {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+.sheet figcaption {
+  color: var(--muted);
+  font-size: 0.92rem;
+  margin-top: 0.7rem;
+  max-width: 62ch;
+}
 .card h3 { font-size: 1.02rem; margin: 0 0 0.4rem; }
 .card p { color: var(--muted); font-size: 0.93rem; margin: 0; }
 
@@ -241,6 +256,38 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; justify-conte
            tamper-proof.</p>
       </div>
     </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Something to practise on</h2>
+    <p class="lede">
+      SheetForge ships with its own drawing, and opens it the first time you start the application.
+      It is a two-page sheet with a title block, a column grid, a legend and a graphic scale — not
+      a blank page with a logo on it. Mark it up as hard as you like.
+    </p>
+
+    <figure class="sheet">
+      <img src="docs/assets/tutorial-sheet-a201.png"
+           alt="The tutorial's second sheet: a floor plan on a lettered and numbered column grid,
+                with an overall dimension reading 144 feet 0 inches below it and 96 feet 0 inches
+                down the left-hand side, a room labelled OPEN OFFICE at 2,304 square feet, a
+                graphic scale, and a title block reading A-201 SECOND FLOOR PLAN."
+           width="1944" height="1296" loading="lazy">
+      <figcaption>
+        The dimension printed as <strong>144'-0"</strong> really is 144 feet at the scale the title
+        block claims. Calibrate against it, measure the other side, and the sheet tells you whether
+        you got it right — it should read 96'-0". Measure the room and you should get 2,304 SF.
+      </figcaption>
+    </figure>
+
+    <p>
+      That is the whole lesson, and it is the one thing a takeoff tool has to teach before anything
+      else: a quantity is only worth what its scale is worth, so check the scale against something
+      the drawing already tells you. Everything after that is
+      <a href="docs/guides/takeoffs.md">detail</a>.
+    </p>
   </div>
 </section>
 

@@ -68,6 +68,8 @@ export interface Chrome {
 export interface ChromeHandlers {
   info: AppInfo | undefined;
   onOpenPdf: () => void;
+  /** Open the tutorial drawing that ships with the application. */
+  onTutorial: () => void;
   onCreateProject: () => void;
   onOpenProject: () => void;
   onImport: () => void;
@@ -252,12 +254,16 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         { id: "new", label: "New project…", enabled: true },
         { id: "verify", label: "Check integrity", enabled: true, separatorBefore: true },
         { id: "diagnostics", label: "Save diagnostic report…", enabled: true },
+        // Findable again after the first run. Somebody who wants to try a tool without risking a
+        // live drawing should not have to reinstall to get the practice sheet back.
+        { id: "tutorial", label: "Open the tutorial sheet", enabled: true, separatorBefore: true },
       ],
       (id) => {
         if (id === "import") handlers.onImport();
         else if (id === "open") handlers.onOpenProject();
         else if (id === "new") handlers.onCreateProject();
         else if (id === "verify") handlers.onVerify();
+        else if (id === "tutorial") handlers.onTutorial();
         else handlers.onDiagnostics();
       },
     ),
@@ -292,7 +298,20 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
     "Open PDF…",
   );
   emptyAction.addEventListener("click", handlers.onOpenPdf);
-  empty.append(emptyAction);
+
+  // The second way out of an empty screen, for the reviewer who has not got a drawing to hand.
+  // Offering only "Open PDF…" makes trying the tool conditional on already having something to
+  // try it on, which is a poor bargain for somebody deciding whether to bother.
+  const tutorialAction = element(
+    "button",
+    { type: "button", class: "sf-action sf-action--quiet" },
+    "Try the tutorial sheet",
+  );
+  tutorialAction.addEventListener("click", handlers.onTutorial);
+
+  const emptyActions = element("div", { class: "sf-empty-actions" });
+  emptyActions.append(emptyAction, tutorialAction);
+  empty.append(emptyActions);
   stage.append(empty);
 
   const status = element("p", {

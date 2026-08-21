@@ -13,7 +13,20 @@
  * What this deliberately does *not* cover is the native file dialog itself, which lives below the
  * stub. That is a plugin call with no logic of ours in it.
  */
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * The tutorial sheet exactly as it is compiled into the application.
+ *
+ * Read from the asset rather than regenerated here, because the thing worth testing is the
+ * file that ships. A sheet that renders in the generator's own rasteriser and not in the
+ * engine would be found by the first user on their first launch, which is the worst possible
+ * place to find it.
+ */
+const TUTORIAL_SHEET = readFileSync(
+  new URL("../../desktop/src-tauri/assets/welcome.pdf", import.meta.url),
+);
 
 /**
  * A small, valid, single-page PDF, built here rather than committed as a fixture.
@@ -82,10 +95,22 @@ const PROJECT = {
  * Modelling the event channel also makes host-pushed events testable. A drop has no call to
  * intercept — the host initiates it — so without this there is no way to exercise drag-and-drop at
  * all. `window.__sfEmit(name, payload)` pushes one the way Rust would.
+ *
+ * By default this presents itself as a **returning** installation: the first-run flag is already
+ * set, so the tutorial does not open itself and each test starts on the empty screen it means to
+ * exercise. Pass `firstRun: true` to test the opposite.
  */
-async function stubHost(page: Page, pdf: number[]): Promise<void> {
+async function stubHost(
+  page: Page,
+  pdf: number[],
+  { firstRun = false }: { firstRun?: boolean } = {},
+): Promise<void> {
   await page.addInitScript(
-    ({ pdfBytes, revision, project }) => {
+    ({ pdfBytes, revision, project, returning }) => {
+      // Set before any application script runs, which is the only moment early enough: the
+      // interface reads this during start-up.
+      if (returning) localStorage.setItem("sheetforge.tutorial-offered", "yes");
+
       const saved: Record<string, unknown>[] = [];
       (window as unknown as { __sfSaved: unknown[] }).__sfSaved = saved;
 
@@ -149,6 +174,12 @@ async function stubHost(page: Page, pdf: number[]): Promise<void> {
               return Promise.resolve(null);
             case "pdf_open":
               return Promise.resolve({ project, revision, reopened: false });
+            case "tutorial_open":
+              return Promise.resolve({
+                project: { ...project, name: "SheetForge Tutorial" },
+                revision: { ...revision, name: "Tutorial - Riverside Tower", pageCount: 2 },
+                reopened: false,
+              });
             case "document_list":
               return Promise.resolve([revision]);
             case "document_bytes":
@@ -179,7 +210,7 @@ async function stubHost(page: Page, pdf: number[]): Promise<void> {
         },
       };
     },
-    { pdfBytes: pdf, revision: REVISION, project: PROJECT },
+    { pdfBytes: pdf, revision: REVISION, project: PROJECT, returning: !firstRun },
   );
 }
 
@@ -367,5 +398,85 @@ test.describe("drag and drop", () => {
 
     // Cancelling is a normal act, not a failure worth a message.
     await expect(page.locator(".sf-status")).toHaveText(before ?? "");
+  });
+});
+
+/**
+ * The first minute.
+ *
+ * A review tool that opens on an empty screen and asks for a PDF makes trying it conditional on
+ * already having a drawing to hand. So the application ships one — but showing it on *every*
+ * launch would be an imposition, and creating a project folder behind somebody's back every time
+ * they open the application would be worse. Once, then on request, is the bargain, and both halves
+ * of it are asserted here because getting either wrong is annoying in a way nobody reports.
+ */
+test.describe("the tutorial sheet", () => {
+  test("opens itself on a genuinely first run", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()), { firstRun: true });
+    await page.goto("/");
+
+    await expect(page.locator("[data-project]")).toContainText("SheetForge Tutorial");
+    await expect(page.locator(".sf-status")).toContainText("calibrate against");
+    // Not the empty screen: the point is that a new user has something to work on immediately.
+    await expect(page.getByText("No drawing open")).toBeHidden();
+  });
+
+  test("does not open itself again on the next run", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()), { firstRun: true });
+    await page.goto("/");
+    await expect(page.locator("[data-project]")).toContainText("SheetForge Tutorial");
+
+    // Same browser context, so the flag written on the first visit is still there — which is the
+    // whole mechanism under test.
+    await page.goto("/");
+    await expect(page.getByText("No drawing open")).toBeVisible();
+  });
+
+  test("can still be asked for from the Project menu", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+    await expect(page.getByText("No drawing open")).toBeVisible();
+
+    await page.getByRole("button", { name: "Project" }).click();
+    await page.getByRole("menuitem", { name: "Open the tutorial sheet" }).click();
+
+    await expect(page.locator("[data-project]")).toContainText("SheetForge Tutorial");
+  });
+
+  test("the sheet that actually ships renders in the real engine", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
+    await page.goto("/");
+
+    const canvas = page.locator(".sf-stage canvas").first();
+    await expect(canvas).toBeVisible({ timeout: 30_000 });
+
+    // An ARCH D title sheet with a heading, five keyed notes, a legend and a wireframe on it is a
+    // long way from blank. The threshold is high on purpose: a hundred stray pixels would pass for
+    // a sheet that failed to draw anything but its border.
+    const painted = await canvas.evaluate((node: HTMLCanvasElement) => {
+      const context = node.getContext("2d");
+      if (!context || node.width === 0 || node.height === 0) return 0;
+      const { data } = context.getImageData(0, 0, node.width, node.height);
+      let nonWhite = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i]! < 250 || data[i + 1]! < 250 || data[i + 2]! < 250) nonWhite += 1;
+      }
+      return nonWhite;
+    });
+    expect(painted, "the tutorial sheet rasterised to something other than a blank page")
+      .toBeGreaterThan(5_000);
+
+    expect(errors, "no uncaught errors while opening the tutorial").toEqual([]);
+  });
+
+  test("is offered on the empty screen too", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+
+    await page.getByRole("button", { name: "Try the tutorial sheet" }).click();
+    await expect(page.locator("[data-project]")).toContainText("SheetForge Tutorial");
   });
 });

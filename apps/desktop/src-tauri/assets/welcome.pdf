@@ -1,0 +1,299 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 2592 1728] /Resources << /Font << /F1 7 0 R /F2 8 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 9033 >>
+stream
+0.05 0.09 0.14 RG 2 w 36 36 2520 1656 re S
+0.45 0.50 0.56 RG 0.7 w 42 42 2508 1644 re S
+0.05 0.09 0.14 RG 1.2 w 2110 42 m 2110 1686 l S
+0.05 0.09 0.14 rg 2140 1562 84 84 re f
+0.45 0.50 0.56 rg 2159.6 1578.8 42 47.599999999999994 re f
+0.97 0.98 0.99 rg 2151.2 1570.4 42 47.599999999999994 re f
+0.94 0.62 0.23 RG 3.5 w 2156.8 1592.8 m 2187.6 1592.8 l S
+0.05 0.09 0.14 rg BT /F2 30 Tf 1 0 0 1 2250 1604 Tm (SheetForge) Tj ET
+0.45 0.50 0.56 rg BT /F1 12 Tf 1 0 0 1 2250 1578 Tm (Construction drawing review) Tj ET
+0.45 0.50 0.56 RG 1 w 2140 1532 m 2526 1532 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1472 Tm (PROJECT) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1446 Tm (Tutorial - Riverside Tower) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1432 m 2526 1432 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1388 Tm (DRAWN BY) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1362 Tm (SheetForge) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1348 m 2526 1348 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1304 Tm (SCALE) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1278 Tm (1/8" = 1'-0") Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1264 m 2526 1264 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1220 Tm (DATE) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1194 Tm (Issued with this build) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1180 m 2526 1180 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1136 Tm (STATUS) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1110 Tm (Not for construction) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1096 m 2526 1096 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1022 Tm (REVISIONS) Tj ET
+0.45 0.50 0.56 RG 0.8 w 2140 1004 m 2526 1004 l S
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 2140 986 Tm (REV) Tj ET
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 2206 986 Tm (DATE) Tj ET
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 2310 986 Tm (DESCRIPTION) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 976 m 2526 976 l S
+0.05 0.09 0.14 rg BT /F1 12 Tf 1 0 0 1 2140 952 Tm (A) Tj ET
+0.05 0.09 0.14 rg BT /F1 12 Tf 1 0 0 1 2206 952 Tm (-) Tj ET
+0.05 0.09 0.14 rg BT /F1 12 Tf 1 0 0 1 2310 952 Tm (Issued with the application) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 940 m 2526 940 l S
+0.80 0.84 0.88 RG 0.5 w 2140 910 m 2526 910 l S
+0.80 0.84 0.88 RG 0.5 w 2140 880 m 2526 880 l S
+0.96 0.97 0.98 rg 2140 106 386 70 re f
+0.05 0.09 0.14 rg BT /F2 40 Tf 1 0 0 1 2156 142 Tm (T-101) Tj ET
+0.45 0.50 0.56 rg BT /F1 12 Tf 1 0 0 1 2156 122 Tm (GETTING STARTED) Tj ET
+0.05 0.09 0.14 rg BT /F2 62 Tf 1 0 0 1 110 1538 Tm (Welcome - this is a real drawing.) Tj ET
+0.45 0.50 0.56 rg BT /F1 20 Tf 1 0 0 1 110 1496 Tm (Mark it up. Measure it. Nothing here is a mock-up, and nothing you do to it can hurt anything.) Tj ET
+0.80 0.84 0.88 RG 1 w 110 1460 m 1110 1460 l S
+0.94 0.62 0.23 rg 110 1368 40 40 re f
+1 1 1 rg BT /F2 22 Tf 1 0 0 1 123 1380 Tm (1) Tj ET
+0.05 0.09 0.14 rg BT /F2 28 Tf 1 0 0 1 170 1382 Tm (Draw a revision cloud) Tj ET
+0.45 0.50 0.56 rg BT /F1 16 Tf 1 0 0 1 170 1352 Tm (Pick the cloud tool and drag a box around something. Give it a subject and a discipline in the panel on the right.) Tj ET
+0.94 0.62 0.23 rg 110 1218 40 40 re f
+1 1 1 rg BT /F2 22 Tf 1 0 0 1 123 1230 Tm (2) Tj ET
+0.05 0.09 0.14 rg BT /F2 28 Tf 1 0 0 1 170 1232 Tm (Calibrate the scale) Tj ET
+0.45 0.50 0.56 rg BT /F1 16 Tf 1 0 0 1 170 1202 Tm (Turn to page 2 and calibrate against the dimension printed there - it reads 144'-0". Then measure the building width.) Tj ET
+0.94 0.62 0.23 rg 110 1068 40 40 re f
+1 1 1 rg BT /F2 22 Tf 1 0 0 1 123 1080 Tm (3) Tj ET
+0.05 0.09 0.14 rg BT /F2 28 Tf 1 0 0 1 170 1082 Tm (Check the answer) Tj ET
+0.45 0.50 0.56 rg BT /F1 16 Tf 1 0 0 1 170 1052 Tm (The width is printed on the sheet. If your measurement agrees, the scale is right. That is the habit worth forming.) Tj ET
+0.94 0.62 0.23 rg 110 918 40 40 re f
+1 1 1 rg BT /F2 22 Tf 1 0 0 1 123 930 Tm (4) Tj ET
+0.05 0.09 0.14 rg BT /F2 28 Tf 1 0 0 1 170 932 Tm (Filter the markup list) Tj ET
+0.45 0.50 0.56 rg BT /F1 16 Tf 1 0 0 1 170 902 Tm (Add a few markups with different disciplines, then filter. The drawing dims everything you filtered out.) Tj ET
+0.94 0.62 0.23 rg 110 768 40 40 re f
+1 1 1 rg BT /F2 22 Tf 1 0 0 1 123 780 Tm (5) Tj ET
+0.05 0.09 0.14 rg BT /F2 28 Tf 1 0 0 1 170 782 Tm (Export the summary) Tj ET
+0.45 0.50 0.56 rg BT /F1 16 Tf 1 0 0 1 170 752 Tm (Export, then Summary \(XLSX\). Three sheets: the register, the takeoff with its provenance, and a roll-up by cost code.) Tj ET
+0.80 0.84 0.88 RG 1 w 110 648 m 1110 648 l S
+0.45 0.50 0.56 rg BT /F1 16 Tf 1 0 0 1 110 608 Tm (Your markups are saved as you draw. There is no Save button; the status bar tells you the state.) Tj ET
+0.45 0.50 0.56 rg BT /F1 16 Tf 1 0 0 1 110 578 Tm (This sheet lives in Documents/SheetForge. Delete that folder and it is gone - nothing is kept anywhere else.) Tj ET
+0.45 0.50 0.56 rg BT /F1 16 Tf 1 0 0 1 110 548 Tm (No account, no cloud, no telemetry. The application makes no network request unless you ask it to check for an update.) Tj ET
+0.05 0.09 0.14 rg BT /F2 26 Tf 1 0 0 1 1230 1360 Tm (What you are looking at) Tj ET
+0.45 0.50 0.56 rg BT /F1 15 Tf 1 0 0 1 1230 1330 Tm (The keyed notes on the left refer to these parts of the workspace.) Tj ET
+0.05 0.09 0.14 RG 1.6 w 1230 430 850 870 re S
+0.96 0.97 0.98 rg 1231 1246 848 53 re f
+0.80 0.84 0.88 RG 0.8 w 1230 1246 m 2080 1246 l S
+0.05 0.09 0.14 rg BT /F2 16 Tf 1 0 0 1 1250 1266 Tm (SheetForge) Tj ET
+0.94 0.62 0.23 rg 1820 1260 96 26 re f
+1 1 1 rg BT /F1 11 Tf 1 0 0 1 1834 1268 Tm (Open PDF) Tj ET
+0.80 0.84 0.88 RG 0.8 w 1926 1260 60 26 re S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1936 1268 Tm (Export) Tj ET
+0.80 0.84 0.88 RG 0.8 w 1380 430 m 1380 1246 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1248 1220 Tm (DRAWINGS) Tj ET
+0.93 0.95 0.97 rg 1240 1182 130 24 re f
+0.05 0.09 0.14 rg BT /F1 11 Tf 1 0 0 1 1250 1190 Tm (A-201) Tj ET
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1250 1160 Tm (A-202) Tj ET
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1250 1130 Tm (M-401) Tj ET
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1250 1100 Tm (S-101) Tj ET
+0.80 0.84 0.88 RG 1 w 1420 520 400 666 re S
+0.80 0.84 0.88 RG 0.6 w 1548 520 m 1548 1186 l S
+0.80 0.84 0.88 RG 0.6 w 1420 886.3 m 1820 886.3 l S
+0.94 0.62 0.23 RG 2 w [7 5] 0 d 1460 932.9200000000001 104 199.79999999999998 re S [] 0 d
+0.94 0.62 0.23 rg BT /F1 11 Tf 1 0 0 1 1466 912.9200000000001 Tm (RFI 014 - clash) Tj ET
+0.94 0.62 0.23 RG 1.6 w 1460 666.52 m 1760 666.52 l S
+1 1 1 rg 1572 656.52 120 22 re f
+0.94 0.62 0.23 rg BT /F1 12 Tf 1 0 0 1 1582 662.52 Tm (148'-6") Tj ET
+0.80 0.84 0.88 RG 0.8 w 1844 520 216 666 re S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1858 1160 Tm (MARKUP) Tj ET
+0.45 0.50 0.56 rg BT /F1 10 Tf 1 0 0 1 1858 1130 Tm (Subject) Tj ET
+0.94 0.96 0.97 rg 1858 1110 188 14 re f
+0.45 0.50 0.56 rg BT /F1 10 Tf 1 0 0 1 1858 1096 Tm (Discipline) Tj ET
+0.94 0.96 0.97 rg 1858 1076 188 14 re f
+0.45 0.50 0.56 rg BT /F1 10 Tf 1 0 0 1 1858 1062 Tm (Cost code) Tj ET
+0.94 0.96 0.97 rg 1858 1042 188 14 re f
+0.45 0.50 0.56 rg BT /F1 10 Tf 1 0 0 1 1858 1028 Tm (Status) Tj ET
+0.94 0.96 0.97 rg 1858 1008 188 14 re f
+0.45 0.50 0.56 rg BT /F1 10 Tf 1 0 0 1 1858 994 Tm (Quantity) Tj ET
+0.94 0.96 0.97 rg 1858 974 188 14 re f
+0.05 0.09 0.14 RG 1.2 w 110 200 900 300 re S
+0.96 0.97 0.98 rg 111 460 898 39 re f
+0.45 0.50 0.56 rg BT /F2 14 Tf 1 0 0 1 128 472 Tm (MARKUP LEGEND) Tj ET
+0.80 0.84 0.88 RG 0.8 w 110 460 m 1010 460 l S
+0.94 0.62 0.23 RG 1.8 w [7 5] 0 d 134 396 100 36 re S [] 0 d
+0.05 0.09 0.14 rg BT /F2 15 Tf 1 0 0 1 260 414 Tm (Revision cloud) Tj ET
+0.45 0.50 0.56 rg BT /F1 12 Tf 1 0 0 1 260 394 Tm (An RFI, a clash, anything that needs an answer from somebody else.) Tj ET
+0.94 0.62 0.23 RG 1.6 w 134 352 m 234 352 l S
+0.94 0.62 0.23 RG 1.2 w 134 344 m 134 360 l S
+0.94 0.62 0.23 RG 1.2 w 234 344 m 234 360 l S
+0.05 0.09 0.14 rg BT /F2 15 Tf 1 0 0 1 260 352 Tm (Measurement) Tj ET
+0.45 0.50 0.56 rg BT /F1 12 Tf 1 0 0 1 260 332 Tm (Carries its scale, its calibration and the raw page length with it, so it can be checked later.) Tj ET
+0.45 0.50 0.56 RG 1.2 w 134 272 100 36 re S
+0.05 0.09 0.14 rg BT /F2 15 Tf 1 0 0 1 260 290 Tm (Text and callouts) Tj ET
+0.45 0.50 0.56 rg BT /F1 12 Tf 1 0 0 1 260 270 Tm (Notes that belong to the review rather than to the drawing.) Tj ET
+0.80 0.84 0.88 RG 0.5 w 110 242 m 1010 242 l S
+0.45 0.50 0.56 rg BT /F1 12 Tf 1 0 0 1 134 218 Tm (Every markup is a record with an author, a timestamp and a status - never ink burnt into the PDF.) Tj ET
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 1230 284 Tm (GRAPHIC SCALE) Tj ET
+0.05 0.09 0.14 rg 1230 250 180 8 re f
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 1224 236 Tm (0) Tj ET
+0.05 0.09 0.14 RG 0.7 w 1410 250 180 8 re S
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 1404 236 Tm (20) Tj ET
+0.05 0.09 0.14 rg 1590 250 180 8 re f
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 1584 236 Tm (40) Tj ET
+0.05 0.09 0.14 RG 0.7 w 1770 250 180 8 re S
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 1764 236 Tm (60) Tj ET
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 1942 236 Tm (80) Tj ET
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 1964 248 Tm (FEET) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 2592 1728] /Resources << /Font << /F1 7 0 R /F2 8 0 R >> >> /Contents 6 0 R >>
+endobj
+6 0 obj
+<< /Length 8226 >>
+stream
+0.05 0.09 0.14 RG 2 w 36 36 2520 1656 re S
+0.45 0.50 0.56 RG 0.7 w 42 42 2508 1644 re S
+0.05 0.09 0.14 RG 1.2 w 2110 42 m 2110 1686 l S
+0.05 0.09 0.14 rg 2140 1562 84 84 re f
+0.45 0.50 0.56 rg 2159.6 1578.8 42 47.599999999999994 re f
+0.97 0.98 0.99 rg 2151.2 1570.4 42 47.599999999999994 re f
+0.94 0.62 0.23 RG 3.5 w 2156.8 1592.8 m 2187.6 1592.8 l S
+0.05 0.09 0.14 rg BT /F2 30 Tf 1 0 0 1 2250 1604 Tm (SheetForge) Tj ET
+0.45 0.50 0.56 rg BT /F1 12 Tf 1 0 0 1 2250 1578 Tm (Construction drawing review) Tj ET
+0.45 0.50 0.56 RG 1 w 2140 1532 m 2526 1532 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1472 Tm (PROJECT) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1446 Tm (Tutorial - Riverside Tower) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1432 m 2526 1432 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1388 Tm (DRAWN BY) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1362 Tm (SheetForge) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1348 m 2526 1348 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1304 Tm (SCALE) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1278 Tm (1/8" = 1'-0") Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1264 m 2526 1264 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1220 Tm (DATE) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1194 Tm (Issued with this build) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1180 m 2526 1180 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1136 Tm (STATUS) Tj ET
+0.05 0.09 0.14 rg BT /F1 17 Tf 1 0 0 1 2140 1110 Tm (Not for construction) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 1096 m 2526 1096 l S
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 2140 1022 Tm (REVISIONS) Tj ET
+0.45 0.50 0.56 RG 0.8 w 2140 1004 m 2526 1004 l S
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 2140 986 Tm (REV) Tj ET
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 2206 986 Tm (DATE) Tj ET
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 2310 986 Tm (DESCRIPTION) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 976 m 2526 976 l S
+0.05 0.09 0.14 rg BT /F1 12 Tf 1 0 0 1 2140 952 Tm (A) Tj ET
+0.05 0.09 0.14 rg BT /F1 12 Tf 1 0 0 1 2206 952 Tm (-) Tj ET
+0.05 0.09 0.14 rg BT /F1 12 Tf 1 0 0 1 2310 952 Tm (Issued with the application) Tj ET
+0.80 0.84 0.88 RG 0.5 w 2140 940 m 2526 940 l S
+0.80 0.84 0.88 RG 0.5 w 2140 910 m 2526 910 l S
+0.80 0.84 0.88 RG 0.5 w 2140 880 m 2526 880 l S
+0.96 0.97 0.98 rg 2140 106 386 70 re f
+0.05 0.09 0.14 rg BT /F2 40 Tf 1 0 0 1 2156 142 Tm (A-201) Tj ET
+0.45 0.50 0.56 rg BT /F1 12 Tf 1 0 0 1 2156 122 Tm (SECOND FLOOR PLAN) Tj ET
+0.05 0.09 0.14 RG 2.5 w 420 430 1296 864 re S
+0.80 0.84 0.88 RG 0.6 w 420 1294 m 420 1334 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 414.6154 1361 m 425.3846 1361 l 433 1353.3846 l 433 1342.6154 l 425.3846 1335 l 414.6154 1335 l 407 1342.6154 l 407 1353.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 417.03 1344 Tm (A) Tj ET
+0.80 0.84 0.88 RG 0.6 w 636 430 m 636 1294 l S
+0.80 0.84 0.88 RG 0.6 w 636 1294 m 636 1334 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 630.6154 1361 m 641.3846 1361 l 649 1353.3846 l 649 1342.6154 l 641.3846 1335 l 630.6154 1335 l 623 1342.6154 l 623 1353.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 633.03 1344 Tm (B) Tj ET
+0.80 0.84 0.88 RG 0.6 w 852 430 m 852 1294 l S
+0.80 0.84 0.88 RG 0.6 w 852 1294 m 852 1334 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 846.6154 1361 m 857.3846 1361 l 865 1353.3846 l 865 1342.6154 l 857.3846 1335 l 846.6154 1335 l 839 1342.6154 l 839 1353.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 849.03 1344 Tm (C) Tj ET
+0.80 0.84 0.88 RG 0.6 w 1068 430 m 1068 1294 l S
+0.80 0.84 0.88 RG 0.6 w 1068 1294 m 1068 1334 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 1062.6154 1361 m 1073.3846 1361 l 1081 1353.3846 l 1081 1342.6154 l 1073.3846 1335 l 1062.6154 1335 l 1055 1342.6154 l 1055 1353.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1065.03 1344 Tm (D) Tj ET
+0.80 0.84 0.88 RG 0.6 w 1284 430 m 1284 1294 l S
+0.80 0.84 0.88 RG 0.6 w 1284 1294 m 1284 1334 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 1278.6154 1361 m 1289.3846 1361 l 1297 1353.3846 l 1297 1342.6154 l 1289.3846 1335 l 1278.6154 1335 l 1271 1342.6154 l 1271 1353.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1281.03 1344 Tm (E) Tj ET
+0.80 0.84 0.88 RG 0.6 w 1500 430 m 1500 1294 l S
+0.80 0.84 0.88 RG 0.6 w 1500 1294 m 1500 1334 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 1494.6154 1361 m 1505.3846 1361 l 1513 1353.3846 l 1513 1342.6154 l 1505.3846 1335 l 1494.6154 1335 l 1487 1342.6154 l 1487 1353.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1497.03 1344 Tm (F) Tj ET
+0.80 0.84 0.88 RG 0.6 w 1716 1294 m 1716 1334 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 1710.6154 1361 m 1721.3846 1361 l 1729 1353.3846 l 1729 1342.6154 l 1721.3846 1335 l 1710.6154 1335 l 1703 1342.6154 l 1703 1353.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 1713.03 1344 Tm (G) Tj ET
+0.80 0.84 0.88 RG 0.6 w 380 430 m 420 430 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 360.6154 443 m 371.3846 443 l 379 435.3846 l 379 424.6154 l 371.3846 417 l 360.6154 417 l 353 424.6154 l 353 435.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 363.03 426 Tm (1) Tj ET
+0.80 0.84 0.88 RG 0.6 w 420 646 m 1716 646 l S
+0.80 0.84 0.88 RG 0.6 w 380 646 m 420 646 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 360.6154 659 m 371.3846 659 l 379 651.3846 l 379 640.6154 l 371.3846 633 l 360.6154 633 l 353 640.6154 l 353 651.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 363.03 642 Tm (2) Tj ET
+0.80 0.84 0.88 RG 0.6 w 420 862 m 1716 862 l S
+0.80 0.84 0.88 RG 0.6 w 380 862 m 420 862 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 360.6154 875 m 371.3846 875 l 379 867.3846 l 379 856.6154 l 371.3846 849 l 360.6154 849 l 353 856.6154 l 353 867.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 363.03 858 Tm (3) Tj ET
+0.80 0.84 0.88 RG 0.6 w 420 1078 m 1716 1078 l S
+0.80 0.84 0.88 RG 0.6 w 380 1078 m 420 1078 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 360.6154 1091 m 371.3846 1091 l 379 1083.3846 l 379 1072.6154 l 371.3846 1065 l 360.6154 1065 l 353 1072.6154 l 353 1083.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 363.03 1074 Tm (4) Tj ET
+0.80 0.84 0.88 RG 0.6 w 380 1294 m 420 1294 l S
+1 1 1 rg 0.45 0.50 0.56 RG 0.8 w 360.6154 1307 m 371.3846 1307 l 379 1299.3846 l 379 1288.6154 l 371.3846 1281 l 360.6154 1281 l 353 1288.6154 l 353 1299.3846 l h B
+0.45 0.50 0.56 rg BT /F1 11 Tf 1 0 0 1 363.03 1290 Tm (5) Tj ET
+0.45 0.50 0.56 RG 1.4 w 636 646 432 432 re S
+0.45 0.50 0.56 rg BT /F2 17 Tf 1 0 0 1 652 872 Tm (OPEN OFFICE) Tj ET
+0.45 0.50 0.56 rg BT /F1 13 Tf 1 0 0 1 652 848 Tm (48'-0" x 48'-0" = 2,304 SF) Tj ET
+0.45 0.50 0.56 RG 1.4 w 1284 646 324 216 re S
+0.45 0.50 0.56 rg BT /F1 14 Tf 1 0 0 1 1300 758 Tm (PLANT) Tj ET
+0.94 0.62 0.23 RG 1.5 w 420 340 m 1716 340 l S
+0.94 0.62 0.23 RG 1 w 420 324 m 420 422 l S
+0.94 0.62 0.23 RG 1.5 w 412 332 m 428 348 l S
+0.94 0.62 0.23 RG 1 w 1716 324 m 1716 422 l S
+0.94 0.62 0.23 RG 1.5 w 1708 332 m 1724 348 l S
+1 1 1 rg 1008 328 120 26 re f
+0.94 0.62 0.23 rg BT /F2 22 Tf 1 0 0 1 1026.42 334 Tm (144'-0") Tj ET
+0.94 0.62 0.23 RG 1.5 w 280 430 m 280 1294 l S
+0.94 0.62 0.23 RG 1.5 w 272 422 m 288 438 l S
+0.94 0.62 0.23 RG 1.5 w 272 1286 m 288 1302 l S
+1 1 1 rg 225 849 110 26 re f
+0.94 0.62 0.23 rg BT /F2 22 Tf 1 0 0 1 244.36 855 Tm (96'-0") Tj ET
+0.05 0.09 0.14 rg BT /F2 40 Tf 1 0 0 1 280 1528 Tm (Practice sheet) Tj ET
+0.45 0.50 0.56 rg BT /F1 17 Tf 1 0 0 1 280 1488 Tm (Calibrate against the 144'-0" dimension below the plan, then measure the far side. It should read 96'-0".) Tj ET
+0.45 0.50 0.56 rg BT /F1 17 Tf 1 0 0 1 280 1460 Tm (Measure the OPEN OFFICE as an area and you should get 2,304 SF - the number printed inside it.) Tj ET
+0.45 0.50 0.56 rg BT /F1 17 Tf 1 0 0 1 280 1432 Tm (If either answer disagrees, the calibration is wrong rather than the sheet. Set it again and check.) Tj ET
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 420 234 Tm (GRAPHIC SCALE) Tj ET
+0.05 0.09 0.14 rg 420 200 180 8 re f
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 414 186 Tm (0) Tj ET
+0.05 0.09 0.14 RG 0.7 w 600 200 180 8 re S
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 594 186 Tm (20) Tj ET
+0.05 0.09 0.14 rg 780 200 180 8 re f
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 774 186 Tm (40) Tj ET
+0.05 0.09 0.14 RG 0.7 w 960 200 180 8 re S
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 954 186 Tm (60) Tj ET
+0.45 0.50 0.56 rg BT /F1 8 Tf 1 0 0 1 1132 186 Tm (80) Tj ET
+0.45 0.50 0.56 rg BT /F1 9 Tf 1 0 0 1 1154 198 Tm (FEET) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+8 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+9 0 obj
+<< /Title (SheetForge - tutorial sheet) /Author (SheetForge) /Subject (A drawing to practise on) /Creator (SheetForge) >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000265 00000 n 
+0000009349 00000 n 
+0000009487 00000 n 
+0000017764 00000 n 
+0000017834 00000 n 
+0000017909 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R /Info 9 0 R >>
+startxref
+18046
+%%EOF

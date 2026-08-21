@@ -42,8 +42,12 @@ The README calls this early. This page says exactly how early, because "producti
 | The store stays responsive on a 5,000-markup, 200-sheet project | Timed against ceilings that catch an order-of-magnitude regression; real figures printed each run | `sf-store/tests/scale.rs` |
 | Every header control is reachable and visible by keyboard alone | Real tab presses, then a computed-style check for a focus indicator | `apps/ui/e2e/accessibility.spec.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
+| The tutorial sheet is a genuine two-page PDF, not a stale or truncated asset | Rust test over the embedded bytes | `apps/desktop/src-tauri/src/commands.rs` |
+| The tutorial's printed dimensions match the scale its title block claims | Rust test over the arithmetic the generator emits | `apps/desktop/src-tauri/src/commands.rs` |
+| The committed tutorial sheet matches the script that generates it | CI regenerates it and fails on any difference | `.github/workflows/ci.yml` |
+| The tutorial opens on a first run, and does not open itself again | Browser tests over both halves of the behaviour | `apps/ui/e2e/open-drawing.spec.ts` |
 
-**Totals: 214 Rust tests, 42 TypeScript unit tests, 20 browser tests.** The Rust figure includes
+**Totals: 217 Rust tests, 42 TypeScript unit tests, 25 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and

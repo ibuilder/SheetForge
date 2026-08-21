@@ -34,7 +34,6 @@ const ROOT = resolve(HERE, "..");
 const OUT = join(ROOT, "_site");
 const REPO = "https://github.com/ibuilder/SheetForge";
 const BLOB = `${REPO}/blob/main`;
-const RAW = "https://raw.githubusercontent.com/ibuilder/SheetForge/main";
 
 /** Root-level documents that belong on the site, and where they land. */
 const ROOT_DOCS = [
@@ -66,6 +65,20 @@ for (const source of markdownUnder(join(ROOT, "docs"))) {
 for (const [source, out] of ROOT_DOCS) {
   if (existsSync(join(ROOT, source))) routes.set(source, out);
 }
+
+/**
+ * Repository images the documentation points at, collected while rewriting and copied afterwards.
+ *
+ * Falling back to `raw.githubusercontent.com` produces a page that renders, which is why this went
+ * unnoticed for a while: the documentation site of an application whose selling point is that it
+ * does not phone anywhere was fetching pictures of itself from a third-party host on every view.
+ * It also fails outright for any image whose commit has not reached `main` yet, which is every
+ * image on the day it is added.
+ *
+ * The output mirrors the repository path, so a link is just the relative path between the two.
+ * `scripts/check-site-links.mjs` fails the build if any image escapes this.
+ */
+const images = new Set();
 
 /**
  * Rewrite one link, given the repository path of the page it appears on and the output path that
@@ -102,11 +115,15 @@ function rewriteLink(href, sourceRepoPath, outPath, isImage) {
     if (existsSync(join(ROOT, dir))) return `${REPO}/tree/main/${dir}`;
   }
 
-  // Not a page this site renders. If it exists in the repository, link to it there — an image
-  // through the raw host so it actually displays, anything else through the blob view so it is
-  // readable with syntax highlighting.
+  // Not a page this site renders. An image gets copied into the output and linked relatively;
+  // anything else — a source file, a capability, the licence — goes to GitHub's blob view, where
+  // it is genuinely more useful than a copy would be.
   if (existsSync(join(ROOT, repoPath))) {
-    return `${isImage ? RAW : BLOB}/${repoPath}${suffix}`;
+    if (isImage) {
+      images.add(repoPath);
+      return path.relative(path.dirname(outPath), repoPath) || path.basename(repoPath);
+    }
+    return `${BLOB}/${repoPath}${suffix}`;
   }
   return href;
 }
@@ -258,7 +275,20 @@ function render(sourcePath, outPath) {
 mkdirSync(OUT, { recursive: true });
 cpSync(join(ROOT, "site"), OUT, { recursive: true });
 
+// `docs/assets` is copied unconditionally rather than only when something links to it, because
+// the hand-written landing page points into it and is copied verbatim — nothing rewrites its
+// markup, so nothing would discover the reference.
+const docAssets = join(ROOT, "docs", "assets");
+if (existsSync(docAssets)) cpSync(docAssets, join(OUT, "docs", "assets"), { recursive: true });
+
 for (const [source, out] of routes) render(source, out);
+
+// After rendering, because rendering is what discovers them.
+for (const image of images) {
+  const target = join(OUT, image);
+  mkdirSync(dirname(target), { recursive: true });
+  cpSync(join(ROOT, image), target);
+}
 
 // Pages runs Jekyll by default, which ignores files beginning with an underscore and tries to
 // parse braces in the output as Liquid tags.

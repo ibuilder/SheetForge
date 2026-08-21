@@ -42,6 +42,7 @@ async function start(): Promise<void> {
     // `guard` reports its own failures, so these are deliberately not awaited: a click handler
     // that returned a promise would leave the caller with nothing useful to do with it.
     onOpenPdf: () => void guard(() => openPdf(chrome)),
+    onTutorial: () => void guard(() => openTutorial(chrome)),
     onCreateProject: () => void guard(() => createProject(chrome)),
     onOpenProject: () => void guard(() => openProject(chrome)),
     onImport: () => void guard(() => importDrawings(chrome)),
@@ -80,6 +81,12 @@ async function start(): Promise<void> {
     if (current) {
       chrome.setProject(current);
       chrome.setRevisions(await host.documentList());
+    } else if (isFirstRun()) {
+      // Once, on a genuinely empty first launch. Opening a drawing on *every* start would be an
+      // imposition on somebody who closed their project deliberately, and creating a project
+      // folder behind their back on every launch would be worse. After this the tutorial lives in
+      // the Project menu and on the empty state, where it can be asked for rather than inflicted.
+      await guard(() => openTutorial(chrome));
     }
   } else {
     chrome.setStatus(
@@ -208,6 +215,49 @@ async function openPdf(chrome: Chrome): Promise<void> {
   if (opened.reopened) {
     chrome.setStatus(`${opened.revision.name} — reopened, with the markups you made on it.`);
   }
+}
+
+/**
+ * Whether this is the first launch on this machine, recording that it no longer is.
+ *
+ * `localStorage` rather than a host setting: the fact is about this installation's interface, it
+ * is worthless to anybody else, and it is not something to spend an IPC command and a schema
+ * version on. It carries no personal data — the value is the string "yes" — and clearing browser
+ * storage simply offers the tutorial again, which is a harmless failure mode in both directions.
+ */
+function isFirstRun(): boolean {
+  try {
+    if (localStorage.getItem(FIRST_RUN_KEY)) return false;
+    localStorage.setItem(FIRST_RUN_KEY, "yes");
+    return true;
+  } catch {
+    // Storage can be unavailable or full. Treating that as "not the first run" is the quiet
+    // failure: at worst somebody misses a tutorial they can still open from the menu, rather than
+    // being shown it every single launch.
+    return false;
+  }
+}
+
+const FIRST_RUN_KEY = "sheetforge.tutorial-offered";
+
+/**
+ * Open the tutorial sheet.
+ *
+ * Deliberately the same path as any other drawing — it lands in a real project, in the real place,
+ * with a real audit trail — because a tutorial that behaves unlike the product teaches the wrong
+ * thing about the product.
+ */
+async function openTutorial(chrome: Chrome): Promise<void> {
+  chrome.setStatus("Opening the tutorial sheet…");
+  const opened = await host.tutorialOpen();
+  chrome.setProject(opened.project);
+  chrome.setRevisions(await host.documentList());
+  await openRevision(chrome, opened.revision);
+  chrome.setStatus(
+    opened.reopened
+      ? "Tutorial sheet — reopened, with the markups you made on it. Page 2 is the practice sheet."
+      : "Tutorial sheet. Mark it up freely; page 2 has a dimension to calibrate against.",
+  );
 }
 
 async function createProject(chrome: Chrome): Promise<void> {

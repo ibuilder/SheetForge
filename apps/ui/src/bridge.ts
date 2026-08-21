@@ -255,6 +255,8 @@ export const host = {
 
   /** The primary action: pick a PDF and show it, creating a project behind it if needed. */
   pdfOpen: () => call<OpenedDrawing>("pdf_open"),
+  /** Open the tutorial drawing compiled into the application. Takes no path, and needs none. */
+  tutorialOpen: () => call<OpenedDrawing>("tutorial_open"),
   documentImport: () => call<RevisionSummary[]>("document_import"),
   documentList: () => call<RevisionSummary[]>("document_list"),
   /** The drawing's bytes, as an `ArrayBuffer` — raw, not JSON. */

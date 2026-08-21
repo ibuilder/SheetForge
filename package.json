@@ -20,6 +20,8 @@
     "test:e2e": "npm run test:e2e -w @sheetforge/ui",
     "check": "npm run typecheck && npm run lint && npm run test",
     "check:licences": "node scripts/check-licences.mjs",
+    "welcome": "node scripts/make-welcome-sheet.mjs",
+    "check:welcome": "node scripts/make-welcome-sheet.mjs && git diff --exit-code -- apps/desktop/src-tauri/assets/welcome.pdf",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",

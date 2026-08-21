@@ -120,6 +120,7 @@ pub fn run() {
             commands::project_close,
             commands::project_verify,
             commands::pdf_open,
+            commands::tutorial_open,
             commands::document_import,
             commands::document_list,
             commands::document_bytes,

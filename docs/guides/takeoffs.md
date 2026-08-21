@@ -16,6 +16,12 @@ number — because a zero would be indistinguishable from a real measurement of 
 
 There are three ways to set it, and they are not equally trustworthy.
 
+> **Practise this first.** The tutorial sheet that ships with SheetForge exists mostly for this
+> step: page two prints a `144'-0"` dimension whose geometry really is 144 feet, so you can
+> calibrate against it and then check your answer against a second dimension the sheet also prints.
+> **Project → Open the tutorial sheet.** Getting this wrong on a real drawing produces a confident
+> wrong number, and nothing downstream will catch it for you.
+
 ### Draw a known dimension — the strongest
 
 Pick **Calibrate**, draw a line along something whose real length is printed on the sheet, and type

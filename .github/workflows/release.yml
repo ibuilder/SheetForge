@@ -53,6 +53,23 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - run: npm ci --foreground-scripts
 
+      # `createUpdaterArtifacts` is on, so a build without the signing key fails deep inside the
+      # bundler with a message about a public key having been found. Catching it here costs one
+      # step and turns twenty minutes of confused log-reading into one sentence.
+      - name: The updater signing key is present
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set on this repository."
+            echo "The application ships an updater public key, so every release must be signed"
+            echo "with the matching private key or installed copies can never update."
+            echo "Add it under Settings > Secrets and variables > Actions."
+            echo "See docs/runbooks/release.md for how the key is generated and stored."
+            exit 1
+          fi
+
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

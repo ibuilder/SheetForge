@@ -37,6 +37,10 @@ function describe(violations: { id: string; impact?: string | null; nodes: { htm
 test.describe("accessibility", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
+      // Present as a returning installation, so the tutorial does not open itself over the empty
+      // screen this suite is checking.
+      localStorage.setItem("sheetforge.tutorial-offered", "yes");
+
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
         transformCallback: (callback: unknown) => {
           void callback;

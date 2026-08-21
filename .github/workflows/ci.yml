@@ -40,6 +40,11 @@ jobs:
       - run: npm run build
       - name: No copyleft in the installed tree
         run: node scripts/check-licences.mjs
+      # The tutorial sheet is committed so a Rust-only build needs no Node, and regenerated here so
+      # the committed file cannot drift from the script that is supposed to describe it. The
+      # generator is deterministic — no date, no random — so any difference is a real one.
+      - name: The tutorial sheet matches its generator
+        run: npm run check:welcome
 
   browser:
     name: Browser

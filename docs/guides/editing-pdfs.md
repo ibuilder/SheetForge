@@ -14,6 +14,30 @@ carries besides its shape, and how to get the result back out.
 
 ---
 
+## 0. Practise on the sheet that ships with it
+
+If you have not got a drawing to hand, you do not need one. SheetForge carries a two-page tutorial
+sheet: **Project → Open the tutorial sheet**, or the link on the empty screen. It opens by itself
+the first time you start the application.
+
+It is a real drawing, not a picture of one — a title block, a column grid, a legend, a graphic
+scale, and rooms with their areas printed in them. Mark it up as hard as you like; it is synthetic,
+it belongs to nobody, and deleting `Documents\SheetForge\SheetForge Tutorial.sfproj` removes every
+trace of what you did to it.
+
+![Sheet T-101 of the tutorial drawing: a title sheet carrying the heading "Welcome - this is a
+real drawing", five numbered keyed notes, a markup legend, a graphic scale, a title block, and a
+line drawing of the SheetForge workspace showing the sheet list, the drawing stage with a revision
+cloud and a measurement on it, and the markup properties panel.](../assets/tutorial-sheet-t101.png)
+
+Page two is the part worth your time. It carries a dimension printed as `144'-0"`, and the geometry
+behind that dimension really is 144 feet at the scale the title block claims. Calibrate against it,
+then measure the other side: it should read `96'-0"`. Measure the OPEN OFFICE as an area and you
+should get 2,304 SF. If either disagrees, the calibration is wrong rather than the sheet — which is
+exactly the check [Takeoffs](takeoffs.md) asks you to make on every real drawing you ever measure.
+
+---
+
 ## 1. Open a drawing
 
 **Open PDF…** and pick a file, or drop one straight onto the window. That is the whole of it —

@@ -112,6 +112,17 @@ body {
 }
 .sf-action--primary:hover { filter: brightness(1.08); }
 
+/* The alternative offer beside a primary action. Underlined rather than only tinted, so the fact
+   that it is a control does not depend on seeing the colour. */
+.sf-action--quiet {
+  background: none;
+  border-color: transparent;
+  color: var(--sf-muted);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.sf-action--quiet:hover { color: var(--sf-ink); border-color: var(--sf-line); }
+
 /* ---- menus ---- */
 
 .sf-menu { position: relative; }
@@ -180,7 +191,14 @@ body {
 }
 .sf-empty-title { font-size: 1.05rem; font-weight: 600; margin: 0; }
 .sf-empty-hint { color: var(--sf-muted); margin: 0; max-width: 44ch; }
-.sf-empty .sf-action { margin-top: 0.6rem; }
+.sf-empty-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.6rem;
+}
 
 :where(.sf-action, .sf-sheets):focus-visible {
   outline: 2px solid var(--sf-focus);
