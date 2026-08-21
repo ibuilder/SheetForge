@@ -124,6 +124,7 @@ pub fn run() {
             commands::document_bytes,
             commands::markup_list,
             commands::markup_create,
+            commands::markup_create_many,
             commands::markup_update,
             commands::markup_delete,
             commands::calibration_set,

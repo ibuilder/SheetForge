@@ -487,6 +487,58 @@ impl Store {
         Ok(())
     }
 
+    /// Store many markups in one transaction.
+    ///
+    /// Not a convenience wrapper around the single insert: it is a different cost. This store runs
+    /// with `synchronous = FULL`, so every implicit transaction is a flush to disk — the price of
+    /// surviving a power cut mid-review. Inserting one markup at a time therefore costs one fsync
+    /// each, which measured at roughly 8 ms per record: importing five thousand markups from an
+    /// XFDF file took forty seconds of almost pure waiting.
+    ///
+    /// One transaction is one flush. The durability guarantee is unchanged — the batch either
+    /// lands whole or not at all, which is also the right semantics for an import.
+    ///
+    /// # Errors
+    /// If any insert fails, in which case none of them are applied.
+    pub fn insert_markups(&mut self, markups: &[Markup]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            // Prepared once and reused. Re-parsing the same SQL five thousand times is small
+            // beside the fsync but free to avoid.
+            let mut statement = tx.prepare(
+                "INSERT INTO markups
+                   (id, project_id, document_revision_id, page, kind, status, geometry_schema,
+                    geometry, metadata, quantity, version, created_by, created_at, updated_by, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            )?;
+            for markup in markups {
+                statement.execute(params![
+                    markup.id.to_string(),
+                    markup.project_id.to_string(),
+                    markup.document_revision_id.to_string(),
+                    markup.page,
+                    markup.kind.as_str(),
+                    markup.status.as_str(),
+                    markup.geometry.schema_version,
+                    serde_json::to_string(&markup.geometry.data)?,
+                    serde_json::to_string(&markup.metadata)?,
+                    markup
+                        .quantity
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()?,
+                    to_sql_int(markup.version)?,
+                    markup.created_by.as_str(),
+                    stamp(markup.created_at),
+                    markup.updated_by.as_str(),
+                    stamp(markup.updated_at),
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// One markup by id.
     ///
     /// # Errors

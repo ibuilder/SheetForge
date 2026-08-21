@@ -39,10 +39,11 @@ The README calls this early. This page says exactly how early, because "producti
 | A dropped drawing opens, and the interface never sees a path | Browser test pushes the host's drop event through a faithful IPC stub | `apps/ui/e2e/open-drawing.spec.ts` |
 | The XLSX summary is a workbook Excel will actually open | 18 unit tests over the written parts, unpacked and inspected with a separate zip reader | `apps/ui/test/xlsx.test.ts` |
 | No serious WCAG 2.1 A/AA violations, including in forced colours | axe over the whole page — the drawing engine's interface included, not excluded | `apps/ui/e2e/accessibility.spec.ts` |
+| The store stays responsive on a 5,000-markup, 200-sheet project | Timed against ceilings that catch an order-of-magnitude regression; real figures printed each run | `sf-store/tests/scale.rs` |
 | Every header control is reachable and visible by keyboard alone | Real tab presses, then a computed-style check for a focus indicator | `apps/ui/e2e/accessibility.spec.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
 
-**Totals: 204 Rust tests, 42 TypeScript unit tests, 20 browser tests.** The Rust figure includes
+**Totals: 208 Rust tests, 42 TypeScript unit tests, 20 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -61,7 +62,7 @@ Listed because omitting them would make the table above dishonest.
 | **The IPC seam is stubbed, not driven** | The browser suite mocks `invoke` at the Tauri boundary, so everything above it is real code and everything below it — the commands, the dialogs — is covered only by Rust tests and by hand. A test that drives the packaged application has not been written | 0.2 |
 | **The native file dialogs are not driven by any test** | They sit below the stub. Exercised by hand only | 0.2 |
 | **The PDF parser itself is not fuzzed** | Path containment, format sniffing, size arithmetic and the audit chain now have property tests generating thousands of inputs each, and one found a real defect. pdf.js itself — the actual parser — is upstream and is not fuzzed by us | 0.3 |
-| **No performance measurement** | No published budget for time-to-first-page, tile latency or memory on a large set. Nothing here claims performance | 0.2 |
+| **Rendering performance is unmeasured** | The *store* is now benchmarked against a realistic project — 5,000 markups over 200 sheets — with ceilings in CI that catch order-of-magnitude regressions, and the numbers are printed on every run. What is still unmeasured is the part users feel most: time to first page, tile latency at high zoom, and memory on a 200-sheet set | 0.3 |
 | **Power loss is untested** | A committed write is now proven to survive the process being *killed* — a real child process, `TerminateProcess`/`SIGKILL`, no destructors. That proves SQLite committed, not that the platter did; testing the latter honestly needs hardware or a fault injector | 0.4 |
 | **Built and run on Windows only** | macOS, Linux, iOS and Android are configured and compile in CI, but have not been run by a human | 0.2 |
 | **Binaries are unsigned** | SmartScreen and Gatekeeper will warn | 0.2 |

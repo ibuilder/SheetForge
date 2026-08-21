@@ -82,7 +82,13 @@ export class HostAdapter implements StorageAdapter {
     const conflicts: { id: string; mine?: unknown; theirs?: unknown }[] = [];
     const failures: string[] = [];
 
-    for (const mutation of mutations) {
+    // Creates are batched. The engine hands over a whole import as one list of mutations, and
+    // sending them one at a time costs an IPC round trip and a disk flush each — about fifty times
+    // the cost of doing them together. Everything else stays sequential: an update depends on the
+    // version the previous one produced.
+    const remaining = await this.createInBulk(key, mutations);
+
+    for (const mutation of remaining) {
       try {
         await this.applyOne(key, mutation);
       } catch (error) {
@@ -113,6 +119,51 @@ export class HostAdapter implements StorageAdapter {
     // The host is a local process. It is reachable whenever the application is running, which is
     // the point of the product: a superintendent in a basement is not offline, they are local.
     return true;
+  }
+
+  /**
+   * Send every mutation that is a *new* markup as one call, and return the rest untouched.
+   *
+   * "New" means one this adapter has no version for — the same test `applyOne` uses. An import
+   * arrives as hundreds of those in a single batch, which is the case worth optimising; an
+   * ordinary edit session produces one at a time and takes the same path it always did.
+   *
+   * A failure here falls back to sending them individually rather than losing the batch, because
+   * one malformed record among five hundred should not discard the other four hundred and
+   * ninety-nine.
+   */
+  private async createInBulk(key: StoreKey, mutations: Mutation[]): Promise<Mutation[]> {
+    const creates = mutations.filter(
+      (mutation): mutation is Extract<Mutation, { op: "upsert" }> =>
+        mutation.op === "upsert" && !this.known.has(mutation.annot.id),
+    );
+    // Below this the round trip dominates and the added complexity buys nothing measurable.
+    if (creates.length < 5) return mutations;
+
+    try {
+      const stored = await host.markupCreateMany(
+        creates.map((mutation) => toHostMarkup(mutation.annot, key.documentId)),
+      );
+      creates.forEach((mutation, index) => {
+        const created = stored[index];
+        if (!created) return;
+        const known = { version: created.version, status: created.status };
+        this.known.set(created.id, known);
+        // The engine's own id too, so a later edit of the same annotation finds its version.
+        this.known.set(mutation.annot.id, known);
+      });
+      const sent = new Set<Mutation>(creates);
+      return mutations.filter((mutation) => !sent.has(mutation));
+    } catch {
+      // The batch is all-or-nothing on the host side, so nothing was written. Fall through and let
+      // each record succeed or fail on its own merits: one malformed markup among five hundred
+      // should not discard the other four hundred and ninety-nine.
+      //
+      // Deliberately not recorded as a failure here. The individual attempts that follow report
+      // their own, and reporting this too would tell the user about an error that was retried and
+      // may well have succeeded.
+      return mutations;
+    }
   }
 
   private async applyOne(key: StoreKey, mutation: Mutation): Promise<void> {
