@@ -45,3 +45,6 @@ tests/fixtures/private/
 
 # Built documentation site
 _site/
+
+# Staged from node_modules by scripts/stage-ocr-assets.mjs; generated, not source.
+apps/ui/public/tesseract/

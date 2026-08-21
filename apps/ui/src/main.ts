@@ -19,6 +19,7 @@ import type { AppInfo, RevisionSummary } from "./bridge";
 import { errorMessage, hasHost, host, isCommandError } from "./bridge";
 import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
+import { ocrOptions } from "./ocr";
 import "./styles.css";
 
 interface Session {
@@ -210,6 +211,8 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
     org: "SheetForge",
     initialZoom: "fit-width",
     feetInches: true,
+    // On-device, bundled, off by default. See ocr.ts for what it is good at and what it is not.
+    ocr: ocrOptions(),
     exporters: {
       // Without this the engine falls back to a browser download — an anchor with a `download`
       // attribute — which inside a webview either goes nowhere or lands somewhere the user did not

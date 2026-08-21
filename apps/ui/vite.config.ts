@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 // Tauri sets these when it drives the build; they select a browser target matching the webview
@@ -17,6 +18,17 @@ export default defineConfig({
     watch: { ignored: ["**/src-tauri/**"] },
   },
   envPrefix: ["VITE_", "TAURI_ENV_"],
+  resolve: {
+    alias: [
+      {
+        // The drawing engine references every OCR engine it can adapt, behind optional
+        // dependencies. We install one of them; the rest have to resolve to *something* or the
+        // dev server refuses to start over a code path nothing calls.
+        find: /^ppu-paddle-ocr(\/.*)?$/,
+        replacement: fileURLToPath(new URL("./src/stubs/absent-ocr-engine.ts", import.meta.url)),
+      },
+    ],
+  },
   build: {
     // Windows ships WebView2 (Chromium); macOS and iOS ship WKWebView; Android ships Chromium.
     target: platform === "windows" || platform === "android" ? "chrome105" : "safari13",

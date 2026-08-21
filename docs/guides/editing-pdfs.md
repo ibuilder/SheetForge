@@ -46,11 +46,6 @@ Use **Open PDF** unless you have a reason not to.
   once rather than twice under two names;
 - recorded as a **revision** of a document, not as a file.
 
-- checked for size and sniffed to confirm it is really a PDF, before anything is written;
-- filed under the SHA-256 of its bytes, so the same sheet arriving in two transmittals is stored
-  once rather than twice under two names;
-- recorded as a **revision** of a document, not as a file.
-
 That last distinction is the one that pays off later. `A-201` is a document; the issue of it you
 imported on 14 March is a revision. A markup is raised against the revision, so in six months you
 can still say which drawing a comment was made on. See [Slip-sheeting](#8-when-a-sheet-is-re-issued).
@@ -259,10 +254,13 @@ nothing on it. Turn on OCR and SheetForge recognises the page, after which all t
 
 Two things to know:
 
-- **You choose the recogniser.** SheetForge owns the tiling, the coordinate mapping and the
-  wiring; the engine is a setting, because whether your drawings may leave the building is not
-  something this application can know. An on-device recogniser keeps everything local; a cloud
-  service will be faster and more accurate and will send the page to somebody else.
+- **It runs on your machine.** The recogniser and its English model ship inside the application, so
+  a scan is read with the network unplugged and no page is ever sent anywhere. There is no cloud
+  OCR option and no setting that would quietly turn one on.
+- **It is weak on small lettering.** Measured against a generated title block, the bundled engine
+  reads about three of eight expected strings — it gets the large text and misses the 6pt labels a
+  title block keeps its metadata in. Good enough to make a scanned specification searchable; not
+  good enough to trust for sheet numbering. A better engine is on the roadmap.
 - **Resolution decides the outcome.** Sheets are tiled before recognition, because OCR needs
   roughly 18–20 pixels of character height. The 1/8" lettering on an ARCH D sheet is about 9px if
   you rasterise the whole sheet at once, and 37px at 300 DPI — where the sheet is 78 megapixels and

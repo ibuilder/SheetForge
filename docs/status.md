@@ -30,9 +30,11 @@ The README calls this early. This page says exactly how early, because "producti
 | A drawing opens and actually rasterises | Browser test against the built bundle, asserting non-blank pixels on the page canvas | `apps/ui/e2e/open-drawing.spec.ts` |
 | The engine's toolset is installed, not just a page renderer | Browser test asserts the toolbar mounts | `apps/ui/e2e/open-drawing.spec.ts` |
 | Opening a PDF needs no project set up first | Browser test drives the empty state through to a rendered drawing | `apps/ui/e2e/open-drawing.spec.ts` |
+| Export is reachable by name, not only as an unlabelled glyph | Browser test opens the menu and finds each exporter | `apps/ui/e2e/open-drawing.spec.ts` |
+| OCR runs entirely from bundled files, with nothing off-origin | Browser test recognises real pixels with every non-origin request blocked | `apps/ui/e2e/ocr.spec.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
 
-**Totals: 169 Rust tests, 24 TypeScript unit tests, 3 browser tests.** Clippy clean at `-D warnings` with pedantic lints
+**Totals: 169 Rust tests, 24 TypeScript unit tests, 7 browser tests.** Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
 `exactOptionalPropertyTypes`; ESLint clean on type-checked rules.
 
@@ -55,6 +57,7 @@ Listed because omitting them would make the table above dishonest.
 | **Binaries are unsigned** | SmartScreen and Gatekeeper will warn | 0.2 |
 | **No third-party security review** | No audit, no penetration test | 1.0 |
 | **Accessibility is implemented, not verified** | Keyboard operation and semantics are built in and partly tested upstream; no screen-reader testing has been done here | 1.0 |
+| **OCR accuracy is not measured against real sheets** | The browser test proves the engine loads and reads clean lettering. How it copes with a dyeline scan of a 1974 drawing is unmeasured here, and the engine's own benchmark says the answer is "poorly on small text" | 0.3 |
 | **Migrations are tested at one version** | There is one schema version, so cross-version migration is untested by construction | when there are two |
 | **No SBOM** | Licence policy is enforced in CI; a signed bill of materials is not produced | 0.2 |
 

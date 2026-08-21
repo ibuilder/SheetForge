@@ -22,6 +22,19 @@ Nothing new. The gap between "it works" and "you can depend on it."
 - **Trademark clearance** for the name. See
   [ADR-0009](adr/0009-trademark-and-brand-clearance-status.md).
 
+### Done since this was written
+
+- **OCR, on the device.** Tesseract and its English model ship with the application — about 11 MB
+  of WebAssembly and 2 MB of model — so a scanned sheet is recognised with the network unplugged
+  and no page leaves the machine. Search, specification parsing and title-block extraction all work
+  on scans as a result, because they read through one seam.
+
+  What it is *not* is good at small lettering: against a generated title block at 300 DPI,
+  Tesseract recovers about 3 of 8 expected strings where PaddleOCR recovers 8 of 8. Good enough to
+  make a scanned specification searchable; not good enough to trust for automatic sheet numbering,
+  and the interface never presents a recognised scale as verified. A better on-device engine is
+  still wanted — see below.
+
 ## 0.3 — The review, end to end
 
 - **Drag-and-drop of drawings**, handled entirely in Rust so no path reaches the webview.
@@ -41,6 +54,10 @@ Nothing new. The gap between "it works" and "you can depend on it."
 - **Import from the system document provider**, including Files, SharePoint and Drive, without the
   application ever handling a path.
 - **A field mode**: pins, photos, voice notes, and a sync queue that drains when signal returns.
+- **A better on-device recogniser.** PaddleOCR reads small title-block lettering far better than
+  Tesseract and is roughly five times faster per tile. What it costs is `onnxruntime-web`, whose
+  runtime assets are an order of magnitude larger than everything else the application ships. The
+  provider is a single value, so the change is small; the packaging decision is the hard part.
 
 ## 0.5 — Working with other people
 
