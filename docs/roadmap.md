@@ -24,6 +24,13 @@ Nothing new. The gap between "it works" and "you can depend on it."
 
 ### Done since this was written
 
+- **The diagnostic report** ADR-0007 promised in place of telemetry. Plain text, under Project →
+  Save diagnostic report: build and machine facts, the limits in force, counts from the open
+  project, and the redacted tail of the log. It reports *counts rather than contents* — "14
+  drawings, 320 markups, audit trail intact" — so there is nothing in it a client could object to,
+  and it is readable without a tool because a bundle nobody checks before sending is a telemetry
+  upload with extra steps.
+
 - **Markup summary and takeoff as a spreadsheet.** Three sheets — the markup register, the
   measurements with their provenance, and a roll-up by cost code — written as a real XLSX rather
   than a CSV a spreadsheet mangles. The roll-up groups by cost code *and unit*, because adding a
@@ -56,8 +63,6 @@ Nothing new. The gap between "it works" and "you can depend on it."
 - **The sheet register as a queryable table**, so "every sheet at Rev C" is a query rather than a
   scroll.
 - **Saved filters and views** that travel with the project.
-- **A diagnostics panel** and the user-assembled diagnostic bundle described in
-  [ADR-0007](adr/0007-telemetry-privacy-and-diagnostics.md).
 - **Attachment handling**: photos from a phone camera, sized and content-addressed.
 
 ## 0.4 — Mobile in earnest

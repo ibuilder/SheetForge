@@ -21,6 +21,7 @@
 //! dialog plugin already abstracts.
 
 pub mod commands;
+pub mod diagnostics;
 pub mod error;
 pub mod state;
 
@@ -132,6 +133,7 @@ pub fn run() {
             commands::status_counts,
             commands::audit_list,
             commands::export_save,
+            commands::diagnostics_save,
         ])
         .run(tauri::generate_context!())
         .expect("failed to start SheetForge");

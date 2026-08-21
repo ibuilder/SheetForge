@@ -43,7 +43,7 @@ The README calls this early. This page says exactly how early, because "producti
 | Every header control is reachable and visible by keyboard alone | Real tab presses, then a computed-style check for a focus indicator | `apps/ui/e2e/accessibility.spec.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
 
-**Totals: 208 Rust tests, 42 TypeScript unit tests, 20 browser tests.** The Rust figure includes
+**Totals: 214 Rust tests, 42 TypeScript unit tests, 20 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and

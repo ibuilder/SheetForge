@@ -47,6 +47,7 @@ async function start(): Promise<void> {
     onImport: () => void guard(() => importDrawings(chrome)),
     onSelectRevision: (revision) => void guard(() => openRevision(chrome, revision)),
     onVerify: () => void guard(() => verify(chrome)),
+    onDiagnostics: () => void guard(() => saveDiagnostics(chrome)),
     exportItems,
     onExport: (id) => void guard(() => runExport(id)),
   });
@@ -301,6 +302,21 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
   chrome.setStatus(
     `${revision.name}${revision.revisionLabel ? ` rev ${revision.revisionLabel}` : ""} — ` +
       `${revision.pageCount} page${revision.pageCount === 1 ? "" : "s"}`,
+  );
+}
+
+/**
+ * Write a diagnostic report.
+ *
+ * Worth saying in the status line what it does *not* contain, because somebody about to attach a
+ * file to a ticket for their client's project wants to know that before they send it, not after.
+ */
+async function saveDiagnostics(chrome: Chrome): Promise<void> {
+  chrome.setStatus("Collecting…");
+  await host.diagnosticsSave();
+  chrome.setStatus(
+    "Diagnostic report saved. It contains no drawings, no markup text and no file paths — " +
+      "open it and read it before sending.",
   );
 }
 

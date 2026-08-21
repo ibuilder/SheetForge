@@ -288,7 +288,13 @@ test.describe("getting work back out", () => {
 
     await header.getByRole("button", { name: /^Project/ }).click();
     const menu = page.getByRole("menu");
-    for (const name of [/Add drawings/, /Open project/, /New project/, /Check integrity/]) {
+    for (const name of [
+      /Add drawings/,
+      /Open project/,
+      /New project/,
+      /Check integrity/,
+      /Save diagnostic report/,
+    ]) {
       await expect(menu.getByRole("menuitem", { name })).toBeVisible();
     }
   });

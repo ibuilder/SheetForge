@@ -1179,6 +1179,71 @@ fn default_project_root(app: &AppHandle, name: &str) -> CommandResult<std::path:
         .join(format!("{safe}.{}", sf_package::EXTENSION)))
 }
 
+/// Assemble a diagnostic bundle and save it where the user says.
+///
+/// The thing offered in place of telemetry — see
+/// [ADR-0007](../../../../docs/adr/0007-telemetry-privacy-and-diagnostics.md). It is written as
+/// plain text so somebody can read it before deciding whether to attach it to a ticket, and it
+/// carries counts rather than contents so there is nothing in it a client could object to.
+///
+/// Nothing is sent. This writes a file and stops.
+///
+/// # Errors
+/// [`CommandError::cancelled`] if the dialog is dismissed, or a write failure.
+#[tauri::command]
+pub async fn diagnostics_save(app: AppHandle) -> CommandResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager as _;
+
+        // The log the `log` plugin writes, if this platform gives us a place for it.
+        let log_path = app
+            .path()
+            .app_log_dir()
+            .ok()
+            .map(|dir| dir.join(format!("{}.log", app.package_info().name)));
+
+        let bundle = crate::diagnostics::collect(&app, log_path.as_deref().filter(|p| p.exists()));
+        let text = bundle.to_readable();
+
+        let chosen = app
+            .dialog()
+            .file()
+            .set_title("Save diagnostic bundle")
+            .set_file_name("sheetforge-diagnostics.txt")
+            .add_filter("Text", &["txt"])
+            .blocking_save_file()
+            .ok_or_else(CommandError::cancelled)?;
+
+        let destination = chosen
+            .into_path()
+            .map_err(|_| CommandError::invalid_request("That location cannot be used."))?;
+        std::fs::write(&destination, text).map_err(|error| {
+            log::error!(
+                "could not write the diagnostic bundle: {}",
+                sf_audit::redact(&error.to_string())
+            );
+            CommandError::internal()
+        })?;
+
+        // Audited like any other export: it is a file leaving the application, and somebody may
+        // later want to know one was produced.
+        let state = app.state::<AppState>();
+        let _ = state.with_package(|package| {
+            audit(
+                package,
+                state.actor(),
+                "diagnostics:export",
+                Outcome::Allowed,
+                Record::new(),
+            );
+            Ok::<(), CommandError>(())
+        });
+        Ok(())
+    })
+    .await
+    .map_err(|_| CommandError::internal())?
+}
+
 /// How many pages a PDF claims, read from its page tree without rendering anything.
 ///
 /// A structural count rather than a parse: the renderer is the authority on the document and it

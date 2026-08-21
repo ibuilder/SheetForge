@@ -73,6 +73,7 @@ export interface ChromeHandlers {
   onImport: () => void;
   onSelectRevision: (revision: RevisionSummary) => void;
   onVerify: () => void;
+  onDiagnostics: () => void;
   /**
    * The export and import actions the engine currently offers, read when the menu opens so that
    * "enabled" reflects the document actually on screen rather than the one that was there when the
@@ -250,12 +251,14 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         { id: "open", label: "Open project…", enabled: true, separatorBefore: true },
         { id: "new", label: "New project…", enabled: true },
         { id: "verify", label: "Check integrity", enabled: true, separatorBefore: true },
+        { id: "diagnostics", label: "Save diagnostic report…", enabled: true },
       ],
       (id) => {
         if (id === "import") handlers.onImport();
         else if (id === "open") handlers.onOpenProject();
         else if (id === "new") handlers.onCreateProject();
-        else handlers.onVerify();
+        else if (id === "verify") handlers.onVerify();
+        else handlers.onDiagnostics();
       },
     ),
   );

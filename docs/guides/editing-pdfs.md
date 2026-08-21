@@ -293,6 +293,14 @@ standing. For a record that may end up as contract evidence, that is the propert
 
 ## 11. If something goes wrong
 
+**Project → Save diagnostic report** writes a plain-text file describing the build, the machine,
+the limits in force and the last two hundred log lines. Attach it to a bug report.
+
+Read it first — it is meant to be read. It contains **no drawings, no markup text, no file paths
+and no project name**: the project appears as counts, like "14 drawings, 320 markups, audit trail
+intact". Nothing is sent anywhere by producing it.
+
+
 **Check integrity** re-hashes every drawing in the project and verifies the audit chain. It reports
 one of:
 

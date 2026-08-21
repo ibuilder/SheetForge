@@ -296,6 +296,13 @@ export const host = {
   calibrationGet: (revision: string, page: number) =>
     call<HostCalibration | null>("calibration_get", { revision, page }),
 
+  /**
+   * Assemble a diagnostic bundle and save it where the user says.
+   *
+   * The thing offered in place of telemetry: plain text, counts rather than contents, readable
+   * before it is sent, and sent nowhere by this call.
+   */
+  diagnosticsSave: () => call<void>("diagnostics_save"),
   statusCounts: () => call<[HostStatus, number][]>("status_counts"),
   auditList: () => call<AuditEvent[]>("audit_list"),
 
