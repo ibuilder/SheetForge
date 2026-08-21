@@ -64,7 +64,7 @@ disk"*.
 | Content Security Policy | Strict. No `unsafe-eval`, no inline script, no remote origins. `style-src` allows inline styles, which the drawing engine needs and which does not permit code execution |
 | Navigation | The webview cannot navigate away. A hyperlink inside a drawing is handed to the *system* browser, restricted to `http` and `https` |
 | Asset protocol | Disabled |
-| Drag-and-drop of files onto the window | Disabled in this version — it would hand the webview a path |
+| Drag-and-drop of files onto the window | **Enabled, handled in Rust.** Tauri delivers a drop as a *window* event, so the paths reach the host and never the webview. The renderer is told only that drawings arrived |
 | Devtools in release builds | Absent |
 
 Permissions are declared per capability file under

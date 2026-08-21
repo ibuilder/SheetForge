@@ -25,7 +25,7 @@ pub mod error;
 pub mod state;
 
 use state::AppState;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Build and run the application.
 ///
@@ -62,6 +62,52 @@ pub fn run() {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
             }
+            // Drag-and-drop, handled entirely on this side.
+            //
+            // The drop is a *window* event: Tauri delivers the paths to Rust, and the webview is
+            // told only that drawings arrived. That is what lets this exist at all without moving
+            // the boundary — the rule is that the renderer never names a file, not that files can
+            // never be dropped.
+            let version = app.package_info().version.to_string();
+            if let Some(window) = app.get_webview_window("main") {
+                let handle = app.handle().clone();
+                window.on_window_event(move |event| {
+                    let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) =
+                        event
+                    else {
+                        return;
+                    };
+                    // Only PDFs. Dropping a folder or a spreadsheet on the window is a mistake, not
+                    // a request, and silently ignoring the rest beats an error for each one.
+                    let drawings: Vec<_> = paths
+                        .iter()
+                        .filter(|path| {
+                            path.extension()
+                                .and_then(|e| e.to_str())
+                                .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+                        })
+                        .cloned()
+                        .collect();
+                    if drawings.is_empty() {
+                        return;
+                    }
+
+                    let handle = handle.clone();
+                    let version = version.clone();
+                    // Off the event thread: importing hashes and copies files, and blocking here
+                    // freezes the window while it happens.
+                    tauri::async_runtime::spawn_blocking(move || {
+                        let payload = match commands::import_paths(&handle, &drawings, &version) {
+                            Ok(opened) => serde_json::json!({ "opened": opened }),
+                            Err(error) => serde_json::json!({ "error": error }),
+                        };
+                        if let Err(error) = handle.emit("sheetforge://dropped", payload) {
+                            log::error!("could not report a drop to the interface: {error}");
+                        }
+                    });
+                });
+            }
+
             log::info!("SheetForge {} started", app.package_info().version);
             Ok(())
         })

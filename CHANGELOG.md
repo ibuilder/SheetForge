@@ -70,7 +70,6 @@ First release. The core is built and tested; the shell is young. See
 - The name "SheetForge" has not had trademark clearance —
   [ADR-0009](docs/adr/0009-trademark-and-brand-clearance-status.md).
 - No at-rest encryption of the project package; use full-disk encryption.
-- Drag-and-drop of files onto the window is disabled, because it would hand the webview a path.
 - No fuzzing corpus for hostile PDF input yet. This is the largest security gap.
 - No third-party security audit and no penetration test.
 

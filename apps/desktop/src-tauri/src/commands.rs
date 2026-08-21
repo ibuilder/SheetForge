@@ -529,62 +529,11 @@ pub async fn pdf_open(app: AppHandle) -> CommandResult<OpenedDrawing> {
             .into_path()
             .map_err(|_| CommandError::invalid_request("That file cannot be read."))?;
 
-        // No project open: make one named after the drawing. Opening a second drawing later adds
-        // it to the same project rather than starting another, which is what somebody reviewing a
-        // set expects.
-        if !state.is_open() {
-            let stem = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Drawings")
-                .to_owned();
-            let root = default_project_root(&app, &stem)?;
-
-            let package = if root.exists() {
-                // Reopening the same drawing after a restart lands here, and lands back on the
-                // markups made last time.
-                let mut existing = Package::open(&root)?;
-                // Also on this path, not only on creation: a policy that tightened the limits
-                // would otherwise be ignored for every project opened this way.
-                existing.set_limits(*state.limits());
-                existing
-            } else {
-                let project = Project::new(&stem, None, None, state.actor().clone())?;
-                if let Some(parent) = root.parent() {
-                    std::fs::create_dir_all(parent).map_err(|error| {
-                        log::error!(
-                            "could not create the project folder: {}",
-                            sf_audit::redact(&error.to_string())
-                        );
-                        CommandError::internal()
-                    })?;
-                }
-                let mut created = Package::create(&root, &project, &version)?;
-                created.set_limits(*state.limits());
-                audit(
-                    &mut created,
-                    state.actor(),
-                    "project:create",
-                    Outcome::Allowed,
-                    Record::new().subject("project", &project.id.to_string()),
-                );
-                created
-            };
-            state.set_package(Some(package));
-        }
-
-        with_open(&state, |package| {
-            let (revision, reopened) = file_drawing(package, state.actor(), &path)?;
-            let project = package
-                .store()
-                .project()?
-                .ok_or_else(CommandError::no_project)?;
-            Ok(OpenedDrawing {
-                project: ProjectSummary::of(package, &project),
-                revision,
-                reopened,
-            })
-        })
+        // Everything past the dialog is shared with drag-and-drop, so the two cannot drift.
+        import_paths(&app, &[path], &version)?
+            .into_iter()
+            .next()
+            .ok_or_else(CommandError::cancelled)
     })
     .await
     .map_err(|_| CommandError::internal())?
@@ -1052,6 +1001,92 @@ fn file_drawing(
         },
         false,
     ))
+}
+
+/// Import already-chosen files into the open project, creating one if none is open.
+///
+/// Shared by the file picker and by drag-and-drop. The picker path has a dialog in front of it;
+/// the drop path has the operating system in front of it. Both arrive here with paths that a human
+/// pointed at, and neither ever hands one to the webview.
+///
+/// # Errors
+/// If a file cannot be read, is not a PDF, or exceeds a limit.
+pub fn import_paths(
+    app: &AppHandle,
+    paths: &[std::path::PathBuf],
+    version: &str,
+) -> CommandResult<Vec<OpenedDrawing>> {
+    let state = app.state::<AppState>();
+    state.require(Capability::DocumentImport)?;
+
+    let first = paths.first().ok_or_else(CommandError::cancelled)?;
+    ensure_project_for(app, &state, first, version)?;
+
+    with_open(&state, |package| {
+        let mut opened = Vec::with_capacity(paths.len());
+        for path in paths {
+            let (revision, reopened) = file_drawing(package, state.actor(), path)?;
+            let project = package
+                .store()
+                .project()?
+                .ok_or_else(CommandError::no_project)?;
+            opened.push(OpenedDrawing {
+                project: ProjectSummary::of(package, &project),
+                revision,
+                reopened,
+            });
+        }
+        Ok(opened)
+    })
+}
+
+/// Make sure a project is open, creating one named after `first` if not.
+fn ensure_project_for(
+    app: &AppHandle,
+    state: &tauri::State<'_, AppState>,
+    first: &std::path::Path,
+    version: &str,
+) -> CommandResult<()> {
+    if state.is_open() {
+        return Ok(());
+    }
+    let stem = first
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Drawings")
+        .to_owned();
+    let root = default_project_root(app, &stem)?;
+
+    let package = if root.exists() {
+        // Reopening the same drawing after a restart lands here, and lands back on the markups
+        // made last time.
+        let mut existing = Package::open(&root)?;
+        existing.set_limits(*state.limits());
+        existing
+    } else {
+        let project = Project::new(&stem, None, None, state.actor().clone())?;
+        if let Some(parent) = root.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                log::error!(
+                    "could not create the project folder: {}",
+                    sf_audit::redact(&error.to_string())
+                );
+                CommandError::internal()
+            })?;
+        }
+        let mut created = Package::create(&root, &project, version)?;
+        created.set_limits(*state.limits());
+        audit(
+            &mut created,
+            state.actor(),
+            "project:create",
+            Outcome::Allowed,
+            Record::new().subject("project", &project.id.to_string()),
+        );
+        created
+    };
+    state.set_package(Some(package));
+    Ok(())
 }
 
 /// Where a project goes when the user did not choose a location.

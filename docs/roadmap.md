@@ -24,6 +24,11 @@ Nothing new. The gap between "it works" and "you can depend on it."
 
 ### Done since this was written
 
+- **Drag-and-drop of drawings**, handled entirely in Rust. The reason it was disabled — that a drop
+  would hand the webview a filesystem path — turned out not to apply: Tauri delivers the drop as a
+  window event, so the paths land on the host side and the interface is told only that drawings
+  arrived. The boundary did not have to move for the feature to exist.
+
 - **OCR, on the device.** Tesseract and its English model ship with the application — about 11 MB
   of WebAssembly and 2 MB of model — so a scanned sheet is recognised with the network unplugged
   and no page leaves the machine. Search, specification parsing and title-block extraction all work
@@ -37,7 +42,6 @@ Nothing new. The gap between "it works" and "you can depend on it."
 
 ## 0.3 — The review, end to end
 
-- **Drag-and-drop of drawings**, handled entirely in Rust so no path reaches the webview.
 - **Batch import** of a whole set, with sheet numbers read from title blocks rather than filenames.
 - **The sheet register as a queryable table**, so "every sheet at Rev C" is a query rather than a
   scroll.

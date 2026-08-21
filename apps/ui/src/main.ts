@@ -16,7 +16,7 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 import { HostAdapter } from "./adapter";
 import type { AppInfo, RevisionSummary } from "./bridge";
-import { errorMessage, hasHost, host, isCommandError } from "./bridge";
+import { errorMessage, hasHost, host, isCommandError, onDropped } from "./bridge";
 import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
@@ -52,6 +52,27 @@ async function start(): Promise<void> {
 
   if (info) {
     chrome.setStatus(`SheetForge ${info.version} — signed in as ${info.actor}`);
+    // Drawings dropped on the window. Handled in Rust; this is only told the outcome.
+    await onDropped((event) => {
+      void guard(async () => {
+        if (event.error) {
+          // The host reports a refusal as data rather than as a rejected call, because a drop has
+          // no call to reject — nothing on this side asked for it.
+          if (event.error.code !== "cancelled") chrome.setStatus(event.error.message);
+          return;
+        }
+        const opened = event.opened ?? [];
+        if (opened.length === 0) return;
+        const first = opened[0]!;
+        chrome.setProject(first.project);
+        chrome.setRevisions(await host.documentList());
+        await openRevision(chrome, first.revision);
+        if (opened.length > 1) {
+          chrome.setStatus(`Added ${opened.length} drawings. Showing ${first.revision.name}.`);
+        }
+      });
+    });
+
     // A project left open from the last session is reopened by the host, not remembered here.
     const current = await host.projectCurrent();
     if (current) {

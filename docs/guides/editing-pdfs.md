@@ -16,7 +16,8 @@ carries besides its shape, and how to get the result back out.
 
 ## 1. Open a drawing
 
-**Open PDF…** and pick a file. That is the whole of it — there is nothing to set up first.
+**Open PDF…** and pick a file, or drop one straight onto the window. That is the whole of it —
+there is nothing to set up first.
 
 Behind the drawing, SheetForge creates a **project**: a `.sfproj` folder named after the file,
 under `Documents\SheetForge`. The status bar tells you where. That folder is where your markups,

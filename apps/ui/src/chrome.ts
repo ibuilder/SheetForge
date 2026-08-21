@@ -281,7 +281,7 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
     element(
       "p",
       { class: "sf-empty-hint" },
-      "Open a PDF to start reviewing. SheetForge keeps your markups, scales and measurements in a project folder it creates alongside it.",
+      "Open a PDF — or drop one on this window — to start reviewing. SheetForge keeps your markups, scales and measurements in a project folder it creates alongside it.",
     ),
   );
   const emptyAction = element(

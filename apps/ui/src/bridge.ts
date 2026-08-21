@@ -15,6 +15,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** A refusal from the host. */
 export interface CommandError {
@@ -190,6 +191,28 @@ export interface AuditEvent {
   detail: Record<string, string>;
   prev_hash: string;
   chain_hash: string;
+}
+
+/** What the host reports after drawings are dropped on the window. */
+export interface DroppedDrawings {
+  /** Present when the import succeeded. */
+  opened?: OpenedDrawing[];
+  /** Present when it did not. */
+  error?: CommandError;
+}
+
+/**
+ * Listen for drawings dropped on the window.
+ *
+ * The drop itself is handled entirely in Rust — the paths never cross to this side, which is what
+ * lets drag-and-drop exist without weakening the rule that the interface never names a file. What
+ * arrives here is the result.
+ *
+ * Returns a function that stops listening. No-op without a host.
+ */
+export async function onDropped(handler: (event: DroppedDrawings) => void): Promise<UnlistenFn> {
+  if (!hasHost()) return () => undefined;
+  return listen<DroppedDrawings>("sheetforge://dropped", (event) => handler(event.payload));
 }
 
 /** Thrown when a command is called with no host present. */
