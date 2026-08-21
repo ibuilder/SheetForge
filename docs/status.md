@@ -27,9 +27,12 @@ The README calls this early. This page says exactly how early, because "producti
 | Windows device names and unrepresentable filenames are refused on every platform | Unit tests | `sf-security` |
 | No error message crossing the boundary carries a path, filename or SQL | Tests in three crates | `sf-domain`, `sf-store`, `sf-package`, `commands` |
 | The desktop application builds and launches on Windows | Built and run; window opens and closes cleanly | — |
+| A drawing opens and actually rasterises | Browser test against the built bundle, asserting non-blank pixels on the page canvas | `apps/ui/e2e/open-drawing.spec.ts` |
+| The engine's toolset is installed, not just a page renderer | Browser test asserts the toolbar mounts | `apps/ui/e2e/open-drawing.spec.ts` |
+| Opening a PDF needs no project set up first | Browser test drives the empty state through to a rendered drawing | `apps/ui/e2e/open-drawing.spec.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
 
-**Totals: 166 Rust tests, 24 TypeScript tests.** Clippy clean at `-D warnings` with pedantic lints
+**Totals: 169 Rust tests, 24 TypeScript unit tests, 3 browser tests.** Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
 `exactOptionalPropertyTypes`; ESLint clean on type-checked rules.
 
@@ -43,7 +46,8 @@ Listed because omitting them would make the table above dishonest.
 
 | Gap | Why it matters | Tracked |
 |---|---|---|
-| **No end-to-end test through the real application** | The Rust and TypeScript halves are each tested; the seam between them is exercised by hand, not by CI | 0.2 |
+| **The IPC seam is stubbed, not driven** | The browser suite mocks `invoke` at the Tauri boundary, so everything above it is real code and everything below it — the commands, the dialogs — is covered only by Rust tests and by hand. A test that drives the packaged application has not been written | 0.2 |
+| **The native file dialogs are not driven by any test** | They sit below the stub. Exercised by hand only | 0.2 |
 | **No fuzzing of hostile PDF input** | Bounds are unit-tested; the parser is not fuzzed. Largest security gap | 0.2 |
 | **No performance measurement** | No published budget for time-to-first-page, tile latency or memory on a large set. Nothing here claims performance | 0.2 |
 | **Crash recovery is simulated, not real** | The durability test leaks a connection; it does not kill the process or cut power | 0.2 |

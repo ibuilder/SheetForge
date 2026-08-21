@@ -33,6 +33,7 @@ Thumbs.db
 
 # Test and tooling output
 playwright-report/
+apps/ui/pw.log
 test-results/
 coverage/
 *.log

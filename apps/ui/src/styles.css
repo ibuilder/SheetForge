@@ -205,16 +205,41 @@ body {
   position: relative;
 }
 
-.sf-status {
+.sf-statusbar {
+  align-items: center;
   background: var(--sf-panel);
   border-top: 1px solid var(--sf-line);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.35rem 0.75rem;
+}
+
+.sf-status {
   color: var(--sf-muted);
   font-size: 0.78rem;
   margin: 0;
+  min-width: 0;
   overflow: hidden;
-  padding: 0.35rem 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Text, not a coloured dot. Somebody checking whether it is safe to close the window should be
+   able to read the answer, including if they cannot distinguish green from amber. */
+.sf-save {
+  color: var(--sf-muted);
+  flex: none;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.sf-save[data-state="saving"] { color: var(--sf-ink); }
+.sf-save[data-state="error"] {
+  color: #b3261e;
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  .sf-save[data-state="error"] { color: #ff8a80; }
 }
 
 /* A phone or a narrow tablet: the sheet index becomes a strip above the drawing rather than

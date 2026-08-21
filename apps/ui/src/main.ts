@@ -145,6 +145,30 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
     org: "SheetForge",
     initialZoom: "fit-width",
     feetInches: true,
+    exporters: {
+      // Without this the engine falls back to a browser download — an anchor with a `download`
+      // attribute — which inside a webview either goes nowhere or lands somewhere the user did not
+      // choose. Handing the bytes back means the destination is picked by a native save dialog on
+      // the Rust side, and the export is written to the audit trail.
+      onFile: async (blob, filename) => {
+        const dot = filename.lastIndexOf(".");
+        const stem = dot > 0 ? filename.slice(0, dot) : filename;
+        const extension = dot > 0 ? filename.slice(dot + 1) : "bin";
+        chrome.setStatus(`Saving ${filename}…`);
+        try {
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          await host.exportSave(stem, extension, bytes);
+          chrome.setStatus(`Exported ${filename}.`);
+        } catch (error) {
+          // A dismissed save dialog is not a failure worth shouting about.
+          if (isCommandError(error) && error.code === "cancelled") {
+            chrome.setStatus("Export cancelled.");
+            return;
+          }
+          throw error;
+        }
+      },
+    },
     persistence: {
       adapter: new HostAdapter(),
       // The revision id, not the filename: markups belong to the issue they were raised against.
@@ -154,7 +178,16 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
 
   // The engine takes raw bytes directly. It copies before handing them to pdf.js, which may
   // detach the buffer it is given — so this array is not reused after the call.
+  // Say whether work is safe, continuously. The engine emits this as it debounces writes through
+  // the adapter; without surfacing it, "it saves as you go" is a claim the interface never backs up.
+  viewer.bus.on("sync:state", ({ state, pending, message }) => {
+    if (state === "saving") chrome.setSaveState("saving");
+    else if (state === "error") chrome.setSaveState("error", message ?? "check the project folder");
+    else chrome.setSaveState("saved", pending > 0 ? `${pending} pending` : undefined);
+  });
+
   await viewer.load(new Uint8Array(bytes));
+  chrome.setSaveState("saved");
   session = { viewer, revision };
   chrome.setActiveRevision(revision);
   chrome.setStatus(

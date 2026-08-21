@@ -14,14 +14,37 @@ carries besides its shape, and how to get the result back out.
 
 ---
 
-## 1. Start a project
+## 1. Open a drawing
 
-**New project** creates a `.sfproj` folder wherever you point it. That folder *is* the project:
-the drawings, the markups, the audit trail and the scales all live inside it. Zip it and send it,
-put it on a network share, back it up with everything else — it is a folder, not a database you
-have to export from.
+**Open PDF…** and pick a file. That is the whole of it — there is nothing to set up first.
 
-**Add drawings** imports PDFs into it. Each one is:
+Behind the drawing, SheetForge creates a **project**: a `.sfproj` folder named after the file,
+under `Documents\SheetForge`. The status bar tells you where. That folder is where your markups,
+scales, measurements and audit trail live, because a bare PDF has nowhere to keep any of them —
+and keeping them is the difference between this and a viewer.
+
+The folder *is* the project. Zip it and send it, put it on a network share, back it up with
+everything else. It is a folder, not a database you have to export from.
+
+Reopening the same PDF later returns you to the markups you made on it. Matching is by content,
+not by filename, so a renamed copy still finds them and a genuinely different drawing does not.
+
+### The other three buttons
+
+| Button | When you want it |
+|---|---|
+| **Add drawings** | Put more PDFs into the project that is already open — a whole set, rather than one sheet |
+| **Open project** | Reopen a `.sfproj` folder directly, including one somebody sent you |
+| **New project** | Start an empty project in a location *you* choose, rather than the default. Useful when the job lives on a network share |
+
+Use **Open PDF** unless you have a reason not to.
+
+### What importing does to each file
+
+- checked for size and sniffed to confirm it is really a PDF, before anything is written;
+- filed under the SHA-256 of its bytes, so the same sheet arriving in two transmittals is stored
+  once rather than twice under two names;
+- recorded as a **revision** of a document, not as a file.
 
 - checked for size and sniffed to confirm it is really a PDF, before anything is written;
 - filed under the SHA-256 of its bytes, so the same sheet arriving in two transmittals is stored
@@ -30,7 +53,7 @@ have to export from.
 
 That last distinction is the one that pays off later. `A-201` is a document; the issue of it you
 imported on 14 March is a revision. A markup is raised against the revision, so in six months you
-can still say which drawing a comment was made on. See [Slip-sheeting](#7-when-a-sheet-is-re-issued).
+can still say which drawing a comment was made on. See [Slip-sheeting](#8-when-a-sheet-is-re-issued).
 
 ---
 
@@ -61,7 +84,7 @@ three lines records three quads and draws three bands, on screen and in the expo
 than one block swallowing the margins. That is also what gives a specification citation something
 to anchor to.
 
-They need a text layer. A scanned sheet has none — see [OCR](#8-scanned-sheets).
+They need a text layer. A scanned sheet has none — see [OCR](#9-scanned-sheets).
 
 ### Construction
 
@@ -117,7 +140,7 @@ Two rules are enforced rather than suggested:
 - **A closed item reopens at the start.** It cannot jump straight back into review, because that
   would skip the step where somebody says what is wrong with it.
 - **Every move is recorded.** Status changes, assignments, comments, exports, deletions and
-  revision migrations all become audit entries. See [the audit trail](#9-the-audit-trail).
+  revision migrations all become audit entries. See [the audit trail](#10-the-audit-trail).
 
 If you move an accepted comment straight back to *in review*, SheetForge does it in two steps —
 reopened, then sent back for review — and both appear in the trail. That is a more truthful record
@@ -158,7 +181,38 @@ twelve personal conventions. Set it once and hand it round with the project.
 
 ---
 
-## 6. Getting it back out
+## 6. Saving
+
+**There is no Save button, and that is deliberate.**
+
+Markups, statuses, scales and measurements are written to the project as you work — debounced by a
+second or so, then committed durably. The status bar says which state you are in:
+
+| It says | It means |
+|---|---|
+| **All changes saved** | Everything is on disk. Closing the window now loses nothing |
+| **Saving…** | A write is in flight. It will finish in well under a second |
+| **Not saved** | A write failed, and the message says why. **Do not close the window** — see below |
+
+A Save button on a review is a trap: it makes losing an afternoon's work a single forgotten click,
+and a construction review is exactly the kind of session that gets interrupted. Writes go straight
+to disk with `synchronous = FULL`, so a power cut on a site tablet costs seconds rather than the
+session.
+
+If it ever says **Not saved**, the project folder is the thing to check — a full disk, a
+disconnected network drive, or a folder that has been moved out from under the application. The
+markups are still in memory until you close the window, so fixing the cause and drawing one more
+mark will flush the queue.
+
+### What "saving" does *not* mean
+
+It does not write into your PDF. The source drawing stays byte-identical to what was issued — that
+is the point of it. Your markups live beside it in the project, and the way to hand them to
+somebody else is to export.
+
+---
+
+## 7. Getting it back out
 
 | Export | What it is for | What travels with it |
 |---|---|---|
@@ -175,7 +229,7 @@ name a path on your disk — see [the security model](../../SECURITY.md).
 
 ---
 
-## 7. When a sheet is re-issued
+## 8. When a sheet is re-issued
 
 Import the new issue as a revision of the same document, then open **Compare**.
 
@@ -198,7 +252,7 @@ exists so that never happens quietly.
 
 ---
 
-## 8. Scanned sheets
+## 9. Scanned sheets
 
 A scan has no text layer, so search, specification parsing and title-block extraction all return
 nothing on it. Turn on OCR and SheetForge recognises the page, after which all three work.
@@ -220,7 +274,7 @@ off a title block is never treated as verified until you confirm it — see
 
 ---
 
-## 9. The audit trail
+## 10. The audit trail
 
 Every gated act — created, edited, status changed, deleted, calibrated, exported, imported, and
 every act that was *refused* — becomes an entry carrying who, what, when, and against which
@@ -237,7 +291,7 @@ standing. For a record that may end up as contract evidence, that is the propert
 
 ---
 
-## 10. If something goes wrong
+## 11. If something goes wrong
 
 **Check integrity** re-hashes every drawing in the project and verifies the audit chain. It reports
 one of:

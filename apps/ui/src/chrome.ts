@@ -29,6 +29,8 @@ export interface Chrome {
   /** Remove the "no drawing open" placeholder before the viewer mounts. */
   clearEmptyState(): void;
   setStatus(message: string): void;
+  /** Show whether work is saved, being saved, or failed to save. */
+  setSaveState(state: "saved" | "saving" | "error", detail?: string): void;
   askForProjectName(): string | undefined;
 }
 
@@ -136,9 +138,18 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
     "aria-live": "polite",
   });
 
+  // Saved state gets its own element rather than being folded into the status line, because the
+  // status line is transient — it says what just happened — and this has to be true continuously.
+  // It is text, not a coloured dot: "Saved" is legible to somebody who cannot tell green from
+  // amber, and it is what an anxious user is actually looking for.
+  const saveState = element("span", { class: "sf-save", "aria-live": "polite" }, "");
+
+  const statusBar = element("div", { class: "sf-statusbar" });
+  statusBar.append(status, saveState);
+
   const body = element("div", { class: "sf-body" });
   body.append(sidebar, stage);
-  root.append(header, body, status);
+  root.append(header, body, statusBar);
 
   let revisions: RevisionSummary[] = [];
   let activeId: string | undefined;
@@ -235,6 +246,19 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
 
     setStatus(message) {
       status.textContent = message;
+    },
+
+    setSaveState(state, detail) {
+      const label = {
+        saved: "All changes saved",
+        saving: "Saving…",
+        error: "Not saved",
+      }[state];
+      saveState.textContent = detail ? `${label} — ${detail}` : label;
+      saveState.dataset["state"] = state;
+      // A failure to save is the one thing here that must interrupt rather than sit quietly in a
+      // corner, because the user is about to close the window believing their work is kept.
+      saveState.setAttribute("role", state === "error" ? "alert" : "status");
     },
 
     askForProjectName() {
