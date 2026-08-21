@@ -24,6 +24,16 @@ Nothing new. The gap between "it works" and "you can depend on it."
 
 ### Done since this was written
 
+- **Markup summary and takeoff as a spreadsheet.** Three sheets — the markup register, the
+  measurements with their provenance, and a roll-up by cost code — written as a real XLSX rather
+  than a CSV a spreadsheet mangles. The roll-up groups by cost code *and unit*, because adding a
+  length to an area because they share a code produces a number with no meaning and a spreadsheet
+  will do it without complaint.
+
+  Written by hand rather than with a library: an XLSX is a zip of a few XML parts, the drawing
+  engine already has a zip for BCF archives, and the candidate libraries are between 200 KB and
+  2 MB with one of them carrying a licensing question of its own.
+
 - **Drag-and-drop of drawings**, handled entirely in Rust. The reason it was disabled — that a drop
   would hand the webview a filesystem path — turned out not to apply: Tauri delivers the drop as a
   window event, so the paths land on the host side and the interface is told only that drawings

@@ -213,7 +213,8 @@ somebody else is to export.
 | Export | What it is for | What travels with it |
 |---|---|---|
 | **Flattened PDF** | Sending the marked-up set to somebody with no SheetForge | Markups burned into the page, at the right size and place |
-| **CSV / XLSX** | The markup register, or the takeoff, in a spreadsheet | Document revision, page, markup id, status, discipline, assignee, quantity, calibration and formula version |
+| **Summary (XLSX)** | Sending the review to people without the tool. Three sheets: the markup register, the takeoff with its provenance, and a roll-up by cost code | Everything below, typed — so a cost code keeps its leading zero and `03-30-00` does not become a date |
+| **CSV** | Feeding another system that wants plain text | Document revision, page, markup id, status, discipline, assignee, quantity, calibration and formula version |
 | **XFDF** | Every other PDF review tool reads it | Full geometry, plus a namespaced payload carrying the structured fields XFDF has no vocabulary for — lossless back into SheetForge, silently ignored elsewhere |
 | **BCF** | Round-tripping issues into the coordination model | Topics with a decodable sheet anchor, so an issue comes back able to re-place itself on a sheet plotted at a different size |
 

@@ -71,15 +71,68 @@ const PROJECT = {
   format: 1,
 };
 
-/** Install the host stub before any application script runs. */
+/**
+ * Install the host stub before any application script runs.
+ *
+ * This models the whole of `window.__TAURI_INTERNALS__`, not just `invoke`, because the interface
+ * uses more than `invoke`: `listen` from `@tauri-apps/api/event` goes through `transformCallback`
+ * and a pair of `plugin:event|*` commands. Stubbing only what came to mind first is how a test
+ * passes while the real transport is broken — CI caught exactly that.
+ *
+ * Modelling the event channel also makes host-pushed events testable. A drop has no call to
+ * intercept — the host initiates it — so without this there is no way to exercise drag-and-drop at
+ * all. `window.__sfEmit(name, payload)` pushes one the way Rust would.
+ */
 async function stubHost(page: Page, pdf: number[]): Promise<void> {
   await page.addInitScript(
     ({ pdfBytes, revision, project }) => {
       const saved: Record<string, unknown>[] = [];
       (window as unknown as { __sfSaved: unknown[] }).__sfSaved = saved;
 
+      // event name -> the callback ids listening for it, mirroring what the Rust side tracks.
+      const listeners = new Map<string, number[]>();
+      let nextId = 1;
+
+      // Push an event the way the host would. Named on `window` so a test can reach it.
+      (window as unknown as { __sfEmit: (name: string, payload: unknown) => void }).__sfEmit = (
+        name,
+        payload,
+      ) => {
+        for (const id of listeners.get(name) ?? []) {
+          const callback = (window as unknown as Record<string, (arg: unknown) => void>)[`_${id}`];
+          callback?.({ event: name, id, payload });
+        }
+      };
+
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+        // The real one parks the callback on `window` under a numeric key and hands the number to
+        // Rust, which calls back through it. Same contract here.
+        transformCallback(callback: (arg: unknown) => void, once = false) {
+          const id = nextId++;
+          Object.defineProperty(window, `_${id}`, {
+            value: (result: unknown) => {
+              if (once) Reflect.deleteProperty(window, `_${id}`);
+              return callback(result);
+            },
+            writable: false,
+            configurable: true,
+          });
+          return id;
+        },
+
         invoke(command: string, args: Record<string, unknown>) {
+          if (command === "plugin:event|listen") {
+            const name = args["event"] as string;
+            const handler = args["handler"] as number;
+            listeners.set(name, [...(listeners.get(name) ?? []), handler]);
+            return Promise.resolve(handler);
+          }
+          if (command === "plugin:event|unlisten") {
+            const name = args["event"] as string;
+            const id = args["eventId"] as number;
+            listeners.set(name, (listeners.get(name) ?? []).filter((each) => each !== id));
+            return Promise.resolve(null);
+          }
           switch (command) {
             case "app_info":
               return Promise.resolve({
@@ -238,5 +291,75 @@ test.describe("getting work back out", () => {
     for (const name of [/Add drawings/, /Open project/, /New project/, /Check integrity/]) {
       await expect(menu.getByRole("menuitem", { name })).toBeVisible();
     }
+  });
+});
+
+test.describe("drag and drop", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+  });
+
+  test("a dropped drawing opens, without the interface ever seeing a path", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/");
+    await expect(page.getByText("No drawing open")).toBeVisible();
+
+    // What Rust emits after it has imported the files. Note what is *not* in the payload: any
+    // filesystem path. That is the property the whole design turns on — the host handles the drop
+    // and reports the outcome, so a compromised renderer learns nothing about the disk.
+    await page.evaluate(
+      ({ project, revision }) => {
+        (window as unknown as { __sfEmit: (n: string, p: unknown) => void }).__sfEmit(
+          "sheetforge://dropped",
+          { opened: [{ project, revision, reopened: false }] },
+        );
+      },
+      { project: PROJECT, revision: REVISION },
+    );
+
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".sf-sheet").filter({ hasText: "A-201" })).toBeVisible();
+    await expect(page.getByText("No drawing open")).toBeHidden();
+    expect(errors, "no uncaught errors while handling a drop").toEqual([]);
+  });
+
+  test("a refused drop is reported rather than swallowed", async ({ page }) => {
+    await page.goto("/");
+
+    await page.evaluate(() => {
+      (window as unknown as { __sfEmit: (n: string, p: unknown) => void }).__sfEmit(
+        "sheetforge://dropped",
+        {
+          error: {
+            code: "too-large",
+            message: "this file is 900 MB, over the 512 MB limit for a drawing",
+            retryable: false,
+          },
+        },
+      );
+    });
+
+    // A drop that fails silently is worse than one that errors: the user watched a file land on
+    // the window and has no idea why nothing happened.
+    await expect(page.locator(".sf-status")).toContainText("over the 512 MB limit");
+    await expect(page.getByText("No drawing open")).toBeVisible();
+  });
+
+  test("a cancelled drop says nothing", async ({ page }) => {
+    await page.goto("/");
+    await page.locator(".sf-status").waitFor();
+    const before = await page.locator(".sf-status").textContent();
+
+    await page.evaluate(() => {
+      (window as unknown as { __sfEmit: (n: string, p: unknown) => void }).__sfEmit(
+        "sheetforge://dropped",
+        { error: { code: "cancelled", message: "Cancelled.", retryable: false } },
+      );
+    });
+
+    // Cancelling is a normal act, not a failure worth a message.
+    await expect(page.locator(".sf-status")).toHaveText(before ?? "");
   });
 });

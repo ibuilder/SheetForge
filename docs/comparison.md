@@ -44,7 +44,6 @@ Things Bluebeam has, that construction people actually use, that we should build
 | Gap | Why it matters | Priority |
 |---|---|---|
 | **OCR wired to a provider** | Half the drawings on a refurbishment job are scans. Without OCR, search, spec parsing and title-block extraction all return nothing on them. The engine has the whole pipeline — tiling, coordinate mapping, provider interface — and no provider is configured, so the feature is dark | **0.2 — highest** |
-| **Markup summary export to XLSX** | Bluebeam's Markup Summary is how a review gets sent to people who do not have the tool. We export CSV; a formatted workbook with a sheet per discipline is what actually gets emailed | 0.2 |
 | **Page assembly** — extract, delete, rotate, reorder, insert, split | Sending one sheet from a 200-sheet set is a daily act. This is *document assembly*, not content editing: it never rewrites a content stream, so it does not violate our immutability rule — a new revision is written, the original stays untouched | 0.3 |
 | **Batch operations across a set** | Bluebeam's Batch menu is a genuine differentiator: batch header/footer, batch link, batch summary. Reviewing a set means doing things to 200 sheets at once | 0.3 |
 | **Encrypted / password-protected PDFs** | They arrive. Today we refuse them without a useful message; we should prompt and open | 0.3 |

@@ -20,6 +20,7 @@ import { errorMessage, hasHost, host, isCommandError, onDropped } from "./bridge
 import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
+import { summaryPlugin } from "./summary";
 import "./styles.css";
 
 interface Session {
@@ -102,6 +103,32 @@ async function guard(action: () => Promise<void>): Promise<void> {
     if (chrome) chrome.textContent = errorMessage(error);
     // Kept for the diagnostic bundle. The host's own log has the detail; this is the renderer side.
     console.error("SheetForge:", errorMessage(error));
+  }
+}
+
+/**
+ * Hand produced bytes to the host, which puts them where the user says.
+ *
+ * Shared by the engine's own exporters and by the summary plugin, so both get the same native save
+ * dialog, the same audit entry and the same handling of a dismissed dialog.
+ */
+async function deliverExport(chrome: Chrome, blob: Blob, filename: string): Promise<void> {
+  const dot = filename.lastIndexOf(".");
+  const stem = dot > 0 ? filename.slice(0, dot) : filename;
+  const extension = dot > 0 ? filename.slice(dot + 1) : "bin";
+
+  chrome.setStatus(`Saving ${filename}…`);
+  try {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    await host.exportSave(stem, extension, bytes);
+    chrome.setStatus(`Exported ${filename}.`);
+  } catch (error) {
+    // A dismissed save dialog is not a failure worth shouting about.
+    if (isCommandError(error) && error.code === "cancelled") {
+      chrome.setStatus("Export cancelled.");
+      return;
+    }
+    throw error;
   }
 }
 
@@ -234,29 +261,19 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
     feetInches: true,
     // On-device, bundled, off by default. See ocr.ts for what it is good at and what it is not.
     ocr: ocrOptions(),
+    // Registers "Export summary (XLSX)" in the engine's `io` group, which is what the Export menu
+    // is built from — so it appears there without the chrome being told about it.
+    plugins: [
+      summaryPlugin(async (bytes, filename) => {
+        await deliverExport(chrome, new Blob([bytes as BlobPart]), filename);
+      }),
+    ],
     exporters: {
       // Without this the engine falls back to a browser download — an anchor with a `download`
       // attribute — which inside a webview either goes nowhere or lands somewhere the user did not
       // choose. Handing the bytes back means the destination is picked by a native save dialog on
       // the Rust side, and the export is written to the audit trail.
-      onFile: async (blob, filename) => {
-        const dot = filename.lastIndexOf(".");
-        const stem = dot > 0 ? filename.slice(0, dot) : filename;
-        const extension = dot > 0 ? filename.slice(dot + 1) : "bin";
-        chrome.setStatus(`Saving ${filename}…`);
-        try {
-          const bytes = new Uint8Array(await blob.arrayBuffer());
-          await host.exportSave(stem, extension, bytes);
-          chrome.setStatus(`Exported ${filename}.`);
-        } catch (error) {
-          // A dismissed save dialog is not a failure worth shouting about.
-          if (isCommandError(error) && error.code === "cancelled") {
-            chrome.setStatus("Export cancelled.");
-            return;
-          }
-          throw error;
-        }
-      },
+      onFile: (blob, filename) => deliverExport(chrome, blob, filename),
     },
     persistence: {
       adapter: new HostAdapter(),

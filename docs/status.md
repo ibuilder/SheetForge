@@ -36,9 +36,11 @@ The README calls this early. This page says exactly how early, because "producti
 | Opening a PDF needs no project set up first | Browser test drives the empty state through to a rendered drawing | `apps/ui/e2e/open-drawing.spec.ts` |
 | Export is reachable by name, not only as an unlabelled glyph | Browser test opens the menu and finds each exporter | `apps/ui/e2e/open-drawing.spec.ts` |
 | OCR runs entirely from bundled files, with nothing off-origin | Browser test recognises real pixels with every non-origin request blocked | `apps/ui/e2e/ocr.spec.ts` |
+| A dropped drawing opens, and the interface never sees a path | Browser test pushes the host's drop event through a faithful IPC stub | `apps/ui/e2e/open-drawing.spec.ts` |
+| The XLSX summary is a workbook Excel will actually open | 18 unit tests over the written parts, unpacked and inspected with a separate zip reader | `apps/ui/test/xlsx.test.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
 
-**Totals: 204 Rust tests, 24 TypeScript unit tests, 7 browser tests.** The Rust figure includes
+**Totals: 204 Rust tests, 42 TypeScript unit tests, 10 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
