@@ -113,9 +113,7 @@ impl Bundle {
         let _ = writeln!(out);
         let _ = writeln!(
             out,
-            "This file contains no document content, no markup text, no file paths and no
-             credentials. It is safe to read, and safe to attach to a support request. Nothing
-             was sent anywhere in producing it."
+            "This file contains no document content, no markup text, no file paths and no credentials. It is safe to read, and safe to attach to a support request. Nothing was sent anywhere in producing it."
         );
     }
 
@@ -444,6 +442,20 @@ mod tests {
             audit_intact: None,
         };
         assert!(bundle.to_readable().contains("No project open."));
+    }
+
+    #[test]
+    fn no_line_is_ragged_with_stray_indentation() {
+        // A line-continuation escape lost in a refactor turns a wrapped sentence into thirteen
+        // spaces in the middle of a paragraph. The tests that only check `contains` sail past it,
+        // and the first person to notice is the user reading the file — which is the one audience
+        // this whole format exists for.
+        for line in a_bundle().to_readable().lines() {
+            assert!(
+                !line.starts_with("    "),
+                "a line is indented as though a continuation escape was lost: {line:?}",
+            );
+        }
     }
 
     #[test]
