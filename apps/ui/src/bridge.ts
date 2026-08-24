@@ -261,11 +261,11 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
  * capable of being called `Plan étage`, and a header that silently drops the accent would produce
  * a file named something the person did not ask for.
  */
-async function callWithBytes(
+async function callWithBytes<T = void>(
   command: string,
   bytes: Uint8Array,
   headers: Record<string, string>,
-): Promise<void> {
+): Promise<T> {
   if (!hasHost()) throw new NoHostError(command);
   // Sent as the array itself rather than as `bytes.buffer`, for two reasons. `.buffer` is typed
   // `ArrayBufferLike`, which admits a `SharedArrayBuffer` the transport does not accept — the
@@ -277,7 +277,7 @@ async function callWithBytes(
   // offset and length are the whole buffer, so every implementation sees the same bytes.
   const covers = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength;
   const body = covers ? bytes : bytes.slice();
-  return invoke<void>(command, body, {
+  return invoke<T>(command, body, {
     headers: Object.fromEntries(
       Object.entries(headers).map(([key, value]) => [key, encodeURIComponent(value)]),
     ),
@@ -314,6 +314,21 @@ export const host = {
   /** Open the tutorial drawing compiled into the application. Takes no path, and needs none. */
   tutorialOpen: () => call<OpenedDrawing>("tutorial_open"),
   documentImport: () => call<RevisionSummary[]>("document_import"),
+
+  /**
+   * File a document assembled from one already in the project.
+   *
+   * A new revision, never an edit — see
+   * [ADR-0010](../../docs/adr/0010-page-assembly-produces-a-derived-revision.md). The host checks
+   * that `origin` names a revision this project actually holds, so this side cannot record a
+   * provenance that is not true.
+   */
+  documentDerive: (name: string, origin: string, derivation: string, bytes: Uint8Array) =>
+    callWithBytes<RevisionSummary>("document_derive", bytes, {
+      "x-sf-name": name,
+      "x-sf-origin": origin,
+      "x-sf-derivation": derivation,
+    }),
   documentList: () => call<RevisionSummary[]>("document_list"),
   /** The drawing's bytes, as an `ArrayBuffer` — raw, not JSON. */
   documentBytes: (revision: string) => call<ArrayBuffer>("document_bytes", { revision }),

@@ -126,6 +126,7 @@ pub fn run() {
             commands::pdf_open,
             commands::tutorial_open,
             commands::document_import,
+            commands::document_derive,
             commands::document_list,
             commands::document_bytes,
             commands::markup_list,

@@ -87,6 +87,8 @@ export interface Chrome {
    * time they are, they should have to type it.
    */
   askForIssueStatus(): string | undefined;
+  /** Ask which pages to take, showing how many there are to choose from. */
+  askForPages(pageCount: number): string | undefined;
 }
 
 /**
@@ -109,6 +111,8 @@ export interface ChromeHandlers {
   onSelectOutline: (page: number) => void;
   /** Reopen a project by the handle the host gave it. */
   onSelectRecent: (id: string) => void;
+  /** Take pages out of the open drawing into a new one. */
+  onExtractPages: () => void;
   /**
    * The projects opened lately, read when the menu opens rather than held.
    *
@@ -293,6 +297,9 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       "Add drawings, switch project, or check this one",
       () => [
         { id: "import", label: "Add drawings…", enabled: true },
+        // Produces a new drawing rather than changing this one, which is why it sits with the
+        // other acts that add something to the project.
+        { id: "extract", label: "Extract pages to a new drawing…", enabled: true },
         { id: "open", label: "Open project…", enabled: true, separatorBefore: true },
         { id: "new", label: "New project…", enabled: true },
         // Newest first, and never more than the host keeps. A project that has moved is listed
@@ -316,6 +323,7 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       (id) => {
         if (id.startsWith("recent:")) handlers.onSelectRecent(id.slice("recent:".length));
         else if (id === "import") handlers.onImport();
+        else if (id === "extract") handlers.onExtractPages();
         else if (id === "open") handlers.onOpenProject();
         else if (id === "new") handlers.onCreateProject();
         else if (id === "verify") handlers.onVerify();
@@ -560,6 +568,14 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       // already ships, and it is asking for exactly one string.
       const name = window.prompt("Project name", "New project");
       return name?.trim() ? name.trim() : undefined;
+    },
+
+    askForPages(pageCount) {
+      const pages = window.prompt(
+        `Which pages? This drawing has ${pageCount}. Write something like 1-4, 9, 12-14.`,
+        `1-${pageCount}`,
+      );
+      return pages?.trim() ? pages.trim() : undefined;
     },
 
     askForIssueStatus() {

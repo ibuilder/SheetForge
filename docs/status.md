@@ -55,6 +55,8 @@ The README calls this early. This page says exactly how early, because "producti
 | The page counter survives adversarial input and stays inside the domain ceiling | Property tests over generated near-miss PDF tokens, plus every prefix of each | `apps/desktop/src-tauri/src/commands.rs` |
 | A file that is nothing but page markers stops rather than counting forever | Unit test against a file crafted to exceed the ceiling | `apps/desktop/src-tauri/src/commands.rs` |
 | Counting pages stays linear in file size | 8 MB of non-matching bytes against a ceiling that catches a scan inside a scan | `apps/desktop/src-tauri/src/commands.rs` |
+| An extract is filed as a new revision recording what it came from | Store round-trip test, plus a browser test asserting the derivation and origin that crossed the boundary | `crates/sf-store/tests/store.rs`, `apps/ui/e2e/open-drawing.spec.ts` |
+| A page selection is read the way people write one, and refused when it names a page that is not there | 8 unit tests over ranges, repeats, both ends, backwards ranges and malformed input | `apps/ui/test/assemble.test.ts` |
 | A project written by the previous build still opens, with its data intact | Integration tests build a real version-1 database from the shipped migration and open it with the current build | `crates/sf-store/tests/migration.rs` |
 | Opening twice does not run a migration twice | Integration test — `ADD COLUMN` fails on a second run, so a version recorded wrongly means a project that opens once and never again | `crates/sf-store/tests/migration.rs` |
 | A project from a newer build is refused rather than half-understood | Integration test | `crates/sf-store/tests/migration.rs` |
@@ -70,7 +72,7 @@ The README calls this early. This page says exactly how early, because "producti
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 243 Rust tests, 42 TypeScript unit tests, 38 browser tests.** The Rust figure includes
+**Totals: 245 Rust tests, 50 TypeScript unit tests, 40 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and

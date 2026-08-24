@@ -294,8 +294,8 @@ impl Store {
         self.conn.execute(
             "INSERT INTO document_revisions
                (id, project_id, source_document_id, revision_label, content_sha256, byte_len,
-                page_count, imported_at, imported_by)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                page_count, imported_at, imported_by, derived_from, derivation)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 revision.id.to_string(),
                 revision.project_id.to_string(),
@@ -306,6 +306,8 @@ impl Store {
                 revision.page_count,
                 stamp(revision.imported_at),
                 revision.imported_by.as_str(),
+                revision.derived_from.map(|id| id.to_string()),
+                revision.derivation,
             ],
         )?;
         Ok(())
@@ -352,7 +354,7 @@ impl Store {
         self.conn
             .query_row(
                 "SELECT id, project_id, source_document_id, revision_label, content_sha256,
-                        byte_len, page_count, imported_at, imported_by
+                        byte_len, page_count, imported_at, imported_by, derived_from, derivation
                  FROM document_revisions WHERE content_sha256 = ?1 ORDER BY id LIMIT 1",
                 params![hash.to_hex()],
                 read_revision,
@@ -369,7 +371,7 @@ impl Store {
         self.conn
             .query_row(
                 "SELECT id, project_id, source_document_id, revision_label, content_sha256,
-                        byte_len, page_count, imported_at, imported_by
+                        byte_len, page_count, imported_at, imported_by, derived_from, derivation
                  FROM document_revisions WHERE id = ?1",
                 params![id.to_string()],
                 read_revision,
@@ -385,7 +387,7 @@ impl Store {
     pub fn revisions_of(&self, document: SourceDocumentId) -> Result<Vec<DocumentRevision>> {
         let mut statement = self.conn.prepare(
             "SELECT id, project_id, source_document_id, revision_label, content_sha256,
-                    byte_len, page_count, imported_at, imported_by
+                    byte_len, page_count, imported_at, imported_by, derived_from, derivation
              FROM document_revisions WHERE source_document_id = ?1 ORDER BY id",
         )?;
         let rows = statement.query_map(params![document.to_string()], read_revision)?;
@@ -784,6 +786,8 @@ fn read_revision(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<DocumentRev
     let page_count: u32 = row.get(6)?;
     let imported_at: String = row.get(7)?;
     let imported_by: String = row.get(8)?;
+    let derived_from: Option<String> = row.get(9)?;
+    let derivation: Option<String> = row.get(10)?;
 
     Ok((|| {
         Ok(DocumentRevision {
@@ -796,6 +800,13 @@ fn read_revision(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<DocumentRev
             page_count,
             imported_at: parse_stamp(&imported_at)?,
             imported_by: ActorId::new(&imported_by)?,
+            // Deliberately transposed rather than defaulted: a derivation that does not parse is
+            // a corrupt row, and reading it as "imported from outside" would quietly invent
+            // provenance for a document that has some.
+            derived_from: derived_from
+                .map(|id| DocumentRevisionId::from_str(&id))
+                .transpose()?,
+            derivation,
         })
     })())
 }

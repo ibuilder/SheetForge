@@ -87,11 +87,12 @@ things are missing and some of them should not be".
 
 ### Worth having, and now scheduled
 
-- **Page assembly** — insert, delete, extract, replace, reorder, rotate, and merge. Already listed
-  below; their version sharpened the requirement. The hard part is not the manipulation, it is that
-  [source PDFs are immutable and content-addressed](../CLAUDE.md): an assembled document has to be
-  a **new derived revision** with its own hash and a record of what it was made from, not an edit
-  of the issued drawing. That is an ADR before it is a feature.
+- **Page assembly** — *extraction done; the rest still to come.* Taking pages out of a set into a
+  new drawing works, and does it the way [ADR-0010](adr/0010-page-assembly-produces-a-derived-revision.md)
+  settled: a **new derived revision** carrying its own hash and a record of the issue it was cut
+  from, never an edit of the original. Both documents stay in the project. Insert, replace, reorder,
+  rotate and merge are the same machinery pointed at different selections and are not built yet;
+  neither is carrying markups across, which wants the slip-sheet verdicts rather than a guess.
 
 - **Export a sheet as an image.** *Shipped*, and the whole set as one archive with it — see below.
 

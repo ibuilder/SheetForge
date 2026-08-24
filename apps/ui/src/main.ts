@@ -22,6 +22,7 @@ import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
 import { asBlobPart } from "./bytes";
+import { extractPages, parsePageSelection } from "./assemble";
 import { asPdfBlob, isRedaction, redactionPlugin } from "./redact";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
@@ -65,6 +66,7 @@ async function start(): Promise<void> {
       await session?.viewer.goToPage(page);
     }),
     onSelectRecent: (id) => void guard(() => openRecent(chrome, id)),
+    onExtractPages: () => void guard(() => extractPagesToNewDrawing(chrome)),
     recentProjects: () => recent,
     onVerify: () => void guard(() => verify(chrome)),
     onDiagnostics: () => void guard(() => saveDiagnostics(chrome)),
@@ -521,6 +523,49 @@ const REDACTION_REFUSAL =
   "This drawing has redactions on it, and a marked-up PDF would draw them as black boxes over " +
   "text that is still in the file and still recoverable. Use Export \u2192 redacted copy, which " +
   "removes the content rather than covering it.";
+
+/**
+ * Take pages out of the open drawing into a new one.
+ *
+ * The new drawing is filed by the host as a derived revision, so it carries a record of the issue
+ * it was cut from. Both documents stay in the project; nothing is edited. See
+ * [ADR-0010](../../docs/adr/0010-page-assembly-produces-a-derived-revision.md).
+ */
+async function extractPagesToNewDrawing(chrome: Chrome): Promise<void> {
+  const current = session;
+  if (!current?.viewer.doc) {
+    chrome.setStatus("Open a drawing first.");
+    return;
+  }
+
+  const pageCount = current.viewer.doc.numPages;
+  const selection = chrome.askForPages(pageCount);
+  if (!selection) return;
+
+  // Parsed before anything is built, so a typo costs a message rather than a minute of work.
+  const pages = parsePageSelection(selection, pageCount);
+
+  chrome.setStatus(`Taking ${pages.length} page${pages.length === 1 ? "" : "s"} out…`);
+  const extract = await extractPages(current.viewer.doc.bytes, pages);
+
+  // Named for what it is. Two drawings called A-201 with different page counts is a trap, and the
+  // page selection is the most useful thing to put in the name because it is what somebody will be
+  // looking for when they come back to it.
+  const name = `${current.revision.name} (pages ${selection})`;
+  const filed = await host.documentDerive(
+    name,
+    current.revision.id,
+    "page-assembly",
+    extract.bytes,
+  );
+
+  chrome.setRevisions(await host.documentList());
+  await openRevision(chrome, filed);
+  chrome.setStatus(
+    `${filed.name} — ${extract.pages} page${extract.pages === 1 ? "" : "s"} taken from ` +
+      `${current.revision.name}. The original is untouched.`,
+  );
+}
 
 async function createProject(chrome: Chrome): Promise<void> {
   const name = chrome.askForProjectName();

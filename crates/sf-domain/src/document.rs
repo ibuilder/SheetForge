@@ -150,6 +150,19 @@ pub struct DocumentRevision {
     pub imported_at: DateTime<Utc>,
     /// Who imported it.
     pub imported_by: ActorId,
+    /// The revision this one was made from, when it was made here rather than brought in.
+    ///
+    /// `None` means it came from outside the project, which is true of every drawing somebody
+    /// opened or dropped. See
+    /// [ADR-0010](../../../docs/adr/0010-page-assembly-produces-a-derived-revision.md): assembling
+    /// pages produces a new revision, and this is what makes it traceable to the issue it was cut
+    /// from six months later.
+    pub derived_from: Option<DocumentRevisionId>,
+    /// What was done to produce it — `page-assembly` today.
+    ///
+    /// Free text rather than an enum, so a future operation is describable without a migration and
+    /// a row written by a newer build is still readable by an older one.
+    pub derivation: Option<String>,
 }
 
 impl DocumentRevision {
@@ -199,7 +212,51 @@ impl DocumentRevision {
             page_count,
             imported_at: crate::now(),
             imported_by,
+            derived_from: None,
+            derivation: None,
         })
+    }
+
+    /// Record a revision produced from another one inside this project.
+    ///
+    /// The same checks as an import, because the bytes are just as capable of claiming forty
+    /// thousand pages — they were assembled by code, but from a document somebody else wrote.
+    ///
+    /// Takes the originating revision rather than its id, so the project is read from the thing it
+    /// was derived from instead of being passed alongside and trusted to match. A derived document
+    /// filed into a different project from its origin would be a provenance record pointing at
+    /// something that is not there.
+    ///
+    /// # Errors
+    /// As [`DocumentRevision::new`], and if the derivation is empty or over-long.
+    pub fn derived(
+        from: &Self,
+        source_document_id: SourceDocumentId,
+        content_sha256: ContentHash,
+        byte_len: u64,
+        page_count: u32,
+        derivation: &str,
+        imported_by: ActorId,
+    ) -> Result<Self> {
+        if derivation.trim().is_empty() {
+            return Err(DomainError::OutOfRange {
+                field: "derivation",
+                reason: "a derived revision has to say what was done to produce it".into(),
+            });
+        }
+
+        let mut revision = Self::new(
+            from.project_id,
+            source_document_id,
+            None,
+            content_sha256,
+            byte_len,
+            page_count,
+            imported_by,
+        )?;
+        revision.derived_from = Some(from.id);
+        revision.derivation = optional_text(Some(derivation), "derivation", 64)?;
+        Ok(revision)
     }
 
     /// A short, non-sensitive way to name this revision in a log or an error.

@@ -76,6 +76,12 @@ First release. The core is built and tested; the shell is young. See
   percent-encoded headers, so a drawing called `Plan étage` keeps its accent. This is what makes a
   plot-resolution image an export rather than a frozen window.
 
+**Assembling**
+- Extract pages into a new drawing — "send the subcontractor the six mechanical sheets". The
+  extract is a new revision recording which issue it was cut from; the original is never edited,
+  because a revision's identity is the hash of its bytes and editing in place would make
+  verification report your own work as tampering. Both documents stay in the project.
+
 **Getting back to work**
 - The projects you had open lately, in the Project menu. Closing the application used to mean
   finding your work again through a folder dialog.

@@ -115,6 +115,7 @@ async function stubHost(
       (window as unknown as { __sfSaved: unknown[] }).__sfSaved = saved;
       (window as unknown as { __sfExported: unknown[] }).__sfExported = [];
       (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened = [];
+      (window as unknown as { __sfDerived: unknown[] }).__sfDerived = [];
 
       // event name -> the callback ids listening for it, mirroring what the Rust side tracks.
       const listeners = new Map<string, number[]>();
@@ -153,10 +154,28 @@ async function stubHost(
           // would keep passing after the host stopped accepting it.
           if (args instanceof ArrayBuffer || args instanceof Uint8Array) {
             const headers = (options?.["headers"] ?? {}) as Record<string, string>;
+            const bytes = [...(args instanceof Uint8Array ? args : new Uint8Array(args))];
+
+            // An assembled document, not an export. The host answers with the revision it filed.
+            if (command === "document_derive") {
+              (window as unknown as { __sfDerived: unknown[] }).__sfDerived.push({
+                name: decodeURIComponent(headers["x-sf-name"] ?? ""),
+                origin: decodeURIComponent(headers["x-sf-origin"] ?? ""),
+                derivation: decodeURIComponent(headers["x-sf-derivation"] ?? ""),
+                bytes,
+              });
+              return Promise.resolve({
+                ...revision,
+                id: "0192f0c1-0000-7000-8000-0000000000ff",
+                name: decodeURIComponent(headers["x-sf-name"] ?? ""),
+                pageCount: 1,
+              });
+            }
+
             (window as unknown as { __sfExported: unknown[] }).__sfExported.push({
               suggestedName: decodeURIComponent(headers["x-sf-name"] ?? ""),
               extension: decodeURIComponent(headers["x-sf-extension"] ?? ""),
-              bytes: [...(args instanceof Uint8Array ? args : new Uint8Array(args))],
+              bytes,
             });
             return Promise.resolve(null);
           }
@@ -202,6 +221,11 @@ async function stubHost(
                   available: false,
                 },
               ]);
+            case "document_derive": {
+              // Never reached: a raw-bytes call is handled above. Present so a regression that
+              // sent this as JSON fails loudly here rather than looking like a missing command.
+              throw new Error("document_derive must be sent as raw bytes");
+            }
             case "recent_open": {
               (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened.push(args["id"]);
               return Promise.resolve({ ...project, name: "Riverside Tower" });
@@ -960,5 +984,70 @@ test.describe("recent projects", () => {
       expect(value).not.toMatch(/[/\\]/);
       expect(value).not.toMatch(/\.sfproj/);
     }
+  });
+});
+
+/**
+ * Taking pages out of a set.
+ *
+ * The behaviour worth pinning is not that an extract appears — it is that the original is left
+ * alone and the new document says where it came from. ADR-0010 turns on both: a tool that edits an
+ * issue in place makes verification report the user's own work as tampering, and a tool that
+ * produces an untraceable document reintroduces the provenance gap the whole project exists to
+ * close.
+ */
+test.describe("extracting pages", () => {
+  test("files a new drawing that records what it came from", async ({ page }) => {
+    await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
+    await page.goto("/");
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    page.on("dialog", (dialog) => void dialog.accept("2"));
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    await page.getByRole("menuitem", { name: /Extract pages/ }).click();
+
+    await expect
+      .poll(
+        () => page.evaluate(() => (window as unknown as { __sfDerived: unknown[] }).__sfDerived.length),
+        { timeout: 60_000 },
+      )
+      .toBeGreaterThan(0);
+
+    const derived = await page.evaluate(() => {
+      const all = (window as unknown as { __sfDerived: Record<string, unknown>[] }).__sfDerived;
+      return all[all.length - 1]!;
+    });
+
+    // It says what was done and which revision it was cut from. Without both, the project fills up
+    // with documents nobody can account for.
+    expect(derived["derivation"]).toBe("page-assembly");
+    expect(derived["origin"]).toBe(REVISION.id);
+    expect(derived["name"]).toContain("pages 2");
+
+    // And it really is a PDF, not a description of one.
+    const bytes = derived["bytes"] as number[];
+    expect(bytes.slice(0, 4)).toEqual([0x25, 0x50, 0x44, 0x46]);
+
+    // Smaller than the two-page original, because it holds one page.
+    expect(bytes.length).toBeLessThan(TUTORIAL_SHEET.length);
+  });
+
+  test("a page that is not there is refused before anything is built", async ({ page }) => {
+    await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
+    await page.goto("/");
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    page.on("dialog", (dialog) => void dialog.accept("1-99"));
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    await page.getByRole("menuitem", { name: /Extract pages/ }).click();
+
+    // Refused with the number of pages there actually are, and nothing filed.
+    await expect(page.locator(".sf-status")).toContainText(/2 pages/, { timeout: 15_000 });
+    const filed = await page.evaluate(
+      () => (window as unknown as { __sfDerived: unknown[] }).__sfDerived.length,
+    );
+    expect(filed, "a document was built from a selection that named pages that do not exist").toBe(0);
   });
 });

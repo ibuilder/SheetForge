@@ -846,3 +846,86 @@ fn a_drawing_that_is_not_in_the_project_is_not_found() {
     let other = ContentHash::from_bytes([0x11; 32]);
     assert!(fixture.store.revision_by_hash(other).unwrap().is_none());
 }
+
+/// A derived revision remembers what it was cut from.
+///
+/// The point of [ADR-0010](../../../docs/adr/0010-page-assembly-produces-a-derived-revision.md) is
+/// that assembling pages produces a new document rather than editing one, and that the new
+/// document can be traced back. A derivation that did not survive a write and a read would leave a
+/// project full of documents nobody can account for — which is the provenance gap the decision
+/// exists to close, reintroduced one layer down.
+#[test]
+fn a_derived_revision_remembers_what_it_was_made_from() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(&dir.path().join("database.sqlite")).unwrap();
+    let actor = ActorId::local();
+
+    let project = Project::new("Riverside Tower", None, None, actor.clone()).unwrap();
+    store.create_project(&project).unwrap();
+    let document = SourceDocument::new(project.id, "A-201", None).unwrap();
+    store.insert_source_document(&document).unwrap();
+
+    let issued = DocumentRevision::new(
+        project.id,
+        document.id,
+        Some("C"),
+        ContentHash::from_bytes([0x11; 32]),
+        4096,
+        200,
+        actor.clone(),
+    )
+    .unwrap();
+    store.insert_revision(&issued).unwrap();
+
+    let extract = DocumentRevision::derived(
+        &issued,
+        document.id,
+        ContentHash::from_bytes([0x22; 32]),
+        1024,
+        6,
+        "page-assembly",
+        actor,
+    )
+    .unwrap();
+    store.insert_revision(&extract).unwrap();
+
+    let read = store.revision(extract.id).unwrap();
+    assert_eq!(read.derived_from, Some(issued.id));
+    assert_eq!(read.derivation.as_deref(), Some("page-assembly"));
+
+    // And the issue it was cut from still says it came from outside the project, because it did.
+    let original = store.revision(issued.id).unwrap();
+    assert_eq!(original.derived_from, None);
+    assert_eq!(original.derivation, None);
+}
+
+/// A derivation with nothing in it is refused. "Derived from revision X by (blank)" is a record
+/// that looks like provenance and carries none.
+#[test]
+fn a_derived_revision_has_to_say_what_was_done() {
+    let actor = ActorId::local();
+    let project = Project::new("Riverside Tower", None, None, actor.clone()).unwrap();
+    let document = SourceDocument::new(project.id, "A-201", None).unwrap();
+
+    let issued = DocumentRevision::new(
+        project.id,
+        document.id,
+        Some("C"),
+        ContentHash::from_bytes([0x11; 32]),
+        4096,
+        200,
+        actor.clone(),
+    )
+    .unwrap();
+
+    let refused = DocumentRevision::derived(
+        &issued,
+        document.id,
+        ContentHash::from_bytes([0x22; 32]),
+        1024,
+        6,
+        "   ",
+        actor,
+    );
+    assert!(refused.is_err());
+}
