@@ -20,7 +20,8 @@ import { errorMessage, hasHost, host, isCommandError, onDropped } from "./bridge
 import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
-import { RESOLUTIONS, sheetAsPng } from "./sheet-image";
+import { asBlobPart } from "./bytes";
+import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
 import "./styles.css";
 
@@ -212,7 +213,20 @@ function exportItems(): MenuItem[] {
     separatorBefore: index === 0,
   }));
 
-  return [...engineItems, ...imageItems];
+  // The whole set, as one archive rather than one save dialog per sheet. Only at the two lower
+  // resolutions: a 200-sheet set at plot resolution is several gigabytes, and offering it would be
+  // offering a failure.
+  const bulkItems: MenuItem[] = RESOLUTIONS.filter((each) => each.dpi <= 150).map(
+    (resolution, index) => ({
+      id: `imageset.${resolution.id}`,
+      label: `Every sheet as PNG (ZIP) - ${resolution.label.toLowerCase()}…`,
+      enabled: true,
+      reason: resolution.purpose,
+      separatorBefore: index === 0,
+    }),
+  );
+
+  return [...engineItems, ...imageItems, ...bulkItems];
 }
 
 /** Run one of them. The engine produces the bytes; the host writes them where the user says. */
@@ -223,6 +237,12 @@ async function runExport(chrome: Chrome, id: string): Promise<void> {
   const resolution = RESOLUTIONS.find((each) => `image.${each.id}` === id);
   if (resolution) {
     await exportSheetImage(chrome, viewer, resolution.dpi);
+    return;
+  }
+
+  const bulk = RESOLUTIONS.find((each) => `imageset.${each.id}` === id);
+  if (bulk) {
+    await exportSheetSet(chrome, viewer, bulk.dpi);
     return;
   }
 
@@ -310,6 +330,25 @@ async function openTutorial(chrome: Chrome): Promise<void> {
   );
 }
 
+/**
+ * Every sheet, as one archive.
+ *
+ * Progress is reported per sheet because this is the one export that takes minutes on a real set,
+ * and a window that says nothing for minutes is indistinguishable from one that has hung.
+ */
+async function exportSheetSet(chrome: Chrome, viewer: Viewer, dpi: number): Promise<void> {
+  const set = await sheetsAsZip(viewer, dpi, (page, of) => {
+    chrome.setStatus(`Rendering sheet ${page} of ${of} at ${dpi} DPI…`);
+  });
+
+  const name = session ? session.revision.name : "sheets";
+  await deliverExport(chrome, set.blob, `${name} (${dpi} DPI).zip`);
+  chrome.setStatus(
+    `Exported ${set.pages} sheet${set.pages === 1 ? "" : "s"} - ` +
+      `${Math.round(set.blob.size / (1024 * 1024))} MB.`,
+  );
+}
+
 async function createProject(chrome: Chrome): Promise<void> {
   const name = chrome.askForProjectName();
   if (!name) return;
@@ -388,7 +427,7 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
     // is built from — so it appears there without the chrome being told about it.
     plugins: [
       summaryPlugin(async (bytes, filename) => {
-        await deliverExport(chrome, new Blob([bytes as BlobPart]), filename);
+        await deliverExport(chrome, new Blob([asBlobPart(bytes)]), filename);
       }),
     ],
     exporters: {

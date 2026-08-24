@@ -778,3 +778,55 @@ test.describe("the drawing's own contents", () => {
     await expect(page.locator(".sf-outline")).toBeHidden();
   });
 });
+
+/**
+ * Every sheet, as one archive.
+ *
+ * One save dialog rather than one per sheet. The alternative was a folder picker, which would mean
+ * a directory handle held across calls and a second place for "no path crosses the boundary" to be
+ * got wrong; a single file through the export path that already exists is the same result with
+ * none of that.
+ *
+ * Driven against the tutorial sheet because it is the only two-page document here, and a bulk
+ * export whose test only ever saw one page would not be testing the bulk part.
+ */
+test.describe("exporting every sheet", () => {
+  test("produces a ZIP with one entry per sheet", async ({ page }) => {
+    await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
+    await page.goto("/");
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Export/ }).click();
+    await page.getByRole("menuitem", { name: /Every sheet as PNG \(ZIP\) - screen/ }).click();
+
+    await expect
+      .poll(
+        () => page.evaluate(() => (window as unknown as { __sfExported: unknown[] }).__sfExported.length),
+        { timeout: 60_000 },
+      )
+      .toBeGreaterThan(0);
+
+    const archive = await lastExport(page);
+
+    // The local file header signature, then the entry names read out of the archive. Checking the
+    // structure rather than the length is what tells a real ZIP from a buffer of something.
+    expect(archive.slice(0, 4)).toEqual([0x50, 0x4b, 0x03, 0x04]);
+
+    const names = await page.evaluate((bytes) => {
+      const data = new Uint8Array(bytes);
+      const found: string[] = [];
+      for (let i = 0; i + 30 < data.length; i += 1) {
+        // "PK\x03\x04" — the start of each stored entry.
+        if (data[i] === 0x50 && data[i + 1] === 0x4b && data[i + 2] === 0x03 && data[i + 3] === 0x04) {
+          const nameLength = data[i + 26]! | (data[i + 27]! << 8);
+          found.push(new TextDecoder().decode(data.subarray(i + 30, i + 30 + nameLength)));
+        }
+      }
+      return found;
+    }, archive);
+
+    // Zero-padded, so an archive of a 200-sheet set sorts the way the set is ordered rather than
+    // putting sheet 10 before sheet 2.
+    expect(names).toEqual(["001.png", "002.png"]);
+  });
+});

@@ -59,6 +59,9 @@ First release. The core is built and tested; the shell is young. See
 - One sheet as a PNG, with its markups on it, at 96, 150 or 300 DPI — screen, print or plot. The
   markups are composited from the same renderer the viewer paints with, so an exported cloud cannot
   drift into a different shape from the one on screen.
+- Every sheet as PNGs in one ZIP, at screen or print resolution. One save dialog rather than one
+  per sheet, and no folder picker — which would have meant a directory handle held across calls
+  and a second place for "no command takes a path" to be got wrong.
 - Exports cross to the host as raw bytes rather than as a JSON array of numbers, which cost about
   five characters per byte to build, send and parse. The name and extension travel as
   percent-encoded headers, so a drawing called `Plan étage` keeps its accent. This is what makes a

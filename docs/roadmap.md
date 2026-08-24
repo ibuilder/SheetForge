@@ -90,7 +90,7 @@ things are missing and some of them should not be".
   a **new derived revision** with its own hash and a record of what it was made from, not an edit
   of the issued drawing. That is an ADR before it is a feature.
 
-- **Export a sheet as an image.** *Shipped* — see below.
+- **Export a sheet as an image.** *Shipped*, and the whole set as one archive with it — see below.
 
 - **Snapping while measuring.** They snap to endpoints, midpoints, centres and edges. This is the
   single most on-mission item on their list: a takeoff traced by eye at 1/8" scale carries a

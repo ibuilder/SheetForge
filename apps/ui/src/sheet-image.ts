@@ -24,7 +24,9 @@
  * refused before anything is allocated — a browser canvas has a hard area limit, and crossing it
  * yields a blank image rather than an error.
  */
-import { drawAnnotation, SVG_NS, type Viewer } from "@massingcloud/pdf-viewer";
+import { drawAnnotation, SVG_NS, zip, type Viewer, type ZipEntry } from "@massingcloud/pdf-viewer";
+
+import { asBlobPart } from "./bytes";
 
 /** What a chosen resolution is actually for. */
 export interface Resolution {
@@ -173,4 +175,71 @@ async function markupOverlay(
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+
+/**
+ * How much of a set may be turned into pictures in one go.
+ *
+ * Not a limit on what the format can hold — the archive is uncompressed and the ceiling is four
+ * gigabytes — but on what can be held in memory while it is being built. Every page is rasterised,
+ * encoded, and kept until the last one is done, so a large set at a high resolution is a genuine
+ * way to run a browser out of memory. Refused with a number rather than attempted and lost.
+ */
+const MAX_ARCHIVE_BYTES = 1_200 * 1024 * 1024;
+
+/** What a bulk export produced, for the caller to name and report. */
+export interface SheetSet {
+  blob: Blob;
+  pages: number;
+}
+
+/**
+ * Every sheet in the open drawing, as PNGs in a ZIP.
+ *
+ * One archive rather than one save dialog per sheet. The alternative would be a folder picker,
+ * which would mean a new command, a directory handle held across calls, and a second place for
+ * the rule that no path crosses the boundary to be got wrong. A single file through the export
+ * path that already exists is the same result with none of that.
+ *
+ * Uncompressed entries, because the engine's zip stores rather than deflates and PNGs are already
+ * compressed — deflating them again would spend time to save almost nothing.
+ *
+ * @param onProgress Called before each page. A 200-sheet set takes minutes, and a window that
+ *   says nothing for minutes is indistinguishable from one that has hung.
+ * @throws if no document is open, or the archive would be too large to hold in memory.
+ */
+export async function sheetsAsZip(
+  viewer: Viewer,
+  dpi: number,
+  onProgress: (page: number, of: number) => void,
+): Promise<SheetSet> {
+  const doc = viewer.doc;
+  if (!doc) throw new Error("No drawing is open.");
+
+  const pages = doc.numPages;
+  const entries: ZipEntry[] = [];
+  let total = 0;
+
+  for (let page = 1; page <= pages; page += 1) {
+    onProgress(page, pages);
+    const image = await sheetAsPng(viewer, page, dpi);
+    total += image.blob.size;
+
+    if (total > MAX_ARCHIVE_BYTES) {
+      throw new Error(
+        `The archive passed ${Math.round(total / (1024 * 1024))} MB at sheet ${page} of ${pages}. ` +
+          "Choose a lower resolution, or export the sheets you need one at a time.",
+      );
+    }
+
+    entries.push({
+      // Zero-padded so the archive sorts the way the set is ordered. `p10` before `p2` is the
+      // kind of small wrongness that makes a deliverable look careless.
+      name: `${String(page).padStart(3, "0")}.png`,
+      data: new Uint8Array(await image.blob.arrayBuffer()),
+    });
+  }
+
+  return { blob: new Blob([asBlobPart(zip(entries))], { type: "application/zip" }), pages };
 }
