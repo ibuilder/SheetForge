@@ -220,6 +220,24 @@ test.describe("redaction", () => {
     expect(exported.startsWith("%PDF"), "the export is not a PDF").toBe(true);
   });
 
+  test("a marked-up PDF is refused while redactions exist", async ({ page }) => {
+    await redactTheSecret(page);
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Export/ }).click();
+    await page.getByRole("menuitem", { name: /marked-up PDF/i }).click();
+
+    // The engine would happily flatten the redaction rectangles onto a document whose text is
+    // untouched, producing a file with solid black boxes over recoverable content — visually
+    // identical to a real redaction and believed for exactly that reason.
+    await expect(page.locator(".sf-status")).toContainText(/redacted copy/i, { timeout: 30_000 });
+
+    // Refused means refused: nothing reached the host to be written.
+    const written = await page.evaluate(
+      () => (window as unknown as { __sfExported: unknown[] }).__sfExported.length,
+    );
+    expect(written, "a believable fake redaction was written to disk").toBe(0);
+  });
+
   test("a page nobody redacted keeps its text", async ({ page }) => {
     await redactTheSecret(page);
 

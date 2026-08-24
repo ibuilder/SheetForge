@@ -78,8 +78,11 @@ jobs:
 
       # Kept briefly so a human can install one and see what the operating system says about an
       # unsigned binary — which is the other half of this, and the half CI cannot judge.
+      # Only on success. With `always()` a failed bundle was followed by an upload failure
+      # complaining that no files were found — a second red step describing a consequence rather
+      # than the cause, which is the wrong thing to read first when diagnosing a packaging failure.
       - name: Collect what was produced
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v5
         with:
           name: bundle-${{ matrix.label }}

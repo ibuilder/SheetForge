@@ -22,7 +22,7 @@ import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
 import { asBlobPart } from "./bytes";
-import { asPdfBlob, redactionPlugin } from "./redact";
+import { asPdfBlob, isRedaction, redactionPlugin } from "./redact";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
 import "./styles.css";
@@ -267,6 +267,10 @@ async function runExport(chrome: Chrome, id: string): Promise<void> {
   const viewer = session?.viewer;
   if (!viewer) return;
 
+  // Checked here as well as in the `onFile` hook. This is the route with a working error channel;
+  // the hook is the backstop for the engine's own toolbar.
+  if (id === "export.pdf") refuseIfItWouldFakeARedaction(chrome, "export.pdf");
+
   const resolution = RESOLUTIONS.find((each) => `image.${each.id}` === id);
   if (resolution) {
     await exportSheetImage(chrome, viewer, resolution.dpi);
@@ -476,6 +480,48 @@ async function refreshRecent(): Promise<void> {
   }
 }
 
+/**
+ * Refuse to write a PDF that would look redacted without being redacted.
+ *
+ * The engine's "marked-up PDF" export flattens every markup onto the document, and a redaction is
+ * stored as an ordinary black rectangle. The result is a file with solid black boxes over text
+ * that is still there, still selectable, still recoverable — visually indistinguishable from a
+ * real redaction and believed for exactly that reason. Somebody would send it out.
+ *
+ * The check lives here, in the `onFile` hook, because that is the one point every engine export
+ * passes through. Disabling the menu item would leave the engine's own toolbar button, which this
+ * application does not control; refusing the bytes covers both, and any route added later.
+ *
+ * Image exports are deliberately not caught. A PNG has no text in it at all, so a black rectangle
+ * on one is a genuine redaction rather than a picture of one — which is also why the redacted PDF
+ * export rasterises.
+ *
+ * @throws if the export would produce a believable fake.
+ */
+function refuseIfItWouldFakeARedaction(chrome: Chrome, filename: string): void {
+  if (!filename.toLowerCase().endsWith(".pdf")) return;
+  const viewer = session?.viewer;
+  if (!viewer?.store.all().some(isRedaction)) return;
+
+  // Said out loud *and* thrown. The engine does not propagate a rejection out of this hook, so a
+  // throw on its own stops the file being written and tells the user nothing: they click
+  // "marked-up PDF", nothing happens, and they click it again. The status line is also the only
+  // channel that survives the engine's own toolbar button, which this application does not own.
+  chrome.setStatus(REDACTION_REFUSAL);
+  throw new Error(REDACTION_REFUSAL);
+}
+
+/**
+ * Why a marked-up PDF is refused while redactions exist.
+ *
+ * One string, because it is delivered through two mechanisms and they must not drift into saying
+ * different things about the same refusal.
+ */
+const REDACTION_REFUSAL =
+  "This drawing has redactions on it, and a marked-up PDF would draw them as black boxes over " +
+  "text that is still in the file and still recoverable. Use Export \u2192 redacted copy, which " +
+  "removes the content rather than covering it.";
+
 async function createProject(chrome: Chrome): Promise<void> {
   const name = chrome.askForProjectName();
   if (!name) return;
@@ -562,7 +608,10 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
       // registries, so both appear where the engine's equivalents do.
       redactionPlugin(
         async (bytes, filename) => {
-          const name = session ? `${session.revision.name} (redacted)` : filename;
+          // `filename` already carries an extension, so the fallback strips it rather than
+          // producing "redacted.pdf.pdf".
+          const fallback = filename.replace(/\.pdf$/i, "");
+          const name = session ? `${session.revision.name} (redacted)` : fallback;
           await deliverExport(chrome, asPdfBlob(bytes), `${name}.pdf`);
         },
         (message) => chrome.setStatus(message),
@@ -573,7 +622,10 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
       // attribute — which inside a webview either goes nowhere or lands somewhere the user did not
       // choose. Handing the bytes back means the destination is picked by a native save dialog on
       // the Rust side, and the export is written to the audit trail.
-      onFile: (blob, filename) => deliverExport(chrome, blob, filename),
+      onFile: (blob, filename) => {
+        refuseIfItWouldFakeARedaction(chrome, filename);
+        return deliverExport(chrome, blob, filename);
+      },
     },
     persistence: {
       adapter: new HostAdapter(),

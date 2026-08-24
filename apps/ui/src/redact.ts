@@ -34,6 +34,7 @@ import { definePlugin, type Annotation, type Viewer } from "@massingcloud/pdf-vi
 import { PDFDocument } from "pdf-lib";
 
 import { asBlobPart } from "./bytes";
+import { MAX_PIXELS } from "./sheet-image";
 
 /** Marks a rectangle as a redaction rather than as ordinary markup. */
 const REDACTION = "sfRedaction";
@@ -47,6 +48,16 @@ const REDACTION = "sfRedaction";
  * option is offering somebody the chance to produce an unreadable legal document by accident.
  */
 const REDACTION_DPI = 200;
+
+/**
+ * How large a redacted document may get before it is refused.
+ *
+ * Every rasterised page is held until the last one is encoded, so a set redacted throughout is a
+ * genuine way to run a webview out of memory — and the failure is a dead tab with no message and
+ * no partial output, after somebody has spent an hour drawing redactions. Refused with a number
+ * and the sheet it gave up on, the same way the bulk image export refuses.
+ */
+const MAX_REDACTED_BYTES = 1_200 * 1024 * 1024;
 
 /** Whether a markup is one of ours. */
 export function isRedaction(annotation: Annotation): boolean {
@@ -123,8 +134,29 @@ export async function redactedCopy(
   const doc = viewer.doc;
   if (!doc) throw new Error("No drawing is open.");
 
-  const source = await PDFDocument.load(doc.bytes.slice());
+  // Encrypted PDFs are routine on issued construction drawings — an owner password restricting
+  // printing or extraction. pdf.js opens them, so the drawing renders and redactions can be drawn,
+  // and without this the only sign of trouble is pdf-lib's own error arriving after all the work
+  // is done. `ignoreEncryption` is deliberately *not* set: this produces a document to be handed
+  // out, and quietly stripping someone else's protection is not this tool's decision to make.
+  let source: PDFDocument;
+  try {
+    source = await PDFDocument.load(doc.bytes.slice());
+  } catch {
+    throw new Error(
+      "This drawing is protected, so a redacted copy cannot be built from it. Ask whoever issued " +
+        "it for an unprotected copy. Marking up and measuring still work.",
+    );
+  }
+
   const out = await PDFDocument.create();
+  // The source's own title and bookmarks are not carried across: `copyPages` moves pages, not the
+  // document around them. Naming the output rather than leaving it blank is the part worth doing;
+  // the outline is a known loss, recorded in docs/status.md.
+  out.setTitle("Redacted copy");
+  out.setProducer("SheetForge");
+
+  let produced = 0;
 
   for (let page = 1; page <= doc.numPages; page += 1) {
     const redactions = redactionsOn(viewer, page);
@@ -144,6 +176,15 @@ export async function redactedCopy(
 
     const info = await doc.pageInfo(page);
     const png = await rasteriseRedacted(viewer, page, info.width, info.height, redactions);
+
+    produced += png.byteLength;
+    if (produced > MAX_REDACTED_BYTES) {
+      throw new Error(
+        `The redacted copy passed ${Math.round(produced / (1024 * 1024))} MB at sheet ${page} of ` +
+          `${doc.numPages}. Redact fewer sheets at a time, or export them in batches.`,
+      );
+    }
+
     const embedded = await out.embedPng(png);
     // Added at the source page's own size in points, so the redacted document plots at the same
     // scale as the original. A takeoff measured off a redacted copy has to come out the same.
@@ -172,9 +213,24 @@ async function rasteriseRedacted(
   if (!doc) throw new Error("No drawing is open.");
 
   const scale = REDACTION_DPI / 72;
+  const width = Math.round(widthPt * scale);
+  const height = Math.round(heightPt * scale);
+
+  // Refused rather than attempted. A canvas past the browser's limit does not throw — it yields a
+  // blank one — so without this a roll-plotted section too wide to rasterise would export as a
+  // white page, the redaction would report success, and the blank sheet would go out in a
+  // disclosure bundle. Silence is the worst possible failure for this particular feature.
+  if (width * height > MAX_PIXELS) {
+    throw new Error(
+      `Page ${page} is ${widthPt} by ${heightPt} points, which is too large to redact at ` +
+        `${REDACTION_DPI} DPI. Redaction has to rasterise the page, and this one exceeds what a ` +
+        "canvas can hold.",
+    );
+  }
+
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(widthPt * scale);
-  canvas.height = Math.round(heightPt * scale);
+  canvas.width = width;
+  canvas.height = height;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("This system could not provide a drawing surface.");
 

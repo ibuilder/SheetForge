@@ -54,7 +54,7 @@ export const RESOLUTIONS: readonly Resolution[] = [
  * one rather than by throwing. Held well under, so the failure is a message rather than a picture
  * of nothing.
  */
-const MAX_PIXELS = 200_000_000;
+export const MAX_PIXELS = 200_000_000;
 
 /** Everything the caller needs to name the file and warn about the size. */
 export interface SheetImage {
