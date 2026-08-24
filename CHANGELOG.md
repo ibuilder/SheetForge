@@ -114,8 +114,18 @@ First release. The core is built and tested; the shell is young. See
 
 ### Known limitations
 
+Listed here as prominently as the features, because a first release is mostly a list of things
+nobody has checked yet. [docs/status.md](docs/status.md) is the long version.
+
 - Release binaries are not code-signed with an organisation certificate, so Windows SmartScreen and
   macOS Gatekeeper will warn on install.
+- **No installer has been run on a clean machine.** CI packages the application on all three
+  platforms, which proves it builds; nobody has installed one.
+- **The raw IPC transport is exercised only against a stub.** Every export crosses that seam. The
+  browser suite stops there by design, so the first person to export from a packaged build is
+  testing it.
+- **The updater has never delivered an update**, because there is no previous release to update
+  from. That path ships unexercised end to end.
 - The name "SheetForge" has not had trademark clearance —
   [ADR-0009](docs/adr/0009-trademark-and-brand-clearance-status.md).
 - No at-rest encryption of the project package; use full-disk encryption.

@@ -10,6 +10,11 @@
 - [ ] Version bumped in `Cargo.toml` (workspace), `package.json`, and
       `apps/desktop/src-tauri/tauri.conf.json`. All three, or the updater and the about box
       disagree.
+- [ ] **Run the bundle dry run and let it finish.**
+      `gh workflow run bundle.yml` builds installers on all three platforms without needing the
+      signing key. It exists because the packaging had once been run on Windows only, and finding
+      out that macOS does not package *after* a tag is pushed is the worst moment to find out.
+      Tagging before this is green is tagging on hope.
 
 ## Signing material
 
@@ -53,6 +58,10 @@ Intel) and Linux, signs the update payloads, and opens a **draft** release.
 
 ## Before publishing the draft
 
+- [ ] **Export a file from the installed application.** Any export — a PNG of a sheet will do.
+      Bytes cross to the host as a raw IPC body, and the browser suite exercises that against a
+      stub written by the same person who wrote the code it is checking. This is the one seam
+      nothing automated reaches, and a failure here means every export is broken.
 - [ ] Every expected artefact is present: `.msi`, `.exe`, `.dmg` (both architectures),
       `.AppImage`, `.deb`, `.rpm`.
 - [ ] `latest.json` lists every platform and each entry carries a signature.
@@ -62,10 +71,28 @@ Intel) and Linux, signs the update payloads, and opens a **draft** release.
       reopen, and confirm it is all still there.
 - [ ] Run **Check integrity** and confirm it verifies.
 - [ ] Install the *previous* release, then update to this one, and confirm the project still opens
-      afterwards.
+      afterwards. **Not applicable to the first release**, which is the one case where this cannot
+      be done and therefore the one case where the updater path ships unexercised end to end.
+- [ ] Open a project made by the *previous* release and confirm it still opens. The schema is at
+      version 2 and the migration is tested in `crates/sf-store/tests/migration.rs`, but a test
+      that builds its own version-1 database is not the same as a project somebody actually used.
 - [ ] Release notes name the known limitations.
 
 Then publish.
+
+## If a tag was pushed too early
+
+A tag that points at the wrong commit is not a release — nothing was built from it and nobody has
+downloaded it — so moving it is safe *until a draft exists*. After that, do not: publish a higher
+version instead, as below.
+
+```bash
+git tag -f vX.Y.Z && git push --force origin vX.Y.Z
+```
+
+Check what it currently points at first (`git log --oneline -1 vX.Y.Z`), because a tag pushed weeks
+ago may predate a schema change — in which case building from it produces something that cannot
+open the projects the current build writes.
 
 ## Rolling back
 

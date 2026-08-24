@@ -90,9 +90,22 @@ lands in a review queue with an audit trail.
 **Cite the specification.** A CSI spec book is parsed into addressable sections and clauses, so
 `07 84 00 §1.2.A` is a link rather than a string somebody typed.
 
+**Redact, properly.** A page carrying a redaction is rasterised and the redacted areas are painted
+out before the pixels are encoded, so the text is *gone* rather than covered. A black box over text
+a copy-paste still recovers is worse than no redaction, because it is believed — there is a test
+that greps the exported bytes for the string that was supposed to be removed. Pages you did not
+redact are copied untouched and keep their text.
+
+**Take pages out without touching the original.** Extract a selection into a new drawing that
+records which issue it was cut from. The original is never edited: a revision's identity is the
+hash of its bytes, and editing in place would make verification report your own work as tampering.
+See [ADR-0010](docs/adr/0010-page-assembly-produces-a-derived-revision.md).
+
 **Export.** Flattened PDF, CSV and XLSX takeoff, XFDF for every other review tool, and BCF topics
 for the coordination model — each carrying the document revision, page, markup id, calibration and
-formula version the number came from.
+formula version the number came from. Plus a sheet as a PNG at screen, print or plot resolution, a
+whole set as one ZIP, and an issue status — "NOT FOR CONSTRUCTION" — stamped across the picture and
+into the filename.
 
 ## First run
 
@@ -118,8 +131,15 @@ property and does not belong in a repository.*
 
 ## Install
 
-Installers for each platform are on the
-[releases page](https://github.com/ibuilder/SheetForge/releases). They are **not** signed with an
+> **No release has been cut yet.** The [releases page](https://github.com/ibuilder/SheetForge/releases)
+> is empty, and will stay empty until the first build is signed and checked on a clean machine.
+> Until then, [build from source](#build-from-source) — it is three commands.
+>
+> CI does package the application on Windows, macOS and Linux on every change to the bundling
+> configuration, so the installers below are produced and kept for a week as build artifacts. They
+> are not a release and have not been installed by anybody.
+
+When there is one, installers will be published there. They will **not** be signed with an
 organisation code-signing certificate, so Windows SmartScreen and macOS Gatekeeper will warn on
 first launch — see [docs/status.md](docs/status.md). Update *payloads* are separately signed and
 verified against a key compiled into the application, which is a different guarantee from the
