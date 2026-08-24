@@ -6,27 +6,7 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
-### Added
-
-- **A sheet as a picture.** Export the current page, with its markups on it, as a PNG at 96, 150 or
-  300 DPI — screen, print or plot. The request a reviewer actually gets is "send me a picture of
-  the bit you clouded", and the answer until now was a screenshot cropped to whatever was on
-  screen. The markups are composited from the same renderer the viewer paints with, so an exported
-  cloud cannot drift into a different shape from the one on screen.
-
-### Changed
-
-- **A large export is refused with a message rather than freezing the window.** Bytes cross to the
-  host as a JSON array of numbers, about five characters per byte; invisible for a 40 KB
-  spreadsheet, ruinous for a 30 MB image. The ceiling is the host's own interchange limit. A
-  raw-bytes request — the direction reads already go — is scheduled for 0.2.
-
-### Fixed
-
-- The browser check that proved a drawing had rasterised was reading a thumbnail, not the page, and
-  would have gone on passing if the page canvas had never drawn at all.
-
-## [0.1.0] — 2026-08-21
+## [0.1.0] — 2026-08-24
 
 First release. The core is built and tested; the shell is young. See
 [docs/status.md](docs/status.md) for what is verified and what is not.
@@ -76,6 +56,12 @@ First release. The core is built and tested; the shell is young. See
 **Exporting**
 - Flattened PDF, CSV and XLSX takeoff, XFDF, and BCF topics — each carrying the document revision,
   page, markup id, calibration and formula version.
+- One sheet as a PNG, with its markups on it, at 96, 150 or 300 DPI — screen, print or plot. The
+  markups are composited from the same renderer the viewer paints with, so an exported cloud cannot
+  drift into a different shape from the one on screen.
+- An export past the host's interchange limit is refused with a message rather than attempted.
+  Bytes cross to the host as a JSON array of numbers, about five characters per byte: invisible for
+  a spreadsheet, and a frozen window for a large image. A raw-bytes request is scheduled for 0.2.
 
 **Getting started**
 - A tutorial drawing ships with the application: a two-page ARCH D sheet with a title block, a
