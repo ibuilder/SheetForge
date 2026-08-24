@@ -27,7 +27,7 @@
  * drawing list is a single tab stop with arrow-key navigation, and the status line is a live region.
  */
 
-import type { AppInfo, ProjectSummary, RevisionSummary } from "./bridge";
+import type { AppInfo, ProjectSummary, RecentProject, RevisionSummary } from "./bridge";
 
 /** One entry in a menu. */
 export interface MenuItem {
@@ -107,6 +107,16 @@ export interface ChromeHandlers {
   onSelectRevision: (revision: RevisionSummary) => void;
   /** Jump to a page named by the drawing's own outline. */
   onSelectOutline: (page: number) => void;
+  /** Reopen a project by the handle the host gave it. */
+  onSelectRecent: (id: string) => void;
+  /**
+   * The projects opened lately, read when the menu opens rather than held.
+   *
+   * The same shape as {@link exportItems}: asking at the moment of use means the list cannot go
+   * stale, and a project deleted in Explorer while the application was open shows as unavailable
+   * rather than as a menu entry that fails.
+   */
+  recentProjects: () => readonly RecentProject[];
   onVerify: () => void;
   onDiagnostics: () => void;
   /**
@@ -285,6 +295,18 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         { id: "import", label: "Add drawings…", enabled: true },
         { id: "open", label: "Open project…", enabled: true, separatorBefore: true },
         { id: "new", label: "New project…", enabled: true },
+        // Newest first, and never more than the host keeps. A project that has moved is listed
+        // and disabled rather than hidden: somebody who cannot find their job wants to be told it
+        // has moved, not left wondering whether they imagined it.
+        ...(handlers.recentProjects() ?? []).map((project, index) => ({
+          id: `recent:${project.id}`,
+          label: project.available
+            ? `${project.name}`
+            : `${project.name} — not where it was`,
+          enabled: project.available,
+          reason: "This project has moved. Open it again from its new location",
+          separatorBefore: index === 0,
+        })),
         { id: "verify", label: "Check integrity", enabled: true, separatorBefore: true },
         { id: "diagnostics", label: "Save diagnostic report…", enabled: true },
         // Findable again after the first run. Somebody who wants to try a tool without risking a
@@ -292,7 +314,8 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         { id: "tutorial", label: "Open the tutorial sheet", enabled: true, separatorBefore: true },
       ],
       (id) => {
-        if (id === "import") handlers.onImport();
+        if (id.startsWith("recent:")) handlers.onSelectRecent(id.slice("recent:".length));
+        else if (id === "import") handlers.onImport();
         else if (id === "open") handlers.onOpenProject();
         else if (id === "new") handlers.onCreateProject();
         else if (id === "verify") handlers.onVerify();

@@ -76,6 +76,16 @@ export interface AppInfo {
 }
 
 /** The open project. */
+/** One remembered project, as the host is willing to describe it. */
+export interface RecentProject {
+  /** Opaque. The only thing this side can say to ask for it back. */
+  id: string;
+  name: string;
+  openedAt: string;
+  /** False when the folder is no longer where it was — moved, renamed, or on a drive not here. */
+  available: boolean;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -284,6 +294,17 @@ export const host = {
   projectCreate: (name: string, jobNumber?: string) =>
     call<ProjectSummary>("project_create", { name, jobNumber: jobNumber ?? null }),
   projectOpen: () => call<ProjectSummary>("project_open"),
+
+  /**
+   * The projects opened lately.
+   *
+   * Names and dates, never locations. The host keeps the paths and hands back an opaque handle
+   * per entry; {@link recentOpen} takes that handle and nothing else, so there is no argument in
+   * which this side could ask for an arbitrary folder.
+   */
+  recentList: () => call<RecentProject[]>("recent_list"),
+  recentOpen: (id: string) => call<ProjectSummary>("recent_open", { id }),
+  recentForget: (id: string) => call<RecentProject[]>("recent_forget", { id }),
   projectCurrent: () => call<ProjectSummary | null>("project_current"),
   projectClose: () => call<void>("project_close"),
   projectVerify: () => call<VerifyReport>("project_verify"),

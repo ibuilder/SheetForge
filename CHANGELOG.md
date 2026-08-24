@@ -70,6 +70,13 @@ First release. The core is built and tested; the shell is young. See
   percent-encoded headers, so a drawing called `Plan étage` keeps its accent. This is what makes a
   plot-resolution image an export rather than a frozen window.
 
+**Getting back to work**
+- The projects you had open lately, in the Project menu. Closing the application used to mean
+  finding your work again through a folder dialog.
+- The host keeps the locations and names each one to the interface by an opaque handle, so the
+  set of places this command can reach is exactly the set of projects you have already opened
+  through a native dialog. A project that has moved is listed and disabled rather than hidden.
+
 **Navigating**
 - The drawing's own outline, in the sidebar. A construction set exported from Revit or Bluebeam
   carries one — disciplines at the top, sheets under them — and a 200-sheet set is much faster to

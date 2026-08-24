@@ -17,6 +17,7 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { HostAdapter } from "./adapter";
 import type { AppInfo, RevisionSummary } from "./bridge";
 import { errorMessage, hasHost, host, isCommandError, onDropped } from "./bridge";
+import type { RecentProject } from "./bridge";
 import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
@@ -33,6 +34,15 @@ interface Session {
 }
 
 let session: Session | undefined;
+
+/**
+ * The projects opened lately, refreshed whenever one is opened.
+ *
+ * Held here rather than fetched when the menu opens, because a menu that has to await a round trip
+ * before it can render is a menu that flickers. It is refreshed after every act that changes it,
+ * which is the small number of places a project is opened or created.
+ */
+let recent: RecentProject[] = [];
 
 
 async function start(): Promise<void> {
@@ -53,6 +63,8 @@ async function start(): Promise<void> {
     onSelectOutline: (page) => void guard(async () => {
       await session?.viewer.goToPage(page);
     }),
+    onSelectRecent: (id) => void guard(() => openRecent(chrome, id)),
+    recentProjects: () => recent,
     onVerify: () => void guard(() => verify(chrome)),
     onDiagnostics: () => void guard(() => saveDiagnostics(chrome)),
     exportItems,
@@ -81,6 +93,8 @@ async function start(): Promise<void> {
         }
       });
     });
+
+    await refreshRecent();
 
     // A project left open from the last session is reopened by the host, not remembered here.
     const current = await host.projectCurrent();
@@ -322,6 +336,7 @@ async function exportSheetImage(
 async function openPdf(chrome: Chrome): Promise<void> {
   chrome.setStatus("Opening…");
   const opened = await host.pdfOpen();
+  await refreshRecent();
   chrome.setProject(opened.project);
   chrome.setRevisions(await host.documentList());
   await openRevision(chrome, opened.revision);
@@ -363,6 +378,7 @@ const FIRST_RUN_KEY = "sheetforge.tutorial-offered";
 async function openTutorial(chrome: Chrome): Promise<void> {
   chrome.setStatus("Opening the tutorial sheet…");
   const opened = await host.tutorialOpen();
+  await refreshRecent();
   chrome.setProject(opened.project);
   chrome.setRevisions(await host.documentList());
   await openRevision(chrome, opened.revision);
@@ -420,10 +436,50 @@ function forFilename(stamp: string): string {
     .slice(0, 60);
 }
 
+/**
+ * Reopen a project from the recent list.
+ *
+ * The handle is the whole of what this side can say — the host holds the location and resolves it
+ * against a list it wrote itself, so this cannot name a folder the person has not already opened
+ * through a native dialog.
+ */
+async function openRecent(chrome: Chrome, id: string): Promise<void> {
+  chrome.setStatus("Opening…");
+  const project = await host.recentOpen(id);
+  chrome.setProject(project);
+  const revisions = await host.documentList();
+  chrome.setRevisions(revisions);
+  await refreshRecent();
+
+  const first = revisions[0];
+  if (first) {
+    await openRevision(chrome, first);
+  } else {
+    chrome.setStatus(`Opened ${project.name}. It has no drawings yet.`);
+  }
+}
+
+/**
+ * Re-read the recent list. Failure is silent: it is a convenience, not a guarantee.
+ *
+ * `?? []` rather than trusting the return, because a host that answers `null` is not throwing and
+ * would otherwise put a null where the menu expects an array — which does not fail here, it fails
+ * later, while building the Project menu, and takes the whole menu down with it. A test with a
+ * thinner stub found exactly that.
+ */
+async function refreshRecent(): Promise<void> {
+  try {
+    recent = (await host.recentList()) ?? [];
+  } catch {
+    recent = [];
+  }
+}
+
 async function createProject(chrome: Chrome): Promise<void> {
   const name = chrome.askForProjectName();
   if (!name) return;
   const project = await host.projectCreate(name);
+  await refreshRecent();
   chrome.setProject(project);
   chrome.setRevisions([]);
   chrome.setStatus(`Created ${project.name}. Add drawings to start reviewing.`);
@@ -431,6 +487,7 @@ async function createProject(chrome: Chrome): Promise<void> {
 
 async function openProject(chrome: Chrome): Promise<void> {
   const project = await host.projectOpen();
+  await refreshRecent();
   chrome.setProject(project);
   const revisions = await host.documentList();
   chrome.setRevisions(revisions);

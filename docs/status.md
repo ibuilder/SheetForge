@@ -55,12 +55,15 @@ The README calls this early. This page says exactly how early, because "producti
 | The page counter survives adversarial input and stays inside the domain ceiling | Property tests over generated near-miss PDF tokens, plus every prefix of each | `apps/desktop/src-tauri/src/commands.rs` |
 | A file that is nothing but page markers stops rather than counting forever | Unit test against a file crafted to exceed the ceiling | `apps/desktop/src-tauri/src/commands.rs` |
 | Counting pages stays linear in file size | 8 MB of non-matching bytes against a ceiling that catches a scan inside a scan | `apps/desktop/src-tauri/src/commands.rs` |
+| A recent project is named to the interface by a handle, never by a location | Rust test asserts no path component appears in what is serialised, plus a handle the host never issued resolves to nothing | `apps/desktop/src-tauri/src/recent.rs` |
+| Opening a recent project sends a handle and nothing that could be a path | Browser test inspects what actually crossed the boundary | `apps/ui/e2e/open-drawing.spec.ts` |
+| A project that has moved is listed and disabled rather than hidden | Browser test | `apps/ui/e2e/open-drawing.spec.ts` |
 | An issue status is stamped on the exported pixels, not just the filename | Browser test decodes the export and finds the stamp's colour on a drawing that has none of its own | `apps/ui/e2e/open-drawing.spec.ts` |
 | Every sheet exports as one ZIP with an entry per page | Browser test reads the entry names out of the archive it produced | `apps/ui/e2e/open-drawing.spec.ts` |
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 225 Rust tests, 42 TypeScript unit tests, 32 browser tests.** The Rust figure includes
+**Totals: 237 Rust tests, 42 TypeScript unit tests, 35 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and

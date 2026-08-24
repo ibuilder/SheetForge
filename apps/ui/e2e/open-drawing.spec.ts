@@ -114,6 +114,7 @@ async function stubHost(
       const saved: Record<string, unknown>[] = [];
       (window as unknown as { __sfSaved: unknown[] }).__sfSaved = saved;
       (window as unknown as { __sfExported: unknown[] }).__sfExported = [];
+      (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened = [];
 
       // event name -> the callback ids listening for it, mirroring what the Rust side tracks.
       const listeners = new Map<string, number[]>();
@@ -186,6 +187,25 @@ async function stubHost(
               });
             case "project_current":
               return Promise.resolve(null);
+            case "recent_list":
+              return Promise.resolve([
+                {
+                  id: "3a7f1c9e00000001",
+                  name: "Riverside Tower",
+                  openedAt: "2026-08-23T09:00:00.000Z",
+                  available: true,
+                },
+                {
+                  id: "3a7f1c9e00000002",
+                  name: "Northgate Depot",
+                  openedAt: "2026-08-22T17:00:00.000Z",
+                  available: false,
+                },
+              ]);
+            case "recent_open": {
+              (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened.push(args["id"]);
+              return Promise.resolve({ ...project, name: "Riverside Tower" });
+            }
             case "pdf_open":
               return Promise.resolve({ project, revision, reopened: false });
             case "tutorial_open":
@@ -887,5 +907,58 @@ test.describe("stamping an export with its issue status", () => {
       "the export carries the status in its name but not on its face, which is the half that " +
         "survives being printed and photographed",
     ).toBeGreaterThan(500);
+  });
+});
+
+/**
+ * The projects opened lately.
+ *
+ * Closing the application used to mean finding your work again through a folder dialog, which is a
+ * poor deal for the thing somebody does every morning.
+ *
+ * The part worth testing hardest is not that the list appears — it is that a **handle** is what
+ * crosses the boundary. The host keeps the paths; if a location ever appeared here, the webview
+ * would have been handed a filesystem it is not allowed to have.
+ */
+test.describe("recent projects", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+  });
+
+  test("are offered in the Project menu, newest first", async ({ page }) => {
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem", { name: "Riverside Tower" })).toBeVisible();
+  });
+
+  test("a project that has moved is shown and disabled, not hidden", async ({ page }) => {
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    const moved = page.getByRole("menu").getByRole("menuitem", { name: /Northgate Depot/ });
+
+    // Somebody who cannot find their job wants to be told it has moved, not left wondering whether
+    // they imagined it.
+    await expect(moved).toBeVisible();
+    // The menu marks an unavailable item with the `disabled` attribute, which is what makes it
+    // both unclickable and announced as unavailable.
+    await expect(moved).toBeDisabled();
+  });
+
+  test("opening one sends a handle, and never a location", async ({ page }) => {
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Riverside Tower" }).click();
+
+    await expect(page.locator("[data-project]")).toContainText("Riverside Tower");
+
+    const sent = await page.evaluate(
+      () => (window as unknown as { __sfRecentOpened: string[] }).__sfRecentOpened,
+    );
+    expect(sent).toEqual(["3a7f1c9e00000001"]);
+
+    // The whole of the security argument, stated as an assertion: nothing that could be a path.
+    for (const value of sent) {
+      expect(value).not.toMatch(/[/\\]/);
+      expect(value).not.toMatch(/\.sfproj/);
+    }
   });
 });

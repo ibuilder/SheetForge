@@ -23,6 +23,7 @@
 pub mod commands;
 pub mod diagnostics;
 pub mod error;
+pub mod recent;
 pub mod state;
 
 use state::AppState;
@@ -116,6 +117,9 @@ pub fn run() {
             commands::app_info,
             commands::project_create,
             commands::project_open,
+            commands::recent_list,
+            commands::recent_open,
+            commands::recent_forget,
             commands::project_current,
             commands::project_close,
             commands::project_verify,

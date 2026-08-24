@@ -355,6 +355,7 @@ pub async fn project_create(
         );
 
         let summary = ProjectSummary::of(&package, &project);
+        remember(&app, &project.name, &root);
         state.set_package(Some(package));
         Ok(summary)
     })
@@ -398,6 +399,7 @@ pub async fn project_open(app: AppHandle) -> CommandResult<ProjectSummary> {
         );
 
         let summary = ProjectSummary::of(&package, &project);
+        remember(&app, &project.name, &root);
         state.set_package(Some(package));
         Ok(summary)
     })
@@ -594,6 +596,128 @@ pub async fn tutorial_open(app: AppHandle) -> CommandResult<OpenedDrawing> {
     })
     .await
     .map_err(|_| CommandError::internal())?
+}
+
+/// Where the recent-projects list lives.
+///
+/// Beside the application's configuration, not inside any project: it is a fact about this
+/// installation rather than about a job, and a package that carried a list of other projects would
+/// leak one client's name into another client's folder.
+fn recent_file(app: &AppHandle) -> CommandResult<std::path::PathBuf> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_config_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|_| CommandError::internal())?;
+    Ok(dir.join("recent.json"))
+}
+
+/// Record a project as just opened.
+///
+/// Best effort throughout. Failing to remember where somebody was working is a small
+/// inconvenience; failing to *open a project* because the list of previous ones could not be
+/// written would be an absurd trade.
+fn remember(app: &AppHandle, name: &str, root: &std::path::Path) {
+    let Ok(file) = recent_file(app) else { return };
+    let mut recent = crate::recent::Recent::load(&file);
+    recent.record(
+        name,
+        root,
+        &sf_domain::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    );
+    if let Err(error) = recent.save(&file) {
+        log::warn!(
+            "could not record the recent project: {}",
+            sf_audit::redact(&error.to_string())
+        );
+    }
+}
+
+/// The projects opened lately — names and dates, never locations.
+///
+/// # Errors
+/// [`CommandError`] if the configuration directory cannot be determined.
+#[tauri::command]
+pub fn recent_list(app: AppHandle) -> CommandResult<Vec<crate::recent::Listing>> {
+    let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
+    Ok(crate::recent::Recent::load(&recent_file(&app)?).listing())
+}
+
+/// Open a project the interface named by its handle.
+///
+/// The handle is the only thing the interface can say. It is resolved against the list this
+/// process wrote, so the set of locations reachable through this command is exactly the set of
+/// projects the person has already opened through a native dialog — see [`crate::recent`].
+///
+/// # Errors
+/// [`CommandError::invalid_request`] if the handle names nothing, or the project has moved.
+#[tauri::command]
+pub async fn recent_open(app: AppHandle, id: String) -> CommandResult<ProjectSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.require(Capability::ProjectRead)?;
+
+        let file = recent_file(&app)?;
+        let mut recent = crate::recent::Recent::load(&file);
+        let root = recent
+            .path_of(&id)
+            .ok_or_else(|| CommandError::invalid_request("That project is no longer listed."))?;
+
+        if !root.is_dir() {
+            // Moved or deleted outside the application, which is a normal thing to have happened.
+            // Dropped from the list so the same dead entry is not offered again.
+            recent.forget(&id);
+            let _ = recent.save(&file);
+            return Err(CommandError::invalid_request(
+                "That project is not where it was. Open it again from its new location.",
+            ));
+        }
+
+        let mut package = Package::open(&root)?;
+        package.set_limits(*state.limits());
+        let project = package
+            .store()
+            .project()?
+            .ok_or_else(|| CommandError::invalid_request("That project has no project record."))?;
+        audit(
+            &mut package,
+            state.actor(),
+            "project:open",
+            Outcome::Allowed,
+            Record::new().subject("project", &project.id.to_string()),
+        );
+
+        let summary = ProjectSummary::of(&package, &project);
+        remember(&app, &project.name, &root);
+        state.set_package(Some(package));
+        Ok(summary)
+    })
+    .await
+    .map_err(|_| CommandError::internal())?
+}
+
+/// Drop one project from the list. The project itself is untouched.
+///
+/// # Errors
+/// [`CommandError`] if the list cannot be written.
+#[tauri::command]
+pub fn recent_forget(app: AppHandle, id: String) -> CommandResult<Vec<crate::recent::Listing>> {
+    let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
+
+    let file = recent_file(&app)?;
+    let mut recent = crate::recent::Recent::load(&file);
+    recent.forget(&id);
+    recent.save(&file).map_err(|error| {
+        log::error!(
+            "could not write the recent list: {}",
+            sf_audit::redact(&error.to_string())
+        );
+        CommandError::internal()
+    })?;
+    Ok(recent.listing())
 }
 
 /// A drawing's bytes, for the renderer.
@@ -1253,6 +1377,8 @@ fn ensure_project_named(
         );
         created
     };
+
+    remember(app, &stem, &root);
     state.set_package(Some(package));
     Ok(())
 }
