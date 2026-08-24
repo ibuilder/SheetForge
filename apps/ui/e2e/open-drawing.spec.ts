@@ -490,40 +490,52 @@ test.describe("the tutorial sheet", () => {
     //   runner rendering the same page smaller. That is what this test did on its first run:
     //   3,905 painted pixels against a threshold of 5,000, on a sheet that had rendered perfectly
     //   well. The viewport is pinned above for the same reason.
-    const inked = await page.evaluate(() => {
-      const canvases = [...document.querySelectorAll<HTMLCanvasElement>(".sf-stage canvas")];
-      const node = canvases.sort((a, b) => b.width * b.height - a.width * a.height)[0];
-      const context = node?.getContext("2d");
-      if (!node || !context || node.width === 0 || node.height === 0) {
-        return { ratio: 0, area: 0, canvases: canvases.length };
-      }
+    // Polled, not sampled once. `toBeVisible` means the element is in the layout, not that pdf.js
+    // has finished painting into it — and this test failed exactly that way once the suite got
+    // busy enough for the render to lose the race. A single sample of an asynchronous render is a
+    // flake waiting for a slower machine, which on CI means a red build that says nothing true.
+    let measured = { ratio: 0, area: 0, canvases: 0 };
+    await expect
+      .poll(
+        async () => {
+          measured = await page.evaluate(() => {
+            const canvases = [...document.querySelectorAll<HTMLCanvasElement>(".sf-stage canvas")];
+            const node = canvases.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+            const context = node?.getContext("2d");
+            if (!node || !context || node.width === 0 || node.height === 0) {
+              return { ratio: 0, area: 0, canvases: canvases.length };
+            }
 
-      const x = Math.floor(node.width * 0.2);
-      const y = Math.floor(node.height * 0.2);
-      const w = Math.floor(node.width * 0.6);
-      const h = Math.floor(node.height * 0.6);
-      const { data } = context.getImageData(x, y, w, h);
+            const x = Math.floor(node.width * 0.2);
+            const y = Math.floor(node.height * 0.2);
+            const w = Math.floor(node.width * 0.6);
+            const h = Math.floor(node.height * 0.6);
+            const { data } = context.getImageData(x, y, w, h);
 
-      let nonWhite = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i]! < 250 || data[i + 1]! < 250 || data[i + 2]! < 250) nonWhite += 1;
-      }
-      return { ratio: nonWhite / (w * h), area: w * h, canvases: canvases.length };
-    });
+            let nonWhite = 0;
+            for (let i = 0; i < data.length; i += 4) {
+              if (data[i]! < 250 || data[i + 1]! < 250 || data[i + 2]! < 250) nonWhite += 1;
+            }
+            return { ratio: nonWhite / (w * h), area: w * h, canvases: canvases.length };
+          });
+          return measured.ratio;
+        },
+        {
+          timeout: 30_000,
+          message:
+            "the middle of the tutorial sheet never stopped being blank - the page either failed " +
+            "to rasterise, or rendered only its border and title block",
+        },
+      )
+      .toBeGreaterThan(0.005);
 
     // A thumbnail is a few thousand pixels; the page is hundreds of thousands. Asserting the size
     // of what was measured is what stops this silently going back to reading a postage stamp.
     expect(
-      inked.area,
-      `measured a canvas of only ${inked.area} px across ${inked.canvases} in the stage - that is ` +
-        "a thumbnail, not the page",
+      measured.area,
+      `measured a canvas of only ${measured.area} px across ${measured.canvases} in the stage - ` +
+        "that is a thumbnail, not the page",
     ).toBeGreaterThan(100_000);
-
-    expect(
-      inked.ratio,
-      "the middle of the tutorial sheet is blank - the page either failed to rasterise, or " +
-        "rendered only its border and title block",
-    ).toBeGreaterThan(0.005);
 
     expect(errors, "no uncaught errors while opening the tutorial").toEqual([]);
   });
@@ -828,5 +840,52 @@ test.describe("exporting every sheet", () => {
     // Zero-padded, so an archive of a 200-sheet set sorts the way the set is ordered rather than
     // putting sheet 10 before sheet 2.
     expect(names).toEqual(["001.png", "002.png"]);
+  });
+});
+
+/**
+ * The issue status, stamped across an export.
+ *
+ * Issuing a drawing without saying what it is for is a real mistake with real consequences: a
+ * marked-up review copy that reaches a subcontractor looking like an issued drawing is how
+ * somebody builds the wrong thing. The stamp exists to make that hard, so a test that it is
+ * actually *on the pixels* — rather than merely offered in a menu — is the point.
+ */
+test.describe("stamping an export with its issue status", () => {
+  test("puts the status on the sheet and in the filename", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    // The status is asked for every time rather than remembered, so the prompt is part of the
+    // path under test.
+    page.on("dialog", (dialog) => void dialog.accept("NOT FOR CONSTRUCTION"));
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Export/ }).click();
+    await page.getByRole("menuitem", { name: /This sheet as PNG, stamped/ }).click();
+
+    await expect
+      .poll(
+        () => page.evaluate(() => (window as unknown as { __sfExported: unknown[] }).__sfExported.length),
+        { timeout: 60_000 },
+      )
+      .toBeGreaterThan(0);
+
+    const name = await page.evaluate(() => {
+      const all = (window as unknown as { __sfExported: Record<string, unknown>[] }).__sfExported;
+      return all[all.length - 1]!["suggestedName"] as string;
+    });
+    // A file called "A-201 p1 (NOT FOR CONSTRUCTION)" is harder to forward carelessly than one
+    // that looks like every other export.
+    expect(name).toContain("NOT FOR CONSTRUCTION");
+
+    // And on the sheet itself. The test drawing is black on white, so red is the stamp and
+    // nothing else — the same probe that proves an unstamped export has no colour at all.
+    expect(
+      await saturatedPixels(page, await lastExport(page)),
+      "the export carries the status in its name but not on its face, which is the half that " +
+        "survives being printed and photographed",
+    ).toBeGreaterThan(500);
   });
 });

@@ -106,9 +106,13 @@ things are missing and some of them should not be".
   sheet size, with the scale actually verified against the calibration rather than left to the
   print driver.
 
-- **Watermarks, headers and footers on export.** "NOT FOR CONSTRUCTION", a revision letter, a date,
-  a page number. On a construction set this is not decoration — issuing a drawing without its
-  status stamp is a real mistake with real consequences. Belongs on the export, never on the source.
+- **Watermarks, headers and footers on export.** *Partly done.* An issue status now stamps across
+  an exported image, single sheet or whole set: translucent fill with an opaque outline, so it
+  survives both dark linework and white paper, drawn after the markups so nothing can be laid over
+  it to hide it. The status goes in the filename too, because a file called
+  "A-201 (NOT FOR CONSTRUCTION).png" is harder to forward carelessly. Asked for every time rather
+  than remembered — a remembered status is one that eventually goes out on the wrong drawing.
+  Still to come: the same on a flattened PDF export, and page numbers and dates as a footer band.
 
 - **Redaction, as an export.** Genuinely needed for tender documents and anything carrying personal
   data, and genuinely dangerous: redaction that draws a black box over text a copy-paste still

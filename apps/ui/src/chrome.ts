@@ -79,6 +79,14 @@ export interface Chrome {
   /** Show whether work is saved, being saved, or failed to save. */
   setSaveState(state: "saved" | "saving" | "error", detail?: string): void;
   askForProjectName(): string | undefined;
+  /**
+   * Ask for the status a drawing is being issued under.
+   *
+   * Offered rather than assumed, and with the common answer already filled in: a reviewer
+   * exporting a marked-up sheet is overwhelmingly not issuing it for construction, and the one
+   * time they are, they should have to type it.
+   */
+  askForIssueStatus(): string | undefined;
 }
 
 /**
@@ -529,6 +537,14 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       // already ships, and it is asking for exactly one string.
       const name = window.prompt("Project name", "New project");
       return name?.trim() ? name.trim() : undefined;
+    },
+
+    askForIssueStatus() {
+      const status = window.prompt(
+        "Stamp this export with an issue status:",
+        "NOT FOR CONSTRUCTION",
+      );
+      return status?.trim() ? status.trim() : undefined;
     },
   };
 }

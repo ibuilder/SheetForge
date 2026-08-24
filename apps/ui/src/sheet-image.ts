@@ -73,6 +73,7 @@ export async function sheetAsPng(
   viewer: Viewer,
   page: number,
   dpi: number,
+  stamp?: string,
 ): Promise<SheetImage> {
   const doc = viewer.doc;
   if (!doc) throw new Error("No drawing is open.");
@@ -115,6 +116,8 @@ export async function sheetAsPng(
     // A bitmap holds GPU-side memory until it is closed, and these are large.
     overlay.close();
   }
+
+  if (stamp) drawIssueStamp(context, width, height, stamp);
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("The image could not be encoded.");
@@ -178,6 +181,51 @@ async function markupOverlay(
 }
 
 
+
+/**
+ * The issue status, across the sheet.
+ *
+ * Issuing a drawing without saying what it is for is a real mistake with real consequences: a
+ * marked-up review copy that reaches a subcontractor looking like an issued drawing is how
+ * somebody builds the wrong thing. On paper this is what the big diagonal red letters are for, and
+ * the reason they are diagonal and enormous is that they must survive being photographed, printed
+ * at the wrong size, and glanced at.
+ *
+ * Drawn *after* the markups, so nothing can be laid over it to hide it.
+ *
+ * Deliberately not subtle. A tasteful watermark is one that gets missed.
+ */
+function drawIssueStamp(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  text: string,
+): void {
+  context.save();
+
+  // Sized to the sheet rather than to a fixed point size, so it reads the same on an A4 detail as
+  // on a D-size plan. The divisor is tuned so a ~20 character status spans most of the diagonal.
+  const diagonal = Math.hypot(width, height);
+  const size = diagonal / Math.max(text.length, 12) * 1.4;
+
+  context.translate(width / 2, height / 2);
+  context.rotate(-Math.atan2(height, width));
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.font = `bold ${size}px Helvetica, Arial, sans-serif`;
+
+  // A translucent fill with an opaque outline. Fill alone disappears over dark linework; outline
+  // alone disappears over white. Together the text survives whatever is under it, which is the
+  // whole job.
+  context.fillStyle = "rgba(200, 32, 32, 0.18)";
+  context.fillText(text, 0, 0);
+  context.lineWidth = Math.max(size / 28, 1);
+  context.strokeStyle = "rgba(200, 32, 32, 0.55)";
+  context.strokeText(text, 0, 0);
+
+  context.restore();
+}
+
 /**
  * How much of a set may be turned into pictures in one go.
  *
@@ -213,6 +261,7 @@ export async function sheetsAsZip(
   viewer: Viewer,
   dpi: number,
   onProgress: (page: number, of: number) => void,
+  stamp?: string,
 ): Promise<SheetSet> {
   const doc = viewer.doc;
   if (!doc) throw new Error("No drawing is open.");
@@ -223,7 +272,7 @@ export async function sheetsAsZip(
 
   for (let page = 1; page <= pages; page += 1) {
     onProgress(page, pages);
-    const image = await sheetAsPng(viewer, page, dpi);
+    const image = await sheetAsPng(viewer, page, dpi, stamp);
     total += image.blob.size;
 
     if (total > MAX_ARCHIVE_BYTES) {

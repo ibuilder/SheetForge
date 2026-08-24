@@ -226,7 +226,25 @@ function exportItems(): MenuItem[] {
     }),
   );
 
-  return [...engineItems, ...imageItems, ...bulkItems];
+  // Stamped copies, in their own group. An issue status belongs on a drawing that is leaving the
+  // review — and a drawing leaving the review without one is the mistake this exists to prevent.
+  const stampedItems: MenuItem[] = [
+    {
+      id: "image.stamped",
+      label: "This sheet as PNG, stamped…",
+      enabled: true,
+      reason: "NOT FOR CONSTRUCTION, or whatever status you are issuing under",
+      separatorBefore: true,
+    },
+    {
+      id: "imageset.stamped",
+      label: "Every sheet as PNG (ZIP), stamped…",
+      enabled: true,
+      reason: "NOT FOR CONSTRUCTION, or whatever status you are issuing under",
+    },
+  ];
+
+  return [...engineItems, ...imageItems, ...bulkItems, ...stampedItems];
 }
 
 /** Run one of them. The engine produces the bytes; the host writes them where the user says. */
@@ -246,6 +264,22 @@ async function runExport(chrome: Chrome, id: string): Promise<void> {
     return;
   }
 
+  if (id === "image.stamped") {
+    // Asked for every time rather than remembered. A status that is remembered is a status that
+    // eventually goes out on the wrong drawing, and the cost of asking is one keystroke.
+    const status = chrome.askForIssueStatus();
+    if (!status) return;
+    await exportSheetImage(chrome, viewer, 150, status);
+    return;
+  }
+
+  if (id === "imageset.stamped") {
+    const status = chrome.askForIssueStatus();
+    if (!status) return;
+    await exportSheetSet(chrome, viewer, 150, status);
+    return;
+  }
+
   await viewer.runAction(id);
 }
 
@@ -255,12 +289,21 @@ async function runExport(chrome: Chrome, id: string): Promise<void> {
  * The status line says what is happening before it starts, because at plot resolution this takes
  * seconds and a frozen window with no explanation is indistinguishable from a crash.
  */
-async function exportSheetImage(chrome: Chrome, viewer: Viewer, dpi: number): Promise<void> {
+async function exportSheetImage(
+  chrome: Chrome,
+  viewer: Viewer,
+  dpi: number,
+  stamp?: string,
+): Promise<void> {
   const page = viewer.page;
   chrome.setStatus(`Rendering sheet ${page} at ${dpi} DPI…`);
 
-  const image = await sheetAsPng(viewer, page, dpi);
-  const name = session ? `${session.revision.name} p${page}` : `sheet p${page}`;
+  const image = await sheetAsPng(viewer, page, dpi, stamp);
+  // The status goes in the filename as well as on the sheet. A file called
+  // "A-201 p2 (NOT FOR CONSTRUCTION).png" is harder to forward carelessly than one that looks
+  // like every other export.
+  const suffix = stamp ? ` (${forFilename(stamp)})` : "";
+  const name = session ? `${session.revision.name} p${page}${suffix}` : `sheet p${page}${suffix}`;
   await deliverExport(chrome, image.blob, `${name}.png`);
 
   chrome.setStatus(
@@ -336,17 +379,45 @@ async function openTutorial(chrome: Chrome): Promise<void> {
  * Progress is reported per sheet because this is the one export that takes minutes on a real set,
  * and a window that says nothing for minutes is indistinguishable from one that has hung.
  */
-async function exportSheetSet(chrome: Chrome, viewer: Viewer, dpi: number): Promise<void> {
-  const set = await sheetsAsZip(viewer, dpi, (page, of) => {
-    chrome.setStatus(`Rendering sheet ${page} of ${of} at ${dpi} DPI…`);
-  });
+async function exportSheetSet(
+  chrome: Chrome,
+  viewer: Viewer,
+  dpi: number,
+  stamp?: string,
+): Promise<void> {
+  const set = await sheetsAsZip(
+    viewer,
+    dpi,
+    (page, of) => {
+      chrome.setStatus(`Rendering sheet ${page} of ${of} at ${dpi} DPI…`);
+    },
+    stamp,
+  );
 
   const name = session ? session.revision.name : "sheets";
-  await deliverExport(chrome, set.blob, `${name} (${dpi} DPI).zip`);
+  const suffix = stamp ? ` (${forFilename(stamp)})` : ` (${dpi} DPI)`;
+  await deliverExport(chrome, set.blob, `${name}${suffix}.zip`);
   chrome.setStatus(
     `Exported ${set.pages} sheet${set.pages === 1 ? "" : "s"} - ` +
       `${Math.round(set.blob.size / (1024 * 1024))} MB.`,
   );
+}
+
+/**
+ * A stamp, made safe to put in a filename.
+ *
+ * The stamp itself is drawn on the sheet verbatim — it is the user's words and the sheet is where
+ * they matter. The filename is a different matter: the host checks every name it is asked to write
+ * and refuses anything with a separator in it, and discovering that *after* rendering two hundred
+ * sheets would be a poor way to find out. Characters that cannot be in a filename become spaces
+ * here rather than an error there.
+ */
+function forFilename(stamp: string): string {
+  return stamp
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
 }
 
 async function createProject(chrome: Chrome): Promise<void> {
