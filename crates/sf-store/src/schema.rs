@@ -176,6 +176,43 @@ ALTER TABLE document_revisions ADD COLUMN derived_from TEXT;
 ALTER TABLE document_revisions ADD COLUMN derivation TEXT;
 ",
     },
+    Migration {
+        version: 3,
+        description: "the sheet register: what each page of a set actually is",
+        sql: r"
+-- A drawing set is not a PDF with pages, it is a register. The engine already reads title blocks;
+-- until this table existed it read them and the host threw the result away on every save, so the
+-- question a reviewer asks constantly -- which sheets are at revision C? -- meant scrolling two
+-- hundred pages.
+--
+-- Keyed on (revision, page) rather than on an id of its own: there is exactly one answer to
+-- what is page 7 of this document, and a surrogate key would allow two.
+CREATE TABLE sheets (
+    document_revision_id TEXT NOT NULL REFERENCES document_revisions(id) ON DELETE CASCADE,
+    page                 INTEGER NOT NULL,
+    project_id           TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- As printed in the title block. Nullable because a sketch often has none and a heuristic
+    -- often reads none, and inventing one would be worse than leaving it blank.
+    number               TEXT,
+    title                TEXT,
+    discipline           TEXT,
+    -- The revision letter on *this sheet*, which is not the document revision: a single issue
+    -- routinely contains sheets at different revisions. That difference is the whole point of
+    -- being able to query the register.
+    sheet_revision       TEXT,
+    -- recognised | extracted | imported | confirmed. Stored with every row because a number a
+    -- machine guessed off a 1974 dyeline and a number somebody typed must never be shown alike.
+    source               TEXT NOT NULL,
+    updated_at           TEXT NOT NULL,
+    PRIMARY KEY (document_revision_id, page)
+) STRICT;
+
+-- The register is navigated by number and filtered by revision, which are the two queries the
+-- interface runs and the two that would otherwise scan every sheet in the project.
+CREATE INDEX idx_sheets_number ON sheets(project_id, number);
+CREATE INDEX idx_sheets_revision ON sheets(project_id, sheet_revision);
+",
+    },
 ];
 
 #[cfg(test)]

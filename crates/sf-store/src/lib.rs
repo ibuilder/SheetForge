@@ -33,7 +33,7 @@ use sf_audit::{AuditError, AuditEvent, Outcome, Record};
 use sf_domain::{
     ActorId, Calibration, CalibrationId, ContentHash, DocumentRevision, DocumentRevisionId,
     DomainError, Geometry, Markup, MarkupKind, MarkupMetadata, MarkupPatch, MarkupStatus, Project,
-    ProjectId, Quantity, SourceDocument, SourceDocumentId, MODEL_VERSION,
+    ProjectId, Quantity, Sheet, SheetSource, SourceDocument, SourceDocumentId, MODEL_VERSION,
 };
 use std::path::Path;
 use std::str::FromStr;
@@ -391,6 +391,96 @@ impl Store {
              FROM document_revisions WHERE source_document_id = ?1 ORDER BY id",
         )?;
         let rows = statement.query_map(params![document.to_string()], read_revision)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // The sheet register
+    // -----------------------------------------------------------------------
+
+    /// Write what the pages of a document are, replacing what was there.
+    ///
+    /// One transaction for the whole set. A 200-sheet import produces 200 rows, and at
+    /// `synchronous = FULL` each implicit transaction is a flush to disk — the same reason
+    /// [`Store::insert_markups`] exists.
+    ///
+    /// Upserts rather than inserts, and **refuses to overwrite a confirmed row with a guess**. A
+    /// re-extraction after an OCR pass would otherwise quietly replace the number a person typed
+    /// with the one a machine read, which is the one direction this must never move in.
+    ///
+    /// # Errors
+    /// If the write fails.
+    pub fn upsert_sheets(&mut self, sheets: &[Sheet]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        {
+            let mut statement = tx.prepare(
+                "INSERT INTO sheets
+                   (document_revision_id, page, project_id, number, title, discipline,
+                    sheet_revision, source, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(document_revision_id, page) DO UPDATE SET
+                   number = excluded.number,
+                   title = excluded.title,
+                   discipline = excluded.discipline,
+                   sheet_revision = excluded.sheet_revision,
+                   source = excluded.source,
+                   updated_at = excluded.updated_at
+                 WHERE sheets.source <> 'confirmed' OR excluded.source = 'confirmed'",
+            )?;
+            let now = stamp(sf_domain::now());
+            for sheet in sheets {
+                statement.execute(params![
+                    sheet.document_revision_id.to_string(),
+                    sheet.page,
+                    sheet.project_id.to_string(),
+                    sheet.number,
+                    sheet.title,
+                    sheet.discipline,
+                    sheet.revision,
+                    sheet.source.as_str(),
+                    now,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The register for one document, in page order.
+    ///
+    /// # Errors
+    /// If the query fails or a row does not parse.
+    pub fn sheets(&self, revision: DocumentRevisionId) -> Result<Vec<Sheet>> {
+        let mut statement = self.conn.prepare(
+            "SELECT document_revision_id, page, project_id, number, title, discipline,
+                    sheet_revision, source
+             FROM sheets WHERE document_revision_id = ?1 ORDER BY page",
+        )?;
+        let rows = statement.query_map(params![revision.to_string()], read_sheet)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .collect()
+    }
+
+    /// Every sheet in the project at a given printed revision — "which sheets are at Rev C?".
+    ///
+    /// The question the register exists to answer. Across the whole project rather than one
+    /// document, because that is how it is asked: a set is issued as several files and the reviewer
+    /// wants the sheets, not the containers.
+    ///
+    /// # Errors
+    /// If the query fails or a row does not parse.
+    pub fn sheets_at_revision(&self, project: ProjectId, revision: &str) -> Result<Vec<Sheet>> {
+        let mut statement = self.conn.prepare(
+            "SELECT document_revision_id, page, project_id, number, title, discipline,
+                    sheet_revision, source
+             FROM sheets
+             WHERE project_id = ?1 AND sheet_revision = ?2 COLLATE NOCASE
+             ORDER BY number, page",
+        )?;
+        let rows = statement.query_map(params![project.to_string(), revision], read_sheet)?;
         rows.collect::<rusqlite::Result<Vec<_>>>()?
             .into_iter()
             .collect()
@@ -807,6 +897,30 @@ fn read_revision(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<DocumentRev
                 .map(|id| DocumentRevisionId::from_str(&id))
                 .transpose()?,
             derivation,
+        })
+    })())
+}
+
+fn read_sheet(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Sheet>> {
+    let document_revision_id: String = row.get(0)?;
+    let page: u32 = row.get(1)?;
+    let project_id: String = row.get(2)?;
+    let number: Option<String> = row.get(3)?;
+    let title: Option<String> = row.get(4)?;
+    let discipline: Option<String> = row.get(5)?;
+    let revision: Option<String> = row.get(6)?;
+    let source: String = row.get(7)?;
+
+    Ok((|| {
+        Ok(Sheet {
+            document_revision_id: DocumentRevisionId::from_str(&document_revision_id)?,
+            page,
+            project_id: ProjectId::from_str(&project_id)?,
+            number,
+            title,
+            discipline,
+            revision,
+            source: SheetSource::from_str(&source)?,
         })
     })())
 }

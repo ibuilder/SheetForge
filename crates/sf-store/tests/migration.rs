@@ -163,6 +163,39 @@ fn a_revision_imported_before_the_migration_claims_no_origin() {
     assert_eq!(derivation, None);
 }
 
+/// A version-1 file must arrive at the *current* version, not merely the next one. Migrations run
+/// as a sequence, and a project two versions behind is the ordinary case for anybody who skipped a
+/// release — the one that would break if the loop stopped early.
+#[test]
+fn a_version_one_database_reaches_every_later_migration() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("database.sqlite");
+    a_version_one_database(&file);
+
+    Store::open(&file).unwrap();
+
+    let connection = Connection::open(&file).unwrap();
+    // Version 2 added these columns; version 3 added this table. Asking the schema itself rather
+    // than trusting the recorded version number, which is the thing that could be wrong.
+    let derived: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('document_revisions') WHERE name = 'derived_from'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(derived, 1, "migration 2 did not run");
+
+    let register: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sheets'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(register, 1, "migration 3 did not run");
+}
+
 /// A database from a *newer* build must be refused rather than opened and half-understood. Reading
 /// a file whose shape you do not know is how data gets silently dropped on the next write.
 #[test]

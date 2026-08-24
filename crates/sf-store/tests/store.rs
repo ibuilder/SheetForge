@@ -929,3 +929,150 @@ fn a_derived_revision_has_to_say_what_was_done() {
     );
     assert!(refused.is_err());
 }
+
+/// The register answers the question it exists for: which sheets are at Rev C?
+///
+/// A 200-sheet issue routinely contains sheets at different revisions, which is why this is a
+/// query about *sheets* rather than about the document that contains them.
+#[test]
+fn the_register_answers_which_sheets_are_at_a_revision() {
+    use sf_domain::{Sheet, SheetSource};
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(&dir.path().join("database.sqlite")).unwrap();
+    let actor = ActorId::local();
+
+    let project = Project::new("Riverside Tower", None, None, actor.clone()).unwrap();
+    store.create_project(&project).unwrap();
+    let document = SourceDocument::new(project.id, "Set", None).unwrap();
+    store.insert_source_document(&document).unwrap();
+    let revision = DocumentRevision::new(
+        project.id,
+        document.id,
+        Some("C"),
+        ContentHash::from_bytes([0x33; 32]),
+        4096,
+        3,
+        actor,
+    )
+    .unwrap();
+    store.insert_revision(&revision).unwrap();
+
+    let mut sheets = Vec::new();
+    for (page, number, sheet_revision) in
+        [(1u32, "A-101", "C"), (2, "A-201", "B"), (3, "M-401", "C")]
+    {
+        let mut sheet = Sheet::new(
+            project.id,
+            revision.id,
+            page,
+            3,
+            Some(number),
+            Some("PLAN"),
+            SheetSource::Extracted,
+        )
+        .unwrap();
+        sheet.revision = Some(sheet_revision.to_owned());
+        sheets.push(sheet);
+    }
+    store.upsert_sheets(&sheets).unwrap();
+
+    let at_c = store.sheets_at_revision(project.id, "C").unwrap();
+    let numbers: Vec<&str> = at_c.iter().filter_map(|s| s.number.as_deref()).collect();
+    assert_eq!(
+        numbers,
+        vec!["A-101", "M-401"],
+        "sorted by number, and Rev B is not among them"
+    );
+
+    // Case-insensitively, because a title block says `c` as often as `C` and nobody reading a
+    // register cares which.
+    assert_eq!(store.sheets_at_revision(project.id, "c").unwrap().len(), 2);
+
+    // And the whole register for the document, in page order.
+    let all = store.sheets(revision.id).unwrap();
+    assert_eq!(all.len(), 3);
+    assert_eq!(all[0].page, 1);
+    assert_eq!(all[2].number.as_deref(), Some("M-401"));
+}
+
+/// A machine must never overwrite a person.
+///
+/// The engine re-extracts title blocks whenever a document is opened, and on a scanned set that
+/// reading comes through OCR. Without this rule, opening a project would quietly replace the sheet
+/// number somebody typed with the one a machine guessed off a dyeline — silently, and in the
+/// direction of *less* trustworthy. It is the one direction the register must never move in.
+#[test]
+fn a_re_extraction_does_not_overwrite_a_number_a_person_confirmed() {
+    use sf_domain::{Sheet, SheetSource};
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(&dir.path().join("database.sqlite")).unwrap();
+    let actor = ActorId::local();
+
+    let project = Project::new("Riverside Tower", None, None, actor.clone()).unwrap();
+    store.create_project(&project).unwrap();
+    let document = SourceDocument::new(project.id, "Set", None).unwrap();
+    store.insert_source_document(&document).unwrap();
+    let revision = DocumentRevision::new(
+        project.id,
+        document.id,
+        None,
+        ContentHash::from_bytes([0x44; 32]),
+        1024,
+        1,
+        actor,
+    )
+    .unwrap();
+    store.insert_revision(&revision).unwrap();
+
+    let confirmed = Sheet::new(
+        project.id,
+        revision.id,
+        1,
+        1,
+        Some("A-201"),
+        Some("SECOND FLOOR PLAN"),
+        SheetSource::Confirmed,
+    )
+    .unwrap();
+    store.upsert_sheets(&[confirmed]).unwrap();
+
+    // OCR reads the O as a zero, which is the classic substitution and looks identical at a glance.
+    let guessed = Sheet::new(
+        project.id,
+        revision.id,
+        1,
+        1,
+        Some("A-2O1"),
+        Some("SEC0ND FLO0R PLAN"),
+        SheetSource::Recognised,
+    )
+    .unwrap();
+    store.upsert_sheets(&[guessed]).unwrap();
+
+    let kept = store.sheets(revision.id).unwrap();
+    assert_eq!(
+        kept[0].number.as_deref(),
+        Some("A-201"),
+        "OCR overwrote a person"
+    );
+    assert_eq!(kept[0].source, SheetSource::Confirmed);
+
+    // A person correcting it afterwards does land, because that is a person overruling a person.
+    let corrected = Sheet::new(
+        project.id,
+        revision.id,
+        1,
+        1,
+        Some("A-202"),
+        None,
+        SheetSource::Confirmed,
+    )
+    .unwrap();
+    store.upsert_sheets(&[corrected]).unwrap();
+    assert_eq!(
+        store.sheets(revision.id).unwrap()[0].number.as_deref(),
+        Some("A-202"),
+    );
+}
