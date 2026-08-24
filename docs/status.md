@@ -46,6 +46,7 @@ The README calls this early. This page says exactly how early, because "producti
 | The tutorial's printed dimensions match the scale its title block claims | Rust test over the arithmetic the generator emits | `apps/desktop/src-tauri/src/commands.rs` |
 | The committed tutorial sheet matches the script that generates it | CI regenerates it and fails on any difference | `.github/workflows/ci.yml` |
 | The tutorial opens on a first run, and does not open itself again | Browser tests over both halves of the behaviour | `apps/ui/e2e/open-drawing.spec.ts` |
+| The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
 **Totals: 217 Rust tests, 42 TypeScript unit tests, 25 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
@@ -70,6 +71,8 @@ Listed because omitting them would make the table above dishonest.
 | **Power loss is untested** | A committed write is now proven to survive the process being *killed* — a real child process, `TerminateProcess`/`SIGKILL`, no destructors. That proves SQLite committed, not that the platter did; testing the latter honestly needs hardware or a fault injector | 0.4 |
 | **Built and run on Windows only** | macOS, Linux, iOS and Android are configured and compile in CI, but have not been run by a human | 0.2 |
 | **Binaries are unsigned** | SmartScreen and Gatekeeper will warn | 0.2 |
+| **Bundling runs in CI only at release** | The CI desktop job builds with `--no-bundle`, so the installer packaging — WiX, NSIS, the icon set, the licence file — is exercised only by the release workflow and by hand. It has been run once on Windows and produced both installers; the macOS and Linux bundles have never been produced at all | 0.2 |
+| **No release has been cut** | The release workflow has never run. It needs `TAURI_SIGNING_PRIVATE_KEY` in the repository secrets, without which every installed copy would be unable to update | 0.2 |
 | **No third-party security review** | No audit, no penetration test | 1.0 |
 | **No screen-reader testing** | Automated rule checking now runs on every build — axe over WCAG 2.1 A and AA, keyboard operation driven with real key presses, forced-colours and reduced-motion emulated — and it found a real ARIA defect on its first run. But automated tools catch perhaps a third of real barriers, and nobody who uses a screen reader has tried this | 1.0 |
 | **Spatial accuracy on a drawing is a visual task** | No amount of markup makes placing a measurement on a sheet non-visual. Stated rather than solved | — |

@@ -447,27 +447,69 @@ test.describe("the tutorial sheet", () => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
 
+    // Fixed here rather than inherited from the runner. An ARCH D sheet fitted to a short viewport
+    // rasterises with most of its line work below one pixel wide, so how much ink lands on the
+    // canvas depends on the window the test happened to get. Pinning the viewport makes the
+    // measurement below mean the same thing on every machine.
+    await page.setViewportSize({ width: 1600, height: 1200 });
+
     await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
     await page.goto("/");
 
-    const canvas = page.locator(".sf-stage canvas").first();
-    await expect(canvas).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
 
-    // An ARCH D title sheet with a heading, five keyed notes, a legend and a wireframe on it is a
-    // long way from blank. The threshold is high on purpose: a hundred stray pixels would pass for
-    // a sheet that failed to draw anything but its border.
-    const painted = await canvas.evaluate((node: HTMLCanvasElement) => {
-      const context = node.getContext("2d");
-      if (!context || node.width === 0 || node.height === 0) return 0;
-      const { data } = context.getImageData(0, 0, node.width, node.height);
+    // Measured on the **largest** canvas in the stage, not the first one.
+    //
+    // The stage holds more than one: the page itself and the thumbnails beside it. `.first()` was
+    // picking a thumbnail — about 130 by 88 pixels — so a check written to prove the sheet
+    // rasterises was reading a postage stamp. It passed, which is the problem: it would have gone
+    // on passing if the page canvas had never drawn at all.
+    //
+    // Only the middle of the sheet is counted, and the result is a proportion rather than a pixel
+    // count. Both parts matter:
+    //
+    // - **The middle**, because a sheet that drew nothing but its border and title block would
+    //   sail past a whole-canvas check. The border alone is a good fraction of the ink on a
+    //   mostly-white drawing, so a whole-canvas threshold high enough to mean anything is also
+    //   high enough to pass on that failure.
+    // - **A proportion**, because an absolute count tuned on a developer's screen fails on a CI
+    //   runner rendering the same page smaller. That is what this test did on its first run:
+    //   3,905 painted pixels against a threshold of 5,000, on a sheet that had rendered perfectly
+    //   well. The viewport is pinned above for the same reason.
+    const inked = await page.evaluate(() => {
+      const canvases = [...document.querySelectorAll<HTMLCanvasElement>(".sf-stage canvas")];
+      const node = canvases.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+      const context = node?.getContext("2d");
+      if (!node || !context || node.width === 0 || node.height === 0) {
+        return { ratio: 0, area: 0, canvases: canvases.length };
+      }
+
+      const x = Math.floor(node.width * 0.2);
+      const y = Math.floor(node.height * 0.2);
+      const w = Math.floor(node.width * 0.6);
+      const h = Math.floor(node.height * 0.6);
+      const { data } = context.getImageData(x, y, w, h);
+
       let nonWhite = 0;
       for (let i = 0; i < data.length; i += 4) {
         if (data[i]! < 250 || data[i + 1]! < 250 || data[i + 2]! < 250) nonWhite += 1;
       }
-      return nonWhite;
+      return { ratio: nonWhite / (w * h), area: w * h, canvases: canvases.length };
     });
-    expect(painted, "the tutorial sheet rasterised to something other than a blank page")
-      .toBeGreaterThan(5_000);
+
+    // A thumbnail is a few thousand pixels; the page is hundreds of thousands. Asserting the size
+    // of what was measured is what stops this silently going back to reading a postage stamp.
+    expect(
+      inked.area,
+      `measured a canvas of only ${inked.area} px across ${inked.canvases} in the stage - that is ` +
+        "a thumbnail, not the page",
+    ).toBeGreaterThan(100_000);
+
+    expect(
+      inked.ratio,
+      "the middle of the tutorial sheet is blank - the page either failed to rasterise, or " +
+        "rendered only its border and title block",
+    ).toBeGreaterThan(0.005);
 
     expect(errors, "no uncaught errors while opening the tutorial").toEqual([]);
   });
