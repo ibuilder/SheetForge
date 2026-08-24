@@ -22,8 +22,24 @@
  * host stores the rolled-up state a report counts. See {@link toHostStatus}.
  */
 
-import type { Annotation, AnnotKind, AnnotStatus, Calibration } from "@massingcloud/pdf-viewer";
-import type { HostCalibration, HostKind, HostMarkup, HostMetadata, HostQuantity, HostStatus } from "./bridge";
+import type {
+  Annotation,
+  AnnotKind,
+  AnnotStatus,
+  Calibration,
+  SheetMeta,
+} from "@massingcloud/pdf-viewer";
+import type {
+  HostCalibration,
+  HostKind,
+  HostMarkup,
+  HostMetadata,
+  HostQuantity,
+  HostSheet,
+  HostStatus,
+  NewSheet,
+  SheetSource,
+} from "./bridge";
 
 /**
  * The schema version written alongside every stored annotation.
@@ -294,5 +310,47 @@ export function fromHostCalibration(calibration: HostCalibration): Calibration {
     ...(calibration.preset_label ? { label: calibration.preset_label } : {}),
     source,
     page: calibration.page,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The sheet register
+// ---------------------------------------------------------------------------
+
+/**
+ * The engine's sheet metadata, on its way to the host.
+ *
+ * The engine reads title blocks from the PDF's own text layer, or from OCR output on a scan. It
+ * does not distinguish the two in {@link SheetMeta}, and the host insists on knowing — so the
+ * caller says which, and the default is the more cautious of the two.
+ */
+export function toHostSheet(sheet: SheetMeta, source: SheetSource = "extracted"): NewSheet {
+  return {
+    page: sheet.page,
+    number: sheet.number ?? null,
+    title: sheet.title ?? null,
+    discipline: sheet.discipline ?? null,
+    revision: sheet.revision ?? null,
+    source,
+  };
+}
+
+/**
+ * The host's row, back into the engine's shape.
+ *
+ * `sheetId` is the engine's key for a sheet across re-issues of a container file. The host keys on
+ * (document, page) instead, so it is reconstructed here rather than stored — two records of the
+ * same fact drift, and this one is derivable.
+ */
+export function fromHostSheet(sheet: HostSheet): SheetMeta {
+  return {
+    sheetId: `${sheet.documentRevisionId}#${sheet.page}`,
+    page: sheet.page,
+    ...(sheet.number === null ? {} : { number: sheet.number }),
+    ...(sheet.title === null ? {} : { title: sheet.title }),
+    ...(sheet.discipline === null
+      ? {}
+      : { discipline: sheet.discipline as NonNullable<SheetMeta["discipline"]> }),
+    ...(sheet.revision === null ? {} : { revision: sheet.revision }),
   };
 }

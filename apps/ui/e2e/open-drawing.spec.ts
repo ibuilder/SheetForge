@@ -116,6 +116,7 @@ async function stubHost(
       (window as unknown as { __sfExported: unknown[] }).__sfExported = [];
       (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened = [];
       (window as unknown as { __sfDerived: unknown[] }).__sfDerived = [];
+      (window as unknown as { __sfSheets: unknown[] }).__sfSheets = [];
 
       // event name -> the callback ids listening for it, mirroring what the Rust side tracks.
       const listeners = new Map<string, number[]>();
@@ -245,6 +246,15 @@ async function stubHost(
               return Promise.resolve(new Uint8Array(pdfBytes).buffer);
             case "markup_list":
               return Promise.resolve(seeded);
+            case "sheet_list":
+              return Promise.resolve([]);
+            case "sheet_record": {
+              // The register the engine read off the title blocks. Captured so a test can assert
+              // it is sent as a guess rather than as something a person confirmed.
+              const rows = args["sheets"] as Record<string, unknown>[];
+              (window as unknown as { __sfSheets: unknown[] }).__sfSheets.push(...rows);
+              return Promise.resolve(rows.length);
+            }
             case "calibration_get":
               return Promise.resolve(null);
             case "markup_create": {
@@ -1049,5 +1059,45 @@ test.describe("extracting pages", () => {
       () => (window as unknown as { __sfDerived: unknown[] }).__sfDerived.length,
     );
     expect(filed, "a document was built from a selection that named pages that do not exist").toBe(0);
+  });
+});
+
+/**
+ * The register reaching the host.
+ *
+ * The engine reads title blocks whenever a document opens. Until recently the host adapter dropped
+ * the result, so the numbers were re-derived every time and a correction never survived a restart.
+ *
+ * What matters most here is not that rows arrive — it is *how they are labelled*. They are sent as
+ * `extracted`, because a title-block heuristic is a guess, and the store refuses to let a guess
+ * overwrite something a person confirmed. Sending a stronger source would defeat that rule from
+ * the wrong side of it.
+ */
+test.describe("the sheet register", () => {
+  test("what the engine reads is sent as a guess, never as confirmed", async ({ page }) => {
+    await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
+    await page.goto("/");
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    // The engine extracts asynchronously after the document loads.
+    await expect
+      .poll(
+        () => page.evaluate(() => (window as unknown as { __sfSheets: unknown[] }).__sfSheets.length),
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThan(0);
+
+    const rows = await page.evaluate(
+      () => (window as unknown as { __sfSheets: Record<string, unknown>[] }).__sfSheets,
+    );
+
+    for (const row of rows) {
+      expect(
+        row["source"],
+        "a title-block reading was sent as something a person stood behind, which would let it " +
+          "overwrite a correction",
+      ).toBe("extracted");
+      expect(typeof row["page"]).toBe("number");
+    }
   });
 });

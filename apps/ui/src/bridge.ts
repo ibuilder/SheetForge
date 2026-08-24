@@ -86,6 +86,30 @@ export interface RecentProject {
   available: boolean;
 }
 
+/** How a value in the register came to be known, worst first. */
+export type SheetSource = "recognised" | "extracted" | "imported" | "confirmed";
+
+/** One row of the register, as the host holds it. */
+export interface HostSheet {
+  page: number;
+  number: string | null;
+  title: string | null;
+  discipline: string | null;
+  revision: string | null;
+  source: SheetSource;
+  documentRevisionId: string;
+}
+
+/** One row on its way to the host. */
+export interface NewSheet {
+  page: number;
+  number: string | null;
+  title: string | null;
+  discipline: string | null;
+  revision: string | null;
+  source: SheetSource;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -334,6 +358,17 @@ export const host = {
   documentBytes: (revision: string) => call<ArrayBuffer>("document_bytes", { revision }),
 
   markupList: (revision: string) => call<HostMarkup[]>("markup_list", { revision }),
+
+  /**
+   * The sheet register: what each page of a document actually is.
+   *
+   * `source` travels with every row because a number a person typed and one a machine guessed off
+   * a title block must not be shown alike.
+   */
+  sheetList: (revision: string) => call<HostSheet[]>("sheet_list", { revision }),
+  sheetAtRevision: (revision: string) => call<HostSheet[]>("sheet_at_revision", { revision }),
+  sheetRecord: (revision: string, sheets: NewSheet[]) =>
+    call<number>("sheet_record", { revision, sheets }),
   markupCreate: (markup: NewMarkupPayload) => call<HostMarkup>("markup_create", { markup }),
   /**
    * Raise many at once — what an XFDF or BCF import uses.

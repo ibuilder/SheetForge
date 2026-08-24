@@ -16,18 +16,20 @@
  *    whole batch would discard work the user has already done.
  */
 
-import type { LoadResult, Mutation, StorageAdapter, StoreKey } from "@massingcloud/pdf-viewer";
+import type { LoadResult, Mutation, SheetMeta, StorageAdapter, StoreKey } from "@massingcloud/pdf-viewer";
 import { ConflictError } from "@massingcloud/pdf-viewer";
 import type { HostMarkup } from "./bridge";
 import { host, isCommandError } from "./bridge";
 import {
   fromHostCalibration,
   fromHostMarkup,
+  fromHostSheet,
   statusPath,
   toHostCalibration,
   toHostMarkup,
   toHostMetadata,
   toHostQuantity,
+  toHostSheet,
   toHostStatus,
 } from "./mapping";
 
@@ -74,7 +76,18 @@ export class HostAdapter implements StorageAdapter {
       .filter((calibration) => calibration !== null)
       .map(fromHostCalibration);
 
-    return { annotations, calibrations };
+    // The register the host holds, handed back so the engine does not re-read title blocks it has
+    // already been told about — and, more to the point, so a number somebody corrected survives
+    // being reopened. Failing to read it is not worth failing the load over: the engine will
+    // extract again, which is where these came from in the first place.
+    let sheets: SheetMeta[];
+    try {
+      sheets = (await host.sheetList(key.documentId)).map(fromHostSheet);
+    } catch {
+      sheets = [];
+    }
+
+    return { annotations, calibrations, sheets };
   }
 
   async save(key: StoreKey, mutations: Mutation[]): Promise<void> {
@@ -227,10 +240,14 @@ export class HostAdapter implements StorageAdapter {
       }
 
       case "sheet":
-        // Sheet metadata — title block, sheet number, issue date — is extracted by the engine and
-        // is not yet part of the host's schema. It stays in the engine's own record rather than
-        // being dropped: the annotation payload carries it, so nothing is lost, and the host gains
-        // a sheets table when the register needs to be queried rather than merely displayed.
+        // Sheet metadata — the sheet number and title read off the title block — is now the host's
+        // to keep, so "which sheets are at Rev C?" is a query rather than a scroll.
+        //
+        // Sent as `extracted`, never as `confirmed`: this arrives from the engine's title-block
+        // heuristic, and the store refuses to let a guess overwrite something a person stood
+        // behind. Claiming a stronger source here would defeat that rule from the wrong side of
+        // it.
+        await host.sheetRecord(key.documentId, [toHostSheet(mutation.sheet, "extracted")]);
         return;
     }
   }

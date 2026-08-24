@@ -10,15 +10,17 @@ import type { Annotation, AnnotKind, AnnotStatus, Calibration } from "@massingcl
 import { describe, expect, it } from "vitest";
 import type { HostMarkup, HostStatus } from "../src/bridge";
 import {
+  GEOMETRY_SCHEMA,
   fromHostCalibration,
   fromHostMarkup,
-  GEOMETRY_SCHEMA,
+  fromHostSheet,
   statusPath,
   toHostCalibration,
   toHostKind,
   toHostMarkup,
   toHostMetadata,
   toHostQuantity,
+  toHostSheet,
   toHostStatus,
 } from "../src/mapping";
 
@@ -307,3 +309,71 @@ function asHostMarkup(
     updatedAt: "2026-08-20T10:05:00.000Z",
   };
 }
+
+describe("the sheet register across the boundary", () => {
+  it("sends what the engine read, marked as a guess rather than a fact", () => {
+    // The engine's title-block heuristic produced this. It is not a person, and saying so is what
+    // stops the store letting it overwrite somebody's correction later.
+    const sent = toHostSheet(
+      {
+        sheetId: "rev#7",
+        page: 7,
+        number: "A-201",
+        title: "SECOND FLOOR PLAN",
+        discipline: "architectural",
+        revision: "C",
+      },
+      "extracted",
+    );
+
+    expect(sent.source).toBe("extracted");
+    expect(sent.page).toBe(7);
+    expect(sent.number).toBe("A-201");
+    expect(sent.revision).toBe("C");
+  });
+
+  it("turns what could not be read into null rather than an empty string", () => {
+    // An empty string is a value somebody read; absent is the truth. The store treats a row with
+    // nothing in it as one not worth writing, and that decision needs the difference.
+    const sent = toHostSheet({ sheetId: "rev#1", page: 1 });
+    expect(sent.number).toBeNull();
+    expect(sent.title).toBeNull();
+    expect(sent.discipline).toBeNull();
+    expect(sent.revision).toBeNull();
+  });
+
+  it("reads a row back into the shape the engine expects", () => {
+    const restored = fromHostSheet({
+      page: 3,
+      number: "M-401",
+      title: "MECHANICAL PLANT",
+      discipline: "mechanical",
+      revision: "B",
+      source: "confirmed",
+      documentRevisionId: "0192f0c1-0000-7000-8000-0000000000aa",
+    });
+
+    expect(restored.page).toBe(3);
+    expect(restored.number).toBe("M-401");
+    expect(restored.discipline).toBe("mechanical");
+    // Derived rather than stored: two records of one fact drift, and this one is computable.
+    expect(restored.sheetId).toBe("0192f0c1-0000-7000-8000-0000000000aa#3");
+  });
+
+  it("omits an absent field rather than setting it to undefined", () => {
+    // `exactOptionalPropertyTypes` makes these different, and the engine's own code branches on
+    // whether the key is there.
+    const restored = fromHostSheet({
+      page: 1,
+      number: null,
+      title: null,
+      discipline: null,
+      revision: null,
+      source: "extracted",
+      documentRevisionId: "rev",
+    });
+
+    expect("number" in restored).toBe(false);
+    expect("discipline" in restored).toBe(false);
+  });
+});

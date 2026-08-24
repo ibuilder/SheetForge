@@ -638,6 +638,165 @@ pub async fn document_derive(
     .map_err(|_| CommandError::internal())?
 }
 
+/// One row of the sheet register, on the wire.
+///
+/// Carries `source` because the interface has to show the difference between a number somebody
+/// typed and one a machine guessed off a title block. A register that renders them alike will be
+/// believed at the wrong moment — see [`sf_domain::SheetSource`].
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SheetDto {
+    /// 1-based page within the revision.
+    pub page: u32,
+    /// The sheet number as printed, when one could be read.
+    pub number: Option<String>,
+    /// The sheet title as printed.
+    pub title: Option<String>,
+    /// Discipline, as the engine classifies it.
+    pub discipline: Option<String>,
+    /// The revision letter printed on *this sheet*, which is not the document's revision.
+    pub revision: Option<String>,
+    /// `recognised`, `extracted`, `imported` or `confirmed`.
+    pub source: String,
+    /// Which document this page belongs to. Present on a query across the project, where the
+    /// answer spans several documents.
+    pub document_revision_id: String,
+}
+
+impl SheetDto {
+    fn of(sheet: &sf_domain::Sheet) -> Self {
+        Self {
+            page: sheet.page,
+            number: sheet.number.clone(),
+            title: sheet.title.clone(),
+            discipline: sheet.discipline.clone(),
+            revision: sheet.revision.clone(),
+            source: sheet.source.to_string(),
+            document_revision_id: sheet.document_revision_id.to_string(),
+        }
+    }
+}
+
+/// The register for one document.
+///
+/// # Errors
+/// [`CommandError::no_project`], or a store error.
+#[tauri::command]
+pub fn sheet_list(app: AppHandle, revision: String) -> CommandResult<Vec<SheetDto>> {
+    let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
+    let id = revision_id(&revision)?;
+
+    with_open(&state, |package| {
+        Ok(package
+            .store()
+            .sheets(id)?
+            .iter()
+            .map(SheetDto::of)
+            .collect())
+    })
+}
+
+/// Every sheet in the project at a given printed revision — "which sheets are at Rev C?".
+///
+/// # Errors
+/// [`CommandError::no_project`], or a store error.
+#[tauri::command]
+pub fn sheet_at_revision(app: AppHandle, revision: String) -> CommandResult<Vec<SheetDto>> {
+    let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
+    // A revision letter is a title-block string and is about to become a query parameter. Bounded
+    // rather than trusted: it arrives from the interface and there is no reason for it to be long.
+    if revision.trim().is_empty() || revision.len() > 32 {
+        return Err(CommandError::invalid_request(
+            "That is not a revision letter.",
+        ));
+    }
+
+    with_open(&state, |package| {
+        let project = package
+            .store()
+            .project()?
+            .ok_or_else(CommandError::no_project)?;
+        Ok(package
+            .store()
+            .sheets_at_revision(project.id, revision.trim())?
+            .iter()
+            .map(SheetDto::of)
+            .collect())
+    })
+}
+
+/// Record what the pages of a document are.
+///
+/// Written in one transaction, because a 200-sheet import produces 200 rows and each implicit
+/// transaction is a flush to disk.
+///
+/// The store refuses to overwrite a confirmed row with a guess, so a re-extraction on every open
+/// cannot walk over a number somebody typed. That rule lives in the store rather than here on
+/// purpose: it is a fact about the data, not about this route into it.
+///
+/// # Errors
+/// [`CommandError::no_project`], or a store or domain error.
+#[tauri::command]
+pub fn sheet_record(
+    app: AppHandle,
+    revision: String,
+    sheets: Vec<NewSheet>,
+) -> CommandResult<usize> {
+    let state = app.state::<AppState>();
+    state.require(Capability::MarkupCreate)?;
+    let id = revision_id(&revision)?;
+
+    with_open(&state, |package| {
+        let document = package.store().revision(id)?;
+        let mut rows = Vec::with_capacity(sheets.len());
+
+        for sheet in &sheets {
+            let source = sf_domain::SheetSource::from_str(&sheet.source)?;
+            let mut row = sf_domain::Sheet::new(
+                document.project_id,
+                document.id,
+                sheet.page,
+                document.page_count,
+                sheet.number.as_deref(),
+                sheet.title.as_deref(),
+                source,
+            )?;
+            row.discipline.clone_from(&sheet.discipline);
+            row.revision.clone_from(&sheet.revision);
+
+            // A page nothing could be read from is not written. Storing a blank per page turns the
+            // register into a list of nothing, and an absent row and an empty one mean the same.
+            if !row.is_empty() {
+                rows.push(row);
+            }
+        }
+
+        let written = rows.len();
+        package.store_mut().upsert_sheets(&rows)?;
+        Ok(written)
+    })
+}
+
+/// What the interface sends when it has read a title block.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewSheet {
+    /// 1-based page.
+    pub page: u32,
+    /// The sheet number, if one was read.
+    pub number: Option<String>,
+    /// The sheet title, if one was read.
+    pub title: Option<String>,
+    /// Discipline, as classified.
+    pub discipline: Option<String>,
+    /// The revision letter printed on the sheet.
+    pub revision: Option<String>,
+    /// How it was known. Refused if it is not one of the four the domain defines.
+    pub source: String,
+}
+
 /// The tutorial sheet, compiled into the binary.
 ///
 /// Generated by `scripts/make-welcome-sheet.mjs` rather than committed as an opaque blob, so the
