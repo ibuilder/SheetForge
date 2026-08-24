@@ -103,16 +103,17 @@ const PROJECT = {
 async function stubHost(
   page: Page,
   pdf: number[],
-  { firstRun = false }: { firstRun?: boolean } = {},
+  { firstRun = false, markups = [] }: { firstRun?: boolean; markups?: unknown[] } = {},
 ): Promise<void> {
   await page.addInitScript(
-    ({ pdfBytes, revision, project, returning }) => {
+    ({ pdfBytes, revision, project, returning, seeded }) => {
       // Set before any application script runs, which is the only moment early enough: the
       // interface reads this during start-up.
       if (returning) localStorage.setItem("sheetforge.tutorial-offered", "yes");
 
       const saved: Record<string, unknown>[] = [];
       (window as unknown as { __sfSaved: unknown[] }).__sfSaved = saved;
+      (window as unknown as { __sfExported: unknown[] }).__sfExported = [];
 
       // event name -> the callback ids listening for it, mirroring what the Rust side tracks.
       const listeners = new Map<string, number[]>();
@@ -186,9 +187,17 @@ async function stubHost(
               // The host returns raw bytes, which reach the interface as an ArrayBuffer.
               return Promise.resolve(new Uint8Array(pdfBytes).buffer);
             case "markup_list":
-              return Promise.resolve([]);
+              return Promise.resolve(seeded);
             case "calibration_get":
               return Promise.resolve(null);
+            case "export_save": {
+              (window as unknown as { __sfExported: unknown[] }).__sfExported.push({
+                suggestedName: args["suggestedName"],
+                extension: args["extension"],
+                bytes: args["bytes"],
+              });
+              return Promise.resolve(null);
+            }
             case "markup_create": {
               saved.push(args);
               const markup = args["markup"] as Record<string, unknown>;
@@ -210,7 +219,7 @@ async function stubHost(
         },
       };
     },
-    { pdfBytes: pdf, revision: REVISION, project: PROJECT, returning: !firstRun },
+    { pdfBytes: pdf, revision: REVISION, project: PROJECT, returning: !firstRun, seeded: markups },
   );
 }
 
@@ -522,3 +531,121 @@ test.describe("the tutorial sheet", () => {
     await expect(page.locator("[data-project]")).toContainText("SheetForge Tutorial");
   });
 });
+
+
+/**
+ * One sheet, as a picture.
+ *
+ * The failure worth catching is not "the button did nothing" — that is loud. It is an image that
+ * exports the drawing and silently drops the markups on it, because somebody would send a clean
+ * sheet believing they had sent their comments and nothing downstream would contradict them.
+ *
+ * So the test drives the real path — menu, render, host call — and then decodes the PNG the host
+ * was handed and looks for the colour of the markup. The test drawing is drawn in black only, so
+ * a saturated pixel in the output can have come from nowhere else.
+ */
+test.describe("exporting a sheet as an image", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("hands the host a real PNG of the page, at the resolution asked for", async ({ page }) => {
+    await exportSheet(page);
+
+    const extension = await page.evaluate(() => {
+      const all = (window as unknown as { __sfExported: Record<string, unknown>[] }).__sfExported;
+      return all[all.length - 1]!["extension"];
+    });
+    expect(extension).toBe("png");
+    const bytes = await lastExport(page);
+
+    // The PNG signature, then the IHDR width and height as big-endian 32-bit integers. Checking
+    // the header rather than just the length is what distinguishes a real image from a blob of
+    // something the encoder gave up on.
+    expect(bytes.slice(0, 8)).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const be32 = (at: number) =>
+      (bytes[at]! << 24) | (bytes[at + 1]! << 16) | (bytes[at + 2]! << 8) | bytes[at + 3]!;
+
+    // The test page is 612 by 792 points. At 96 DPI that is 72/96 of a point per pixel.
+    expect(be32(16)).toBe(Math.round(612 * (96 / 72)));
+    expect(be32(20)).toBe(Math.round(792 * (96 / 72)));
+  });
+
+  test("an unmarked sheet exports with no colour on it", async ({ page }) => {
+    // The control for the test below. The generated test drawing is black on white, so any
+    // saturated pixel in an export of it has to have come from a markup.
+    await exportSheet(page);
+    expect(await saturatedPixels(page, await lastExport(page))).toBe(0);
+  });
+});
+
+/*
+ * Not covered here: that the **markup overlay** reaches the exported PNG.
+ *
+ * It should be, and it is the half of `sheet-image.ts` most likely to be wrong — an export that
+ * silently drops the markups is the failure that would actually hurt somebody. Five attempts at
+ * setting it up failed for reasons that had nothing to do with the exporter: driving the engine's
+ * gesture loop from a test armed the wrong control, then dragged across a thumbnail; seeding a
+ * markup through `markup_list` produced an annotation the store did not render, and working out
+ * why is a piece of work about the harness rather than about the product.
+ *
+ * Rather than leave a test that passes for the wrong reason, the gap is recorded in
+ * docs/status.md. The control below at least proves the unmarked case is genuinely colourless, so
+ * whatever eventually asserts the marked case has something to compare against.
+ */
+
+/** Drive the export menu, and wait for the bytes to reach the host stub. */
+async function exportSheet(page: Page): Promise<void> {
+  const before = await page.evaluate(
+    () => (window as unknown as { __sfExported: unknown[] }).__sfExported.length,
+  );
+  await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Export/ }).click();
+  await page.getByRole("menuitem", { name: /This sheet as PNG - screen/ }).click();
+  await expect
+    .poll(
+      () => page.evaluate(() => (window as unknown as { __sfExported: unknown[] }).__sfExported.length),
+      { timeout: 30_000 },
+    )
+    .toBeGreaterThan(before);
+}
+
+/** The bytes of the most recent export. */
+async function lastExport(page: Page): Promise<number[]> {
+  return page.evaluate(() => {
+    const all = (window as unknown as { __sfExported: Record<string, unknown>[] }).__sfExported;
+    return all[all.length - 1]!["bytes"] as number[];
+  });
+}
+
+/**
+ * How many pixels of a PNG carry a saturated colour.
+ *
+ * Decoded in the page rather than in Node, because the browser already has a PNG decoder and
+ * adding one to the test suite to check a picture would be a dependency bought for a single
+ * assertion. "Saturated" means the channels disagree by a wide margin — which black, white and
+ * every grey of an antialiased line drawing do not.
+ */
+async function saturatedPixels(page: Page, bytes: number[]): Promise<number> {
+  return page.evaluate(async (data) => {
+    const blob = new Blob([new Uint8Array(data)], { type: "image/png" });
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(bitmap, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+
+    let saturated = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i]!;
+      const g = pixels[i + 1]!;
+      const b = pixels[i + 2]!;
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 60) saturated += 1;
+    }
+    return saturated;
+  }, bytes);
+}

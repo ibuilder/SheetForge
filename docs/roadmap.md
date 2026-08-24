@@ -19,6 +19,10 @@ Nothing new. The gap between "it works" and "you can depend on it."
 - **Performance budgets, measured**, on real hardware and a real drawing set: time to first page,
   tile latency at 800%, memory on a 200-sheet set. Then published, and failed against.
 - **Crash recovery, tested by killing the process**, not by dropping a connection.
+- **Raw bytes for exports.** Everything leaving the interface is serialised as a JSON array of
+  numbers today, which costs about five characters per byte to build, send and parse. Reads already
+  use a raw response — `document_bytes` returns one — and writes should use a raw request for the
+  same reason. Until then a large export is refused rather than attempted.
 - **Trademark clearance** for the name. See
   [ADR-0009](adr/0009-trademark-and-brand-clearance-status.md).
 
@@ -56,6 +60,91 @@ Nothing new. The gap between "it works" and "you can depend on it."
   make a scanned specification searchable; not good enough to trust for automatic sheet numbering,
   and the interface never presents a recognised scale as verified. A better on-device engine is
   still wanted — see below.
+
+## What Open PDF Studio has that we do not
+
+[Open PDF Studio](https://github.com/OpenAEC-Foundation/open-pdf-studio) is the closest thing to a
+peer this project has: free, open source, AEC-aimed, and built on the same foundations — Tauri 2, a
+Rust backend, pdf.js. It is worth taking seriously rather than dismissing.
+
+> **A licence note, because it matters.** Open PDF Studio is **LGPL-3.0**. Under
+> [the licensing rules](../CLAUDE.md) copyleft is refused rather than reviewed, so no code, asset
+> or snippet from it can come into this repository — and none has. What follows was written from
+> its published feature list and its documentation. Features are not copyrightable; source is. The
+> distinction is the whole of the boundary being observed here, and anyone implementing the items
+> below should implement them, not port them.
+
+The two products are aimed at different halves of the same desk. Open PDF Studio is a **general PDF
+editor** that measures; SheetForge is a **review and takeoff desk** that happens to open PDFs. That
+is why it has redaction, forms and watermarks and we have provenance, an audit chain and a project
+package — and why the honest reading of its feature list is not "catch up" but "these specific
+things are missing and some of them should not be".
+
+### Worth having, and now scheduled
+
+- **Page assembly** — insert, delete, extract, replace, reorder, rotate, and merge. Already listed
+  below; their version sharpened the requirement. The hard part is not the manipulation, it is that
+  [source PDFs are immutable and content-addressed](../CLAUDE.md): an assembled document has to be
+  a **new derived revision** with its own hash and a record of what it was made from, not an edit
+  of the issued drawing. That is an ADR before it is a feature.
+
+- **Export a sheet as an image.** *Shipped* — see below.
+
+- **Snapping while measuring.** They snap to endpoints, midpoints, centres and edges. This is the
+  single most on-mission item on their list: a takeoff traced by eye at 1/8" scale carries a
+  centimetre of hand-wobble per click, and snapping removes it. Two honest tiers: snapping to the
+  vertices and midpoints of *markups already on the page* is straightforward with the geometry the
+  engine already exposes; snapping to the *drawing's own linework* needs vector extraction from the
+  PDF content stream, which is a much larger piece of work. The first tier is worth having on its
+  own and will be built first, with the interface saying which it is doing.
+
+- **Printing, to scale.** We have none at all, which is a real gap on a desk that plots. The
+  generic answer — export a flattened PDF and print that — works and is what people will do; the
+  part worth building is the AEC-specific bit, which is plotting *at a stated scale* onto a stated
+  sheet size, with the scale actually verified against the calibration rather than left to the
+  print driver.
+
+- **Watermarks, headers and footers on export.** "NOT FOR CONSTRUCTION", a revision letter, a date,
+  a page number. On a construction set this is not decoration — issuing a drawing without its
+  status stamp is a real mistake with real consequences. Belongs on the export, never on the source.
+
+- **Redaction, as an export.** Genuinely needed for tender documents and anything carrying personal
+  data, and genuinely dangerous: redaction that draws a black box over text a copy-paste still
+  recovers is worse than none, because it is believed. It will only ship if the content is actually
+  removed and there is a test that greps the output for the text that was supposed to be gone. Like
+  everything else here it produces a **copy**; the issued drawing is never modified.
+
+- **Bookmarks and document outline.** Already parsed by the engine and currently thrown away. A
+  200-sheet set with a discipline outline is much faster to move around than a flat list.
+
+- **Interface language and right-to-left.** They ship 39 languages with RTL. We ship one, and there
+  is not a string catalogue in the codebase — every label is a literal. That is a structural gap,
+  not a translation task, and pretending otherwise would understate it.
+
+### Deliberately not taking
+
+- **Interactive form filling (AcroForms and XFA).** Off-mission, and XFA in particular is a large
+  scripting surface inside a file format this application treats as hostile input. A reviewer
+  filling in a transmittal form should use a form filler.
+- **Multiple documents in tabs.** The project *is* the container here, and its sheet register does
+  the job tabs are doing there. Adding tabs on top would be two answers to one question.
+- **Editing the text and graphics inside a drawing.** Unchanged from below: a positioning decision,
+  not a missing feature.
+
+### Done, prompted by this comparison
+
+- **A sheet as a picture.** One page, with its markups on it, as a PNG at 96, 150 or 300 DPI —
+  because the request a reviewer actually gets is "send me a picture of the bit you clouded", and
+  the answer until now was a screenshot cropped to whatever was on screen. The markups are
+  composited from the same renderer the viewer paints with, so the exported cloud cannot drift into
+  a different shape from the one on screen, and there is a test that decodes the exported PNG and
+  fails if the overlay went missing.
+
+  It also surfaced a limit worth naming: exported bytes cross to the host as a JSON array of
+  numbers, roughly five characters per byte. Invisible for a 40 KB spreadsheet, ruinous for a 30 MB
+  image. The export now refuses anything over the host's interchange limit with a message instead
+  of freezing the window, and **a raw-bytes request for exports** — the direction `document_bytes`
+  already goes for reads — is the next thing to build.
 
 ## 0.3 — The review, end to end
 

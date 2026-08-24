@@ -20,6 +20,7 @@ import { errorMessage, hasHost, host, isCommandError, onDropped } from "./bridge
 import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
+import { RESOLUTIONS, sheetAsPng } from "./sheet-image";
 import { summaryPlugin } from "./summary";
 import "./styles.css";
 
@@ -32,11 +33,20 @@ interface Session {
 
 let session: Session | undefined;
 
+/**
+ * The bounds the host holds untrusted input to, read once at start-up.
+ *
+ * Kept here so the interface can refuse something *before* attempting it. The host enforces these
+ * regardless — this side is a courtesy, not a control.
+ */
+let limits: AppInfo["limits"] | undefined;
+
 async function start(): Promise<void> {
   const root = document.querySelector<HTMLDivElement>("#app");
   if (!root) throw new Error("the application root element is missing from index.html");
 
   const info = hasHost() ? await host.appInfo() : undefined;
+  limits = info?.limits;
   const chrome = mountChrome(root, {
     info,
     // `guard` reports its own failures, so these are deliberately not awaited: a click handler
@@ -50,7 +60,7 @@ async function start(): Promise<void> {
     onVerify: () => void guard(() => verify(chrome)),
     onDiagnostics: () => void guard(() => saveDiagnostics(chrome)),
     exportItems,
-    onExport: (id) => void guard(() => runExport(id)),
+    onExport: (id) => void guard(() => runExport(chrome, id)),
   });
 
   if (info) {
@@ -125,6 +135,25 @@ async function deliverExport(chrome: Chrome, blob: Blob, filename: string): Prom
   const stem = dot > 0 ? filename.slice(0, dot) : filename;
   const extension = dot > 0 ? filename.slice(dot + 1) : "bin";
 
+  // Refused here, before anything is allocated, rather than allowed to become a frozen window.
+  //
+  // Bytes cross to the host as a JSON array of numbers, which costs roughly five characters per
+  // byte to build, serialise and parse. That is invisible for a 40 KB spreadsheet and ruinous for
+  // a 30 MB image: the interface would stop responding for as long as it took, with nothing on
+  // screen to say why. The ceiling is the host's own interchange limit, so there is one number
+  // rather than two disagreeing ones.
+  //
+  // The real fix is a raw-bytes request, the way `document_bytes` already returns one in the other
+  // direction. Until that exists this is a message instead of a hang. See docs/roadmap.md.
+  const ceiling = limits ? limits.maxInterchangeMb * 1024 * 1024 : Number.POSITIVE_INFINITY;
+  if (blob.size > ceiling) {
+    throw new Error(
+      `That export is ${Math.round(blob.size / (1024 * 1024))} MB, over the ` +
+        `${limits?.maxInterchangeMb} MB limit for moving a file to disk. ` +
+        "Choose a lower resolution, or export fewer sheets at once.",
+    );
+  }
+
   chrome.setStatus(`Saving ${filename}…`);
   try {
     const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -181,7 +210,7 @@ function exportItems(): MenuItem[] {
     ...viewer.actionList.filter((a) => a.group === "io" && !preferred.includes(a.id)),
   ];
 
-  return ordered.map((action, index) => ({
+  const engineItems: MenuItem[] = ordered.map((action, index) => ({
     id: action.id,
     // The engine labels these for a tooltip beside an icon ("Export marked-up PDF"); in a menu
     // headed "Export" the verb is redundant, and the ellipsis says a dialog is coming.
@@ -190,13 +219,53 @@ function exportItems(): MenuItem[] {
     reason: "Nothing to export from this drawing yet",
     separatorBefore: action.id.startsWith("import.") && !ordered[index - 1]?.id.startsWith("import."),
   }));
+
+  // Ours, not the engine's: one sheet as a picture, at a resolution chosen for what it is for.
+  // Last in the menu because it is the occasional case; separated because it exports *this sheet*
+  // rather than the review, which is a different kind of thing to be handing somebody.
+  const imageItems: MenuItem[] = RESOLUTIONS.map((resolution, index) => ({
+    id: `image.${resolution.id}`,
+    label: `This sheet as PNG - ${resolution.label.toLowerCase()} (${resolution.dpi} DPI)…`,
+    enabled: true,
+    reason: resolution.purpose,
+    separatorBefore: index === 0,
+  }));
+
+  return [...engineItems, ...imageItems];
 }
 
 /** Run one of them. The engine produces the bytes; the host writes them where the user says. */
-async function runExport(id: string): Promise<void> {
+async function runExport(chrome: Chrome, id: string): Promise<void> {
   const viewer = session?.viewer;
   if (!viewer) return;
+
+  const resolution = RESOLUTIONS.find((each) => `image.${each.id}` === id);
+  if (resolution) {
+    await exportSheetImage(chrome, viewer, resolution.dpi);
+    return;
+  }
+
   await viewer.runAction(id);
+}
+
+/**
+ * One sheet, as a PNG, through the same native save dialog as everything else.
+ *
+ * The status line says what is happening before it starts, because at plot resolution this takes
+ * seconds and a frozen window with no explanation is indistinguishable from a crash.
+ */
+async function exportSheetImage(chrome: Chrome, viewer: Viewer, dpi: number): Promise<void> {
+  const page = viewer.page;
+  chrome.setStatus(`Rendering sheet ${page} at ${dpi} DPI…`);
+
+  const image = await sheetAsPng(viewer, page, dpi);
+  const name = session ? `${session.revision.name} p${page}` : `sheet p${page}`;
+  await deliverExport(chrome, image.blob, `${name}.png`);
+
+  chrome.setStatus(
+    `Exported ${name}.png - ${image.width} by ${image.height} pixels, ` +
+      `${Math.round(image.blob.size / 1024)} KB.`,
+  );
 }
 
 /**

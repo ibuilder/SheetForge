@@ -1,0 +1,176 @@
+/**
+ * The sheet, as a picture.
+ *
+ * A marked-up PDF is the right thing to issue and the wrong thing to put in a Tuesday email. The
+ * question a superintendent actually asks is "send me a picture of the bit you clouded", and the
+ * answer today is a screenshot — cropped to whatever was on screen, at whatever zoom the sender
+ * happened to be at, with the markup list overlapping the corner of the drawing.
+ *
+ * So: render one sheet at a chosen resolution, with its markups drawn on, as a PNG.
+ *
+ * ## The markups are the point
+ *
+ * An image export that quietly dropped the markups would be worse than none. Somebody would send a
+ * clean sheet believing they had sent their comments, and nothing downstream would tell them
+ * otherwise. The overlay is therefore composited from the same {@link drawAnnotation} the viewer
+ * paints with — not re-implemented here, which is how the two would drift into disagreeing about
+ * what a cloud looks like.
+ *
+ * ## Resolution, and why it is asked rather than assumed
+ *
+ * A D-size sheet at 300 DPI is 10,800 by 7,200 pixels: 78 megapixels, and around 30 MB of PNG.
+ * That is the right answer for a plot and the wrong one for an email, and no default is right for
+ * both. The sizes are named for what they are for, and the pixel dimensions are computed and
+ * refused before anything is allocated — a browser canvas has a hard area limit, and crossing it
+ * yields a blank image rather than an error.
+ */
+import { drawAnnotation, SVG_NS, type Viewer } from "@massingcloud/pdf-viewer";
+
+/** What a chosen resolution is actually for. */
+export interface Resolution {
+  id: string;
+  label: string;
+  dpi: number;
+  /** What somebody would use it for, shown beside the label. */
+  purpose: string;
+}
+
+/**
+ * Offered resolutions.
+ *
+ * Screen resolution first, because sending a picture is the common case and a 30 MB attachment is
+ * a worse failure than a soft one.
+ */
+export const RESOLUTIONS: readonly Resolution[] = [
+  { id: "screen", label: "Screen", dpi: 96, purpose: "email and reports" },
+  { id: "print", label: "Print", dpi: 150, purpose: "a readable A3 print" },
+  { id: "plot", label: "Plot", dpi: 300, purpose: "full-size plotting; a large file" },
+];
+
+/**
+ * Chromium refuses to allocate a canvas past roughly 2^28 pixels, and does it by returning a blank
+ * one rather than by throwing. Held well under, so the failure is a message rather than a picture
+ * of nothing.
+ */
+const MAX_PIXELS = 200_000_000;
+
+/** Everything the caller needs to name the file and warn about the size. */
+export interface SheetImage {
+  blob: Blob;
+  width: number;
+  height: number;
+  page: number;
+}
+
+/**
+ * Render one page, with its markups, to a PNG.
+ *
+ * @throws if no document is open, or the requested size exceeds what a canvas can hold.
+ */
+export async function sheetAsPng(
+  viewer: Viewer,
+  page: number,
+  dpi: number,
+): Promise<SheetImage> {
+  const doc = viewer.doc;
+  if (!doc) throw new Error("No drawing is open.");
+
+  const info = await doc.pageInfo(page);
+  // PDF user space is 72 units to the inch by definition, so this is the whole of the conversion.
+  const scale = dpi / 72;
+  const width = Math.round(info.width * scale);
+  const height = Math.round(info.height * scale);
+
+  if (width * height > MAX_PIXELS) {
+    throw new Error(
+      `That would be ${width} by ${height} pixels, which is more than a canvas can hold. ` +
+        "Choose a lower resolution.",
+    );
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("This system could not provide a drawing surface.");
+
+  // White, not transparent. A PDF page has no background of its own, and a transparent PNG pasted
+  // into a dark-themed document renders as white linework on black — technically faithful and
+  // completely unreadable.
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+
+  const proxy = await doc.page(page);
+  await proxy.render({
+    canvas,
+    canvasContext: context,
+    viewport: proxy.getViewport({ scale }),
+  }).promise;
+
+  const overlay = await markupOverlay(viewer, page, scale, width, height);
+  if (overlay) {
+    context.drawImage(overlay, 0, 0);
+    // A bitmap holds GPU-side memory until it is closed, and these are large.
+    overlay.close();
+  }
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("The image could not be encoded.");
+
+  // Release the backing store rather than waiting for the collector; at plot resolution this is
+  // hundreds of megabytes.
+  canvas.width = 0;
+  canvas.height = 0;
+
+  return { blob, width, height, page };
+}
+
+/**
+ * The markups for a page, rasterised at the same scale as the sheet.
+ *
+ * Built as an SVG and decoded through `createImageBitmap` rather than drawn with canvas calls,
+ * because the shapes come from the engine as SVG elements and re-implementing them against a 2D
+ * context is how an exported cloud ends up a different shape from the one on screen.
+ *
+ * Returns `undefined` when the page has no markups, so a clean sheet costs no work.
+ */
+async function markupOverlay(
+  viewer: Viewer,
+  page: number,
+  scale: number,
+  width: number,
+  height: number,
+): Promise<ImageBitmap | undefined> {
+  const annotations = viewer.store.onPage(page);
+  if (annotations.length === 0) return undefined;
+
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("xmlns", SVG_NS);
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  for (const annotation of annotations) {
+    // `zoom: scale` puts the geometry in the same space as the rasterised page: both are page
+    // units multiplied by the same factor.
+    svg.append(drawAnnotation(annotation, { zoom: scale, feetInches: viewer.feetInches }));
+  }
+
+  // A blob URL rather than a data: URL. The markup on a busy sheet runs to hundreds of kilobytes
+  // of path data, and base64 in a URL is a needless third copy of it.
+  const source = new XMLSerializer().serializeToString(svg);
+  const url = URL.createObjectURL(new Blob([source], { type: "image/svg+xml" }));
+  try {
+    const image = new Image();
+    image.width = width;
+    image.height = height;
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("The markup overlay could not be rendered."));
+      image.src = url;
+    });
+    return await createImageBitmap(image);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

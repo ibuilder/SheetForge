@@ -6,6 +6,26 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **A sheet as a picture.** Export the current page, with its markups on it, as a PNG at 96, 150 or
+  300 DPI — screen, print or plot. The request a reviewer actually gets is "send me a picture of
+  the bit you clouded", and the answer until now was a screenshot cropped to whatever was on
+  screen. The markups are composited from the same renderer the viewer paints with, so an exported
+  cloud cannot drift into a different shape from the one on screen.
+
+### Changed
+
+- **A large export is refused with a message rather than freezing the window.** Bytes cross to the
+  host as a JSON array of numbers, about five characters per byte; invisible for a 40 KB
+  spreadsheet, ruinous for a 30 MB image. The ceiling is the host's own interchange limit. A
+  raw-bytes request — the direction reads already go — is scheduled for 0.2.
+
+### Fixed
+
+- The browser check that proved a drawing had rasterised was reading a thumbnail, not the page, and
+  would have gone on passing if the page canvas had never drawn at all.
+
 ## [0.1.0] — 2026-08-21
 
 First release. The core is built and tested; the shell is young. See
