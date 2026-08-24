@@ -1434,8 +1434,8 @@ fn count_pages(bytes: &[u8]) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn a_page_count_is_read_from_the_page_objects() {
@@ -1629,10 +1629,22 @@ mod tests {
     /// an error anybody sees.
     #[test]
     fn the_page_counter_does_not_mistake_a_page_tree_for_a_page() {
-        assert_eq!(count_pages(b"/Type /Pages /Count 40"), 1, "a tree is not a page");
-        assert_eq!(count_pages(b"/Type /Pagemaker"), 1, "a prefix is not a token");
+        assert_eq!(
+            count_pages(b"/Type /Pages /Count 40"),
+            1,
+            "a tree is not a page"
+        );
+        assert_eq!(
+            count_pages(b"/Type /Pagemaker"),
+            1,
+            "a prefix is not a token"
+        );
         assert_eq!(count_pages(b"/Type /Page /Type /Page"), 2);
-        assert_eq!(count_pages(b"/Type\n\t /Page"), 1, "whitespace between tokens is legal");
+        assert_eq!(
+            count_pages(b"/Type\n\t /Page"),
+            1,
+            "whitespace between tokens is legal"
+        );
         // The claim a file makes about itself is not evidence.
         assert_eq!(count_pages(b"/Count 999999 /Type /Page"), 1);
     }
