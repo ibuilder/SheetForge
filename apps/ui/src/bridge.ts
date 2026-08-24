@@ -239,6 +239,41 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   return invoke<T>(command, args);
 }
 
+/**
+ * Send bytes to the host without turning them into text first.
+ *
+ * `invoke` serialises a `Uint8Array` argument as a JSON array of numbers — about five characters
+ * per byte to build here, send, and parse there. That is unnoticeable for a spreadsheet and about
+ * 150 MB of string for a 30 MB image, on the thread that also draws the window.
+ *
+ * Tauri carries an `ArrayBuffer` payload as a raw body instead. The strings that describe it ride
+ * as headers, which are ASCII-only, so they are percent-encoded as UTF-8 — a drawing is quite
+ * capable of being called `Plan étage`, and a header that silently drops the accent would produce
+ * a file named something the person did not ask for.
+ */
+async function callWithBytes(
+  command: string,
+  bytes: Uint8Array,
+  headers: Record<string, string>,
+): Promise<void> {
+  if (!hasHost()) throw new NoHostError(command);
+  // Sent as the array itself rather than as `bytes.buffer`, for two reasons. `.buffer` is typed
+  // `ArrayBufferLike`, which admits a `SharedArrayBuffer` the transport does not accept — the
+  // typechecker caught that. And a subarray view's buffer holds everything behind the view, which
+  // for a canvas-derived array is silently much larger than the data.
+  //
+  // Copied only when the view does not already cover its whole allocation, because copying a
+  // 30 MB image to discover it needed no copying would be its own waste. When it does cover,
+  // offset and length are the whole buffer, so every implementation sees the same bytes.
+  const covers = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength;
+  const body = covers ? bytes : bytes.slice();
+  return invoke<void>(command, body, {
+    headers: Object.fromEntries(
+      Object.entries(headers).map(([key, value]) => [key, encodeURIComponent(value)]),
+    ),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The command surface, in full
 // ---------------------------------------------------------------------------
@@ -308,12 +343,15 @@ export const host = {
   statusCounts: () => call<[HostStatus, number][]>("status_counts"),
   auditList: () => call<AuditEvent[]>("audit_list"),
 
+  /**
+   * Hand an export to the host, which puts it where the user says.
+   *
+   * Raw bytes, not JSON. See {@link callWithBytes} for why that distinction is the difference
+   * between a plot-resolution image being possible and being refused.
+   */
   exportSave: (suggestedName: string, extension: string, bytes: Uint8Array) =>
-    call<void>("export_save", {
-      suggestedName,
-      extension,
-      // Tauri serialises a plain array here; the alternative is a raw-request channel, which is
-      // worth doing when an export gets large enough to notice. Exports are tens of KB today.
-      bytes: Array.from(bytes),
+    callWithBytes("export_save", bytes, {
+      "x-sf-name": suggestedName,
+      "x-sf-extension": extension,
     }),
 } as const;

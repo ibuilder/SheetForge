@@ -59,9 +59,10 @@ First release. The core is built and tested; the shell is young. See
 - One sheet as a PNG, with its markups on it, at 96, 150 or 300 DPI — screen, print or plot. The
   markups are composited from the same renderer the viewer paints with, so an exported cloud cannot
   drift into a different shape from the one on screen.
-- An export past the host's interchange limit is refused with a message rather than attempted.
-  Bytes cross to the host as a JSON array of numbers, about five characters per byte: invisible for
-  a spreadsheet, and a frozen window for a large image. A raw-bytes request is scheduled for 0.2.
+- Exports cross to the host as raw bytes rather than as a JSON array of numbers, which cost about
+  five characters per byte to build, send and parse. The name and extension travel as
+  percent-encoded headers, so a drawing called `Plan étage` keeps its accent. This is what makes a
+  plot-resolution image an export rather than a frozen window.
 
 **Getting started**
 - A tutorial drawing ships with the application: a two-page ARCH D sheet with a title block, a

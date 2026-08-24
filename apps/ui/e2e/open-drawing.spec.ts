@@ -146,7 +146,20 @@ async function stubHost(
           return id;
         },
 
-        invoke(command: string, args: Record<string, unknown>) {
+        invoke(command: string, args: Record<string, unknown>, options?: Record<string, unknown>) {
+          // A raw-bytes call: the payload is an ArrayBuffer and the metadata rides in headers,
+          // percent-encoded. Modelled faithfully because a stub that accepted the old JSON shape
+          // would keep passing after the host stopped accepting it.
+          if (args instanceof ArrayBuffer || args instanceof Uint8Array) {
+            const headers = (options?.["headers"] ?? {}) as Record<string, string>;
+            (window as unknown as { __sfExported: unknown[] }).__sfExported.push({
+              suggestedName: decodeURIComponent(headers["x-sf-name"] ?? ""),
+              extension: decodeURIComponent(headers["x-sf-extension"] ?? ""),
+              bytes: [...(args instanceof Uint8Array ? args : new Uint8Array(args))],
+            });
+            return Promise.resolve(null);
+          }
+
           if (command === "plugin:event|listen") {
             const name = args["event"] as string;
             const handler = args["handler"] as number;
@@ -190,14 +203,6 @@ async function stubHost(
               return Promise.resolve(seeded);
             case "calibration_get":
               return Promise.resolve(null);
-            case "export_save": {
-              (window as unknown as { __sfExported: unknown[] }).__sfExported.push({
-                suggestedName: args["suggestedName"],
-                extension: args["extension"],
-                bytes: args["bytes"],
-              });
-              return Promise.resolve(null);
-            }
             case "markup_create": {
               saved.push(args);
               const markup = args["markup"] as Record<string, unknown>;

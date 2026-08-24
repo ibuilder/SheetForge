@@ -19,10 +19,12 @@ Nothing new. The gap between "it works" and "you can depend on it."
 - **Performance budgets, measured**, on real hardware and a real drawing set: time to first page,
   tile latency at 800%, memory on a 200-sheet set. Then published, and failed against.
 - **Crash recovery, tested by killing the process**, not by dropping a connection.
-- **Raw bytes for exports.** Everything leaving the interface is serialised as a JSON array of
-  numbers today, which costs about five characters per byte to build, send and parse. Reads already
-  use a raw response — `document_bytes` returns one — and writes should use a raw request for the
-  same reason. Until then a large export is refused rather than attempted.
+- ~~**Raw bytes for exports.**~~ *Done.* Exports crossed to the host as a JSON array of numbers,
+  about five characters per byte to build, send and parse — unnoticeable for a spreadsheet, and
+  150 MB of string for a 30 MB image, on the thread that draws the window. They now travel as a raw
+  body with the name and extension as percent-encoded headers, matching the raw response
+  `document_bytes` already returns in the other direction. The size refusal that stood in for the
+  fix is gone. Not yet driven through a real webview — see [status](status.md).
 - **Trademark clearance** for the name. See
   [ADR-0009](adr/0009-trademark-and-brand-clearance-status.md).
 
@@ -140,11 +142,10 @@ things are missing and some of them should not be".
   a different shape from the one on screen, and there is a test that decodes the exported PNG and
   fails if the overlay went missing.
 
-  It also surfaced a limit worth naming: exported bytes cross to the host as a JSON array of
-  numbers, roughly five characters per byte. Invisible for a 40 KB spreadsheet, ruinous for a 30 MB
-  image. The export now refuses anything over the host's interchange limit with a message instead
-  of freezing the window, and **a raw-bytes request for exports** — the direction `document_bytes`
-  already goes for reads — is the next thing to build.
+  It also surfaced a limit worth naming, and then removed it. Exported bytes used to cross to the
+  host as a JSON array of numbers, roughly five characters per byte: invisible for a 40 KB
+  spreadsheet, ruinous for a 30 MB image. Exports now travel as a raw body, so plot resolution is
+  a real option rather than a refused one.
 
 ## 0.3 — The review, end to end
 

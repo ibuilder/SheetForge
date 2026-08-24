@@ -48,10 +48,12 @@ The README calls this early. This page says exactly how early, because "producti
 | The tutorial opens on a first run, and does not open itself again | Browser tests over both halves of the behaviour | `apps/ui/e2e/open-drawing.spec.ts` |
 | A sheet exports as a real PNG at the resolution asked for | Browser test decodes the exported bytes and checks the PNG header and IHDR dimensions | `apps/ui/e2e/open-drawing.spec.ts` |
 | An unmarked sheet exports with no colour on it | Browser test counts saturated pixels in the exported image | `apps/ui/e2e/open-drawing.spec.ts` |
+| An export name with accents, an em dash or an emoji survives the ASCII header it travels in | Rust round-trip tests over what `encodeURIComponent` produces | `apps/desktop/src-tauri/src/commands.rs` |
+| A malformed export name is refused rather than repaired | Rust tests over truncated, non-hex and non-UTF-8 escapes | `apps/desktop/src-tauri/src/commands.rs` |
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 217 Rust tests, 42 TypeScript unit tests, 28 browser tests.** The Rust figure includes
+**Totals: 220 Rust tests, 42 TypeScript unit tests, 28 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -74,6 +76,7 @@ Listed because omitting them would make the table above dishonest.
 | **Power loss is untested** | A committed write is now proven to survive the process being *killed* — a real child process, `TerminateProcess`/`SIGKILL`, no destructors. That proves SQLite committed, not that the platter did; testing the latter honestly needs hardware or a fault injector | 0.4 |
 | **Built and run on Windows only** | macOS, Linux, iOS and Android are configured and compile in CI, but have not been run by a human | 0.2 |
 | **Binaries are unsigned** | SmartScreen and Gatekeeper will warn | 0.2 |
+| **The raw-bytes export transport has not been driven through a real webview** | Exports now cross to the host as a raw body rather than as a JSON array of numbers. The decoding either side is unit-tested, the payload and header shapes are the ones `@tauri-apps/api` declares, and the browser suite drives them against a stub that models the transport — but no test drives the actual injected IPC, because the browser suite stops at that seam by design. A first release should have somebody export a file from the packaged application before it is published | 0.2 |
 | **Bundling runs in CI only at release** | The CI desktop job builds with `--no-bundle`, so the installer packaging — WiX, NSIS, the icon set, the licence file — is exercised only by the release workflow and by hand. It has been run once on Windows and produced both installers; the macOS and Linux bundles have never been produced at all | 0.2 |
 | **No release has been cut** | The release workflow has never run. It needs `TAURI_SIGNING_PRIVATE_KEY` in the repository secrets, without which every installed copy would be unable to update | 0.2 |
 | **No third-party security review** | No audit, no penetration test | 1.0 |

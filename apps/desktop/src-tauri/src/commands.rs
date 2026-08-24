@@ -973,12 +973,28 @@ pub fn audit_list(app: AppHandle) -> CommandResult<Vec<sf_audit::AuditEvent>> {
 /// # Errors
 /// [`CommandError::cancelled`], a capability refusal, or a write failure.
 #[tauri::command]
-pub async fn export_save(
-    app: AppHandle,
-    suggested_name: String,
-    extension: String,
-    bytes: Vec<u8>,
-) -> CommandResult<()> {
+pub async fn export_save(app: AppHandle, request: tauri::ipc::Request<'_>) -> CommandResult<()> {
+    // The bytes arrive as a raw body; the two strings that describe them arrive as headers.
+    //
+    // The alternative — and what this used to be — is a JSON array of numbers, which costs about
+    // five characters per byte to build in the renderer, serialise, and parse back. A spreadsheet
+    // export never noticed. A 300 DPI image of a D-size sheet is 30 MB, which became 150 MB of
+    // text on a thread that also draws the window, so the feature was capped rather than the
+    // transport fixed. This is the transport fixed.
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(bytes) => bytes.clone(),
+        // A JSON body here means an old renderer against a new host, which is a bug rather than a
+        // compatibility case worth serving: the two ship together.
+        tauri::ipc::InvokeBody::Json(_) => {
+            return Err(CommandError::invalid_request(
+                "An export must be sent as raw bytes.",
+            ));
+        }
+    };
+
+    let suggested_name = header(&request, "x-sf-name")?;
+    let extension = header(&request, "x-sf-extension")?;
+
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         state.require(Capability::Export)?;
@@ -1265,6 +1281,52 @@ fn default_project_root(app: &AppHandle, name: &str) -> CommandResult<std::path:
         .join(format!("{safe}.{}", sf_package::EXTENSION)))
 }
 
+/// One percent-decoded header value from an invoke request.
+///
+/// Headers are ASCII by construction, and a drawing is quite capable of being called `Plan étage`.
+/// The renderer percent-encodes as UTF-8 and this reverses it — the same encoding a URL uses,
+/// chosen because both sides already have it and neither needs a dependency for it.
+///
+/// A value that is absent, not ASCII, or not valid UTF-8 once decoded is refused rather than
+/// repaired: every one of those means the renderer sent something this host did not define, and a
+/// filename is the last place to start guessing.
+fn header(request: &tauri::ipc::Request<'_>, name: &str) -> CommandResult<String> {
+    let raw = request
+        .headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| CommandError::invalid_request("That export is missing its description."))?;
+
+    percent_decode(raw)
+}
+
+/// Reverse `encodeURIComponent`.
+///
+/// Separate from [`header`] so it can be tested without building an invoke request: the decoding
+/// is where the edge cases are, and the header lookup is not.
+fn percent_decode(raw: &str) -> CommandResult<String> {
+    let bytes = raw.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let hex = bytes
+                .get(index + 1..index + 3)
+                .and_then(|pair| std::str::from_utf8(pair).ok())
+                .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+                .ok_or_else(|| CommandError::invalid_request("That export name is malformed."))?;
+            decoded.push(hex);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+
+    String::from_utf8(decoded)
+        .map_err(|_| CommandError::invalid_request("That export name is malformed."))
+}
+
 /// Assemble a diagnostic bundle and save it where the user says.
 ///
 /// The thing offered in place of telemetry — see
@@ -1430,6 +1492,60 @@ mod tests {
         assert_eq!(json["kind"], "cloud");
         assert_eq!(json["status"], "open");
         assert!(json["geometrySchema"].is_number(), "camelCase on the wire");
+    }
+
+    /// A drawing is quite capable of being called `Plan étage — révision C`, and a header is
+    /// ASCII only. Round-tripping the names people actually use is the whole reason this decoder
+    /// exists rather than the header being read straight.
+    #[test]
+    fn an_export_name_survives_the_trip_through_an_ascii_header() {
+        // What `encodeURIComponent` produces for each of these.
+        for (encoded, expected) in [
+            ("A-201", "A-201"),
+            ("Plan%20%C3%A9tage", "Plan étage"),
+            (
+                "R%C3%A9vision%20C%20%E2%80%94%20structure",
+                "Révision C — structure",
+            ),
+            ("100%25%20complete", "100% complete"),
+            ("%F0%9F%93%90%20takeoff", "📐 takeoff"),
+        ] {
+            assert_eq!(percent_decode(encoded).unwrap(), expected);
+        }
+    }
+
+    /// Refused rather than repaired. Every one of these means the renderer sent something this
+    /// host does not define, and a filename is the last place to start guessing — a decoder that
+    /// silently dropped a bad escape would turn `%2E%2E%2Fetc` into something worth worrying
+    /// about rather than into an error.
+    #[test]
+    fn a_malformed_export_name_is_refused_rather_than_repaired() {
+        for malformed in [
+            "%",      // truncated escape at the end
+            "%2",     // half an escape
+            "%zz",    // not hexadecimal
+            "%C3",    // a lead byte with no continuation: not valid UTF-8 once decoded
+            "%FF%FE", // never valid UTF-8
+        ] {
+            assert_eq!(
+                percent_decode(malformed).unwrap_err().code,
+                "invalid-request",
+                "{malformed:?} should have been refused",
+            );
+        }
+    }
+
+    /// The separator and the traversal sequence decode to exactly what they are, and are then
+    /// refused downstream by `check_name` rather than here. This asserts the decoder does not
+    /// quietly neutralise them — a defence that happens by accident is a defence that disappears
+    /// by accident.
+    #[test]
+    fn the_decoder_does_not_pretend_to_be_a_path_check() {
+        assert_eq!(
+            percent_decode("..%2Fetc%2Fpasswd").unwrap(),
+            "../etc/passwd"
+        );
+        assert!(sf_security::check_name("../etc/passwd").is_err());
     }
 
     /// The tutorial sheet is compiled in, so a missing or truncated asset is a build failure

@@ -33,20 +33,12 @@ interface Session {
 
 let session: Session | undefined;
 
-/**
- * The bounds the host holds untrusted input to, read once at start-up.
- *
- * Kept here so the interface can refuse something *before* attempting it. The host enforces these
- * regardless — this side is a courtesy, not a control.
- */
-let limits: AppInfo["limits"] | undefined;
 
 async function start(): Promise<void> {
   const root = document.querySelector<HTMLDivElement>("#app");
   if (!root) throw new Error("the application root element is missing from index.html");
 
   const info = hasHost() ? await host.appInfo() : undefined;
-  limits = info?.limits;
   const chrome = mountChrome(root, {
     info,
     // `guard` reports its own failures, so these are deliberately not awaited: a click handler
@@ -135,24 +127,10 @@ async function deliverExport(chrome: Chrome, blob: Blob, filename: string): Prom
   const stem = dot > 0 ? filename.slice(0, dot) : filename;
   const extension = dot > 0 ? filename.slice(dot + 1) : "bin";
 
-  // Refused here, before anything is allocated, rather than allowed to become a frozen window.
-  //
-  // Bytes cross to the host as a JSON array of numbers, which costs roughly five characters per
-  // byte to build, serialise and parse. That is invisible for a 40 KB spreadsheet and ruinous for
-  // a 30 MB image: the interface would stop responding for as long as it took, with nothing on
-  // screen to say why. The ceiling is the host's own interchange limit, so there is one number
-  // rather than two disagreeing ones.
-  //
-  // The real fix is a raw-bytes request, the way `document_bytes` already returns one in the other
-  // direction. Until that exists this is a message instead of a hang. See docs/roadmap.md.
-  const ceiling = limits ? limits.maxInterchangeMb * 1024 * 1024 : Number.POSITIVE_INFINITY;
-  if (blob.size > ceiling) {
-    throw new Error(
-      `That export is ${Math.round(blob.size / (1024 * 1024))} MB, over the ` +
-        `${limits?.maxInterchangeMb} MB limit for moving a file to disk. ` +
-        "Choose a lower resolution, or export fewer sheets at once.",
-    );
-  }
+  // No size check here any more. Bytes cross to the host as a raw body rather than as a JSON
+  // array of numbers, so a plot-resolution image costs one copy instead of five characters per
+  // byte on the thread that draws the window. The host still enforces its own limits, which is
+  // where that decision belongs.
 
   chrome.setStatus(`Saving ${filename}…`);
   try {
