@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="apps/desktop/src-tauri/icons/128x128@2x.png" width="96" alt="">
+<img src="docs/assets/logo.png" width="96" alt="SheetForge">
 
 # SheetForge
 
