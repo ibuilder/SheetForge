@@ -23,10 +23,11 @@ pub struct Migration {
 }
 
 /// Every migration, in order.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    description: "initial project, document, markup, calibration and audit tables",
-    sql: r"
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        description: "initial project, document, markup, calibration and audit tables",
+        sql: r"
 -- Key/value for facts about the file itself: the model version it was written by, the id of the
 -- single project it holds. Deliberately not a one-row table with fixed columns, so adding a fact
 -- later is an insert rather than a migration.
@@ -148,7 +149,34 @@ END;
 
 CREATE INDEX idx_audit_subject ON audit_events(subject_id);
 ",
-}];
+    },
+    Migration {
+        version: 2,
+        description: "record what a derived revision was made from",
+        sql: r"
+-- Page assembly produces a new revision rather than editing the source — see
+-- docs/adr/0010-page-assembly-produces-a-derived-revision.md. These two columns are what make
+-- that traceable: without them a project accumulates documents nobody can account for, which is
+-- the provenance gap the decision exists to close.
+--
+-- Nullable, because every revision that already exists was imported rather than derived, and
+-- because an imported drawing has no origin inside this project. A NULL here means somebody
+-- brought this drawing in from outside, which is the truth about every row written before this
+-- migration.
+--
+-- Deliberately *not* a foreign key to document_revisions. The originating revision can be deleted
+-- while the thing derived from it remains, and a cascade would then quietly destroy the derived
+-- document, while a restrict would refuse a deletion the user is entitled to make. A dangling
+-- reference here is the honest state: it says the origin is gone, which is worth recording.
+ALTER TABLE document_revisions ADD COLUMN derived_from TEXT;
+
+-- What was done: `page-assembly` today. Free text rather than an enum so a future operation does
+-- not need a migration to be describable, and so a row written by a newer build is still readable
+-- by an older one.
+ALTER TABLE document_revisions ADD COLUMN derivation TEXT;
+",
+    },
+];
 
 #[cfg(test)]
 mod tests {
@@ -174,6 +202,23 @@ mod tests {
             assert!(!migration.description.trim().is_empty());
             assert!(!migration.sql.trim().is_empty());
         }
+    }
+
+    /// A shipped migration is never edited, so the first one's text is pinned. Editing it would
+    /// mean two databases with the same version number and different shapes — the failure the
+    /// module header warns about, and one that only shows up on somebody else's machine.
+    #[test]
+    fn the_first_migration_is_still_the_one_that_shipped() {
+        let first = &MIGRATIONS[0];
+        assert_eq!(first.version, 1);
+        assert!(
+            first.sql.contains("CREATE TABLE document_revisions"),
+            "migration 1 no longer creates the table it created when it shipped",
+        );
+        assert!(
+            !first.sql.contains("derived_from"),
+            "migration 1 was edited to add a column instead of a migration being appended",
+        );
     }
 
     #[test]

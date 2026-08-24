@@ -55,6 +55,9 @@ The README calls this early. This page says exactly how early, because "producti
 | The page counter survives adversarial input and stays inside the domain ceiling | Property tests over generated near-miss PDF tokens, plus every prefix of each | `apps/desktop/src-tauri/src/commands.rs` |
 | A file that is nothing but page markers stops rather than counting forever | Unit test against a file crafted to exceed the ceiling | `apps/desktop/src-tauri/src/commands.rs` |
 | Counting pages stays linear in file size | 8 MB of non-matching bytes against a ceiling that catches a scan inside a scan | `apps/desktop/src-tauri/src/commands.rs` |
+| A project written by the previous build still opens, with its data intact | Integration tests build a real version-1 database from the shipped migration and open it with the current build | `crates/sf-store/tests/migration.rs` |
+| Opening twice does not run a migration twice | Integration test — `ADD COLUMN` fails on a second run, so a version recorded wrongly means a project that opens once and never again | `crates/sf-store/tests/migration.rs` |
+| A project from a newer build is refused rather than half-understood | Integration test | `crates/sf-store/tests/migration.rs` |
 | A recent project is named to the interface by a handle, never by a location | Rust test asserts no path component appears in what is serialised, plus a handle the host never issued resolves to nothing | `apps/desktop/src-tauri/src/recent.rs` |
 | Opening a recent project sends a handle and nothing that could be a path | Browser test inspects what actually crossed the boundary | `apps/ui/e2e/open-drawing.spec.ts` |
 | A project that has moved is listed and disabled rather than hidden | Browser test | `apps/ui/e2e/open-drawing.spec.ts` |
@@ -67,7 +70,7 @@ The README calls this early. This page says exactly how early, because "producti
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 237 Rust tests, 42 TypeScript unit tests, 38 browser tests.** The Rust figure includes
+**Totals: 243 Rust tests, 42 TypeScript unit tests, 38 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -98,7 +101,7 @@ Listed because omitting them would make the table above dishonest.
 | **No screen-reader testing** | Automated rule checking now runs on every build — axe over WCAG 2.1 A and AA, keyboard operation driven with real key presses, forced-colours and reduced-motion emulated — and it found a real ARIA defect on its first run. But automated tools catch perhaps a third of real barriers, and nobody who uses a screen reader has tried this | 1.0 |
 | **Spatial accuracy on a drawing is a visual task** | No amount of markup makes placing a measurement on a sheet non-visual. Stated rather than solved | — |
 | **OCR accuracy is not measured against real sheets** | The browser test proves the engine loads and reads clean lettering. How it copes with a dyeline scan of a 1974 drawing is unmeasured here, and the engine's own benchmark says the answer is "poorly on small text" | 0.3 |
-| **Migrations are tested at one version** | There is one schema version, so cross-version migration is untested by construction | when there are two |
+| ~~**Migrations are tested at one version**~~ | *Closed.* There are two versions now, and the upgrade path is tested for real: a version-1 database is built from the shipped migration, opened by the current build, and checked for its data, its recorded version, a second open, and refusal of a version from the future | done |
 | **The SBOM is not signed** | CI now produces a CycloneDX bill of materials over the resolved dependency tree on every run and keeps it for 90 days. Signing it, and attaching it to releases, is still outstanding | 0.3 |
 
 ## What this means for you
