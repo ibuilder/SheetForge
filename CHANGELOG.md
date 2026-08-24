@@ -59,6 +59,12 @@ First release. The core is built and tested; the shell is young. See
 - One sheet as a PNG, with its markups on it, at 96, 150 or 300 DPI — screen, print or plot. The
   markups are composited from the same renderer the viewer paints with, so an exported cloud cannot
   drift into a different shape from the one on screen.
+- **Redaction that removes the content.** A Redact tool, and an export that rasterises any page
+  carrying a redaction with the redacted areas painted out before the pixels are encoded — so the
+  text is gone rather than covered. A black box over text a copy-paste still recovers is worse than
+  no redaction, because it is believed. Pages with no redaction on them are copied unchanged and
+  keep their text. Markups are not included: a redacted copy is made to be handed outside the
+  review.
 - An issue status stamped across an exported image — "NOT FOR CONSTRUCTION" or whatever you are
   issuing under. A marked-up review copy that reaches a subcontractor looking like an issued
   drawing is how somebody builds the wrong thing.

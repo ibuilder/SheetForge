@@ -50,10 +50,10 @@ jobs:
           - label: Linux
             os: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -80,7 +80,7 @@ jobs:
       # unsigned binary — which is the other half of this, and the half CI cannot judge.
       - name: Collect what was produced
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: bundle-${{ matrix.label }}
           retention-days: 7

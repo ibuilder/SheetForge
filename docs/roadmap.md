@@ -15,7 +15,10 @@ Nothing new. The gap between "it works" and "you can depend on it."
   macOS, with keys in an HSM or cloud signing service. Ends the SmartScreen and Gatekeeper warnings
   and is the single biggest barrier to anyone installing this at work.
 - **A hostile-PDF fuzzing corpus** wired into CI. The largest security gap today.
-- **An installer smoke test in a clean VM** as a release gate, per platform.
+- **An installer smoke test in a clean VM** as a release gate, per platform. Half of this now
+  exists: a bundle job builds installers on Windows, macOS and Linux weekly and on demand, which is
+  what caught that the macOS and Linux bundles had never been produced by anything. Installing one
+  and seeing what the operating system says is the half CI cannot do.
 - **Performance budgets, measured**, on real hardware and a real drawing set: time to first page,
   tile latency at 800%, memory on a 200-sheet set. Then published, and failed against.
 - **Crash recovery, tested by killing the process**, not by dropping a connection.
@@ -114,11 +117,14 @@ things are missing and some of them should not be".
   than remembered — a remembered status is one that eventually goes out on the wrong drawing.
   Still to come: the same on a flattened PDF export, and page numbers and dates as a footer band.
 
-- **Redaction, as an export.** Genuinely needed for tender documents and anything carrying personal
-  data, and genuinely dangerous: redaction that draws a black box over text a copy-paste still
-  recovers is worse than none, because it is believed. It will only ship if the content is actually
-  removed and there is a test that greps the output for the text that was supposed to be gone. Like
-  everything else here it produces a **copy**; the issued drawing is never modified.
+- ~~**Redaction, as an export.**~~ *Done, on the terms it was set.* A page carrying a redaction is
+  rasterised and the redacted areas are painted out before the pixels are encoded, so the text does
+  not survive because there is no text. There is a test that greps the exported bytes for a string
+  that exists nowhere else, on a fixture with uncompressed content streams — so "not found" cannot
+  quietly mean "deflated". A page nobody redacted is copied from the source unchanged and keeps its
+  text, its vectors and its size, so redacting one number on sheet 12 costs sheet 12 rather than
+  the set. Markups are deliberately absent from the output: a redacted copy is made to be handed
+  outside the review, and the review's own comments are the last thing to send with it.
 
 - ~~**Bookmarks and document outline.**~~ *Done.* The engine parsed the outline and this
   application threw it away, leaving a reviewer to scroll two hundred sheets looking for the

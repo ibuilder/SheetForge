@@ -26,10 +26,10 @@ jobs:
     name: TypeScript
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       # The drawing engine is a git dependency with a build step, so install scripts have to be
       # allowed for it specifically. `package.json` pins which package and which commit.
@@ -50,10 +50,10 @@ jobs:
     name: Browser
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci --foreground-scripts
       - run: npx playwright install --with-deps chromium
@@ -62,7 +62,7 @@ jobs:
       # tested is what ships.
       - run: npm run test:e2e -w @sheetforge/ui
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-report
           path: apps/ui/playwright-report/
@@ -78,7 +78,7 @@ jobs:
         # platforms differ, so they are tested on all three rather than on Linux alone.
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -98,7 +98,7 @@ jobs:
     name: Dependency policy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           # advisories: known vulnerabilities. bans: duplicate versions.
@@ -109,10 +109,10 @@ jobs:
     name: Bill of materials
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       # Installed first so the SBOM covers the *resolved* tree — the transitive dependencies that
       # actually ship — rather than the ranges the manifests ask for.
@@ -123,7 +123,7 @@ jobs:
           format: cyclonedx-json
           artifact-name: sheetforge-sbom.cyclonedx.json
           output-file: sheetforge-sbom.cyclonedx.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: sbom
           path: sheetforge-sbom.cyclonedx.json
@@ -137,10 +137,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2

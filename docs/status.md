@@ -58,12 +58,15 @@ The README calls this early. This page says exactly how early, because "producti
 | A recent project is named to the interface by a handle, never by a location | Rust test asserts no path component appears in what is serialised, plus a handle the host never issued resolves to nothing | `apps/desktop/src-tauri/src/recent.rs` |
 | Opening a recent project sends a handle and nothing that could be a path | Browser test inspects what actually crossed the boundary | `apps/ui/e2e/open-drawing.spec.ts` |
 | A project that has moved is listed and disabled rather than hidden | Browser test | `apps/ui/e2e/open-drawing.spec.ts` |
+| Redacted text is not in the exported file | Browser test searches the exported bytes for a string that exists nowhere else, on an uncompressed fixture so "absent" cannot mean "deflated" | `apps/ui/e2e/redaction.spec.ts` |
+| A page nobody redacted keeps its text | Browser test, so the safe implementation and rasterising everything are distinguishable | `apps/ui/e2e/redaction.spec.ts` |
+| The application packages into installers on Windows, macOS and Linux | A bundle job builds all three, weekly and on demand, and keeps what it produced | `.github/workflows/bundle.yml` |
 | An issue status is stamped on the exported pixels, not just the filename | Browser test decodes the export and finds the stamp's colour on a drawing that has none of its own | `apps/ui/e2e/open-drawing.spec.ts` |
 | Every sheet exports as one ZIP with an entry per page | Browser test reads the entry names out of the archive it produced | `apps/ui/e2e/open-drawing.spec.ts` |
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 237 Rust tests, 42 TypeScript unit tests, 35 browser tests.** The Rust figure includes
+**Totals: 237 Rust tests, 42 TypeScript unit tests, 37 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -87,7 +90,7 @@ Listed because omitting them would make the table above dishonest.
 | **Built and run on Windows only** | macOS, Linux, iOS and Android are configured and compile in CI, but have not been run by a human | 0.2 |
 | **Binaries are unsigned** | SmartScreen and Gatekeeper will warn | 0.2 |
 | **The raw-bytes export transport has not been driven through a real webview** | Exports now cross to the host as a raw body rather than as a JSON array of numbers. The decoding either side is unit-tested, the payload and header shapes are the ones `@tauri-apps/api` declares, and the browser suite drives them against a stub that models the transport — but no test drives the actual injected IPC, because the browser suite stops at that seam by design. A first release should have somebody export a file from the packaged application before it is published | 0.2 |
-| **Bundling runs in CI only at release** | The CI desktop job builds with `--no-bundle`, so the installer packaging — WiX, NSIS, the icon set, the licence file — is exercised only by the release workflow and by hand. It has been run once on Windows and produced both installers; the macOS and Linux bundles have never been produced at all | 0.2 |
+| **No installer has been run on a clean machine** | Bundling itself is now covered on all three platforms — see above — and the artifacts are kept for a week. What is still unchecked is installing one: whether it lands where it should, whether it uninstalls, and what SmartScreen and Gatekeeper actually say. CI cannot judge that | 0.2 |
 | **No release has been cut** | The release workflow has never run. It needs `TAURI_SIGNING_PRIVATE_KEY` in the repository secrets, without which every installed copy would be unable to update | 0.2 |
 | **No third-party security review** | No audit, no penetration test | 1.0 |
 | **No screen-reader testing** | Automated rule checking now runs on every build — axe over WCAG 2.1 A and AA, keyboard operation driven with real key presses, forced-colours and reduced-motion emulated — and it found a real ARIA defect on its first run. But automated tools catch perhaps a third of real barriers, and nobody who uses a screen reader has tried this | 1.0 |

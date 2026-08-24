@@ -22,6 +22,7 @@ import { mountChrome, type Chrome, type MenuItem } from "./chrome";
 import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
 import { asBlobPart } from "./bytes";
+import { asPdfBlob, redactionPlugin } from "./redact";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
 import "./styles.css";
@@ -557,6 +558,15 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
       summaryPlugin(async (bytes, filename) => {
         await deliverExport(chrome, new Blob([asBlobPart(bytes)]), filename);
       }),
+      // Registers a Redact tool and an "Export redacted copy" action in the engine's own
+      // registries, so both appear where the engine's equivalents do.
+      redactionPlugin(
+        async (bytes, filename) => {
+          const name = session ? `${session.revision.name} (redacted)` : filename;
+          await deliverExport(chrome, asPdfBlob(bytes), `${name}.pdf`);
+        },
+        (message) => chrome.setStatus(message),
+      ),
     ],
     exporters: {
       // Without this the engine falls back to a browser download — an anchor with a `download`
