@@ -90,6 +90,10 @@ First release. The core is built and tested; the shell is young. See
   through a native dialog. A project that has moved is listed and disabled rather than hidden.
 
 **Navigating**
+- The sheet register in the sidebar: the set listed by sheet number and title, with **Find sheets
+  at a revision…** to answer "which sheets are at Rev C?". A sheet number nobody has checked is
+  marked *unchecked* — most of them are read off title blocks by a heuristic, and on a scanned set
+  that reading is frequently wrong.
 - The drawing's own outline, in the sidebar. A construction set exported from Revit or Bluebeam
   carries one — disciplines at the top, sheets under them — and a 200-sheet set is much faster to
   move around by it than by a flat list. Hidden entirely when the document has none.
@@ -119,6 +123,10 @@ nobody has checked yet. [docs/status.md](docs/status.md) is the long version.
 
 - Release binaries are not code-signed with an organisation certificate, so Windows SmartScreen and
   macOS Gatekeeper will warn on install.
+- **The drawing engine's own interface has two serious accessibility defects** — empty panels that
+  still announce themselves as lists of options, and a drawing scroller that cannot be focused by
+  keyboard. They are in a dependency, they are listed rather than hidden, and any *new* defect
+  fails the build.
 - **No installer has been run on a clean machine.** CI packages the application on all three
   platforms, which proves it builds; nobody has installed one.
 - **The raw IPC transport is exercised only against a stub.** Every export crosses that seam. The

@@ -247,7 +247,37 @@ async function stubHost(
             case "markup_list":
               return Promise.resolve(seeded);
             case "sheet_list":
-              return Promise.resolve([]);
+            case "sheet_at_revision": {
+              const wanted = args["revision"] as string | undefined;
+              const register = [
+                {
+                  page: 1,
+                  number: "T-101",
+                  title: "GETTING STARTED",
+                  discipline: null,
+                  revision: "A",
+                  source: "extracted",
+                  documentRevisionId: revision.id,
+                },
+                {
+                  page: 2,
+                  number: "A-201",
+                  title: "SECOND FLOOR PLAN",
+                  discipline: "architectural",
+                  revision: "C",
+                  source: "confirmed",
+                  documentRevisionId: revision.id,
+                },
+              ];
+              // `sheet_list` is given a revision *id*; `sheet_at_revision` a printed letter. The
+              // short one is the letter.
+              if (command === "sheet_at_revision") {
+                return Promise.resolve(
+                  register.filter((row) => row.revision === (wanted ?? "").toUpperCase()),
+                );
+              }
+              return Promise.resolve(register);
+            }
             case "sheet_record": {
               // The register the engine read off the title blocks. Captured so a test can assert
               // it is sent as a guess rather than as something a person confirmed.
@@ -1099,5 +1129,77 @@ test.describe("the sheet register", () => {
       ).toBe("extracted");
       expect(typeof row["page"]).toBe("number");
     }
+  });
+});
+
+/**
+ * The sheet register on screen.
+ *
+ * A drawing set is navigated by sheet number, not by page number, and the register is what makes
+ * that possible. The part that needs a test rather than a look is the distinction between a number
+ * somebody confirmed and one a machine read off a title block — because on a scanned set that
+ * second kind is frequently wrong, and it is the reader about to quote a sheet number who most
+ * needs to know which they are looking at.
+ */
+test.describe("the sheet register on screen", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
+    await page.goto("/");
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("lists sheets by number, and says which have not been checked", async ({ page }) => {
+    const register = page.locator(".sf-register");
+    await expect(register).toBeVisible({ timeout: 15_000 });
+
+    await expect(register.getByRole("button", { name: /T-101/ })).toBeVisible();
+    await expect(register.getByRole("button", { name: /A-201/ })).toBeVisible();
+
+    // T-101 came from the title-block heuristic; A-201 was confirmed by a person.
+    const unchecked = register.getByRole("button", { name: /T-101/ });
+    await expect(unchecked).toHaveAttribute("aria-label", /not confirmed by a person/);
+
+    const confirmed = register.getByRole("button", { name: /A-201/ });
+    await expect(confirmed).not.toHaveAttribute("aria-label", /not confirmed/);
+
+    // And it is a word on screen, not a shade of grey. Somebody who cannot tell two greys apart
+    // still has to be able to see it.
+    await expect(register.getByText("unchecked")).toBeVisible();
+  });
+
+  test("jumps to the page a sheet is on", async ({ page }) => {
+    await page.locator(".sf-register").getByRole("button", { name: /A-201/ }).click();
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const field = document.querySelector<HTMLInputElement>(
+              ".sf-stage input[type='number'], .sf-stage input[aria-label*='age' i]",
+            );
+            return field ? Number(field.value) : 0;
+          }),
+        { timeout: 15_000 },
+      )
+      .toBe(2);
+  });
+
+  test("says when it is showing only part of the set", async ({ page }) => {
+    page.on("dialog", (dialog) => void dialog.accept("C"));
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    await page.getByRole("menuitem", { name: /Find sheets at a revision/ }).click();
+
+    const register = page.locator(".sf-register");
+    // A list silently narrowed to a subset is a list somebody reads as the whole set and acts on.
+    await expect(register.getByRole("button", { name: /Showing revision C/ })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(register.getByRole("button", { name: /A-201/ })).toBeVisible();
+    await expect(register.getByRole("button", { name: /T-101/ })).toBeHidden();
+
+    // And it can be put back.
+    await register.getByRole("button", { name: /show all/ }).click();
+    await expect(register.getByRole("button", { name: /T-101/ })).toBeVisible();
   });
 });

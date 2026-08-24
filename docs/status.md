@@ -38,7 +38,8 @@ The README calls this early. This page says exactly how early, because "producti
 | OCR runs entirely from bundled files, with nothing off-origin | Browser test recognises real pixels with every non-origin request blocked | `apps/ui/e2e/ocr.spec.ts` |
 | A dropped drawing opens, and the interface never sees a path | Browser test pushes the host's drop event through a faithful IPC stub | `apps/ui/e2e/open-drawing.spec.ts` |
 | The XLSX summary is a workbook Excel will actually open | 18 unit tests over the written parts, unpacked and inspected with a separate zip reader | `apps/ui/test/xlsx.test.ts` |
-| No serious WCAG 2.1 A/AA violations, including in forced colours | axe over the whole page — the drawing engine's interface included, not excluded | `apps/ui/e2e/accessibility.spec.ts` |
+| No serious WCAG 2.1 A/AA violations **in this project's own interface**, including in forced colours | axe over the whole page, with a drawing open, and with the engine's known defects listed rather than excluded — see the gap below | `apps/ui/e2e/accessibility.spec.ts` |
+| The register distinguishes a confirmed sheet number from a guessed one in text, not colour | Browser test asserts the word and the accessible name | `apps/ui/e2e/accessibility.spec.ts`, `apps/ui/e2e/open-drawing.spec.ts` |
 | The store stays responsive on a 5,000-markup, 200-sheet project | Timed against ceilings that catch an order-of-magnitude regression; real figures printed each run | `sf-store/tests/scale.rs` |
 | Every header control is reachable and visible by keyboard alone | Real tab presses, then a computed-style check for a focus indicator | `apps/ui/e2e/accessibility.spec.ts` |
 | The frontend bundles under a strict CSP | Inherited from the engine's own CSP suite | upstream |
@@ -77,7 +78,7 @@ The README calls this early. This page says exactly how early, because "producti
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 255 Rust tests, 54 TypeScript unit tests, 41 browser tests.** The Rust figure includes
+**Totals: 255 Rust tests, 54 TypeScript unit tests, 45 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -105,6 +106,7 @@ Listed because omitting them would make the table above dishonest.
 | **No release has been cut** | The release workflow has never run. It needs `TAURI_SIGNING_PRIVATE_KEY` in the repository secrets, without which every installed copy would be unable to update | 0.2 |
 | **No third-party security review** | No audit, no penetration test | 1.0 |
 | **A redacted copy loses the source's bookmarks** | `copyPages` moves pages, not the document around them, so a redacted copy of a set with a discipline outline arrives with no outline. The output is at least named rather than blank. Nothing in the interface warns of this yet | 0.3 |
+| **The drawing engine's own interface has serious accessibility defects** | Until this build, the accessibility suite had only ever tested the opening screen — no drawing open means none of the engine's toolbar or panels are mounted, so the previous claim that they were "included, not excluded" was wrong. Opening a drawing and scanning found two: three empty engine panels keep a `listbox` role, so a screen reader announces options that are not there (**critical**); and the drawing scroller cannot be focused, so scrolling it needs a pointer (**serious**). They are in a dependency and are not ours to fix. They are listed in the test rather than excluded from it, so a *new* defect still fails the build, and they should be reported upstream | 0.3 |
 | **No screen-reader testing** | Automated rule checking now runs on every build — axe over WCAG 2.1 A and AA, keyboard operation driven with real key presses, forced-colours and reduced-motion emulated — and it found a real ARIA defect on its first run. But automated tools catch perhaps a third of real barriers, and nobody who uses a screen reader has tried this | 1.0 |
 | **Spatial accuracy on a drawing is a visual task** | No amount of markup makes placing a measurement on a sheet non-visual. Stated rather than solved | — |
 | **OCR accuracy is not measured against real sheets** | The browser test proves the engine loads and reads clean lettering. How it copes with a dyeline scan of a 1974 drawing is unmeasured here, and the engine's own benchmark says the answer is "poorly on small text" | 0.3 |

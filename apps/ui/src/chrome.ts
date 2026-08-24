@@ -58,6 +58,20 @@ export interface OutlineEntry {
   page?: number;
 }
 
+/**
+ * One row of the register as the chrome shows it.
+ *
+ * `confirmed` is carried separately from the values because the difference has to be visible: a
+ * number a person typed and one a machine read off a scanned title block must not look alike.
+ */
+export interface RegisterRow {
+  page: number;
+  number?: string;
+  title?: string;
+  revision?: string;
+  confirmed: boolean;
+}
+
 export interface Chrome {
   /** Where the drawing engine mounts. */
   readonly stage: HTMLElement;
@@ -76,6 +90,13 @@ export interface Chrome {
    * that does not must not leave each other's contents on screen.
    */
   setOutline(entries: readonly OutlineEntry[]): void;
+  /**
+   * The sheet register for the open drawing, or an empty list to hide it.
+   *
+   * `filter` names the revision the list has been narrowed to, so the panel can say what it is
+   * showing rather than silently displaying a subset.
+   */
+  setRegister(rows: readonly RegisterRow[], filter?: string): void;
   /** Show whether work is saved, being saved, or failed to save. */
   setSaveState(state: "saved" | "saving" | "error", detail?: string): void;
   askForProjectName(): string | undefined;
@@ -113,6 +134,10 @@ export interface ChromeHandlers {
   onSelectRecent: (id: string) => void;
   /** Take pages out of the open drawing into a new one. */
   onExtractPages: () => void;
+  /** Jump to a page named by the register. */
+  onSelectSheet: (page: number) => void;
+  /** Narrow the register to one printed revision, or clear the filter. */
+  onFilterRevision: (revision: string | undefined) => void;
   /**
    * The projects opened lately, read when the menu opens rather than held.
    *
@@ -269,6 +294,18 @@ function menu(
   return wrap;
 }
 
+/**
+ * Ask which printed revision to narrow the register to.
+ *
+ * A native prompt, for the same reason the others are: it is asking for one short string, and a
+ * custom modal would need its own focus trap and screen-reader semantics to be as good as the one
+ * the platform ships.
+ */
+function askForRevision(): string | undefined {
+  const revision = window.prompt("Show sheets at which revision? For example: C");
+  return revision?.trim() ? revision.trim() : undefined;
+}
+
 /** Build the chrome into `root` and return the handle to drive it. */
 export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome {
   root.replaceChildren();
@@ -300,6 +337,7 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         // Produces a new drawing rather than changing this one, which is why it sits with the
         // other acts that add something to the project.
         { id: "extract", label: "Extract pages to a new drawing…", enabled: true },
+        { id: "revision", label: "Find sheets at a revision…", enabled: true },
         { id: "open", label: "Open project…", enabled: true, separatorBefore: true },
         { id: "new", label: "New project…", enabled: true },
         // Newest first, and never more than the host keeps. A project that has moved is listed
@@ -324,6 +362,7 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         if (id.startsWith("recent:")) handlers.onSelectRecent(id.slice("recent:".length));
         else if (id === "import") handlers.onImport();
         else if (id === "extract") handlers.onExtractPages();
+        else if (id === "revision") handlers.onFilterRevision(askForRevision());
         else if (id === "open") handlers.onOpenProject();
         else if (id === "new") handlers.onCreateProject();
         else if (id === "verify") handlers.onVerify();
@@ -344,6 +383,27 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
   // reader announces a list of options containing nothing selectable. Found by the axe suite.
   const sheetsEmpty = element("p", { class: "sf-sheets-empty" }, "No drawings yet.");
   sidebar.append(sheetsHeading, list, sheetsEmpty);
+
+  // The sheet register, above the drawing's own contents: it is the more useful of the two and
+  // the one a reviewer navigates by. Hidden entirely when the open drawing has no register, which
+  // is every single-sheet PDF.
+  const registerSection = element("section", { class: "sf-register", hidden: "" });
+  const registerHeading = element(
+    "h2",
+    { class: "sf-sidebar-heading", id: "sf-register-heading" },
+    "Sheets",
+  );
+  const registerFilter = element("button", {
+    type: "button",
+    class: "sf-register-filter",
+    hidden: "",
+  });
+  const registerList = element("ul", {
+    class: "sf-register-list",
+    "aria-labelledby": "sf-register-heading",
+  });
+  registerSection.append(registerHeading, registerFilter, registerList);
+  sidebar.append(registerSection);
 
   // The drawing's own contents, below the drawings. Hidden entirely when the open document has no
   // outline, which is most single-sheet PDFs: an empty heading is furniture that says nothing.
@@ -500,6 +560,64 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       revisions = next;
       focusIndex = 0;
       renderList();
+    },
+
+    setRegister(rows, filter) {
+      registerList.replaceChildren();
+      registerSection.hidden = rows.length === 0 && filter === undefined;
+      if (registerSection.hidden) return;
+
+      if (filter === undefined) {
+        registerFilter.hidden = true;
+      } else {
+        // Says what it is showing. A list silently narrowed to a subset is a list somebody will
+        // read as the whole set and act on.
+        registerFilter.hidden = false;
+        registerFilter.textContent = `Showing revision ${filter} — show all`;
+        registerFilter.onclick = () => handlers.onFilterRevision(undefined);
+      }
+
+      if (rows.length === 0) {
+        registerList.append(
+          element("li", { class: "sf-register-empty" }, "No sheets at that revision."),
+        );
+        return;
+      }
+
+      for (const row of rows) {
+        const item = element("li");
+        const button = element("button", { type: "button", class: "sf-register-row" });
+
+        const label = row.number ?? `Page ${row.page}`;
+        button.append(element("span", { class: "sf-register-number" }, label));
+        if (row.title) {
+          button.append(element("span", { class: "sf-register-title" }, row.title));
+        }
+
+        const marks = element("span", { class: "sf-register-marks" });
+        if (row.revision) {
+          marks.append(element("span", { class: "sf-register-rev" }, `Rev ${row.revision}`));
+        }
+        if (!row.confirmed) {
+          // Text, not a colour or a shade. Somebody who cannot tell grey from black still has to
+          // be able to see that nobody has checked this number — and it is exactly the reader who
+          // most needs to know before quoting it.
+          marks.append(element("span", { class: "sf-register-unchecked" }, "unchecked"));
+        }
+        if (marks.childElementCount > 0) button.append(marks);
+
+        // The whole row announced as one thing, so a screen reader gets the sheet rather than
+        // three fragments, and says outright whether it has been checked.
+        button.setAttribute(
+          "aria-label",
+          `${label}${row.title ? `, ${row.title}` : ""}` +
+            `${row.revision ? `, revision ${row.revision}` : ""}` +
+            `, page ${row.page}${row.confirmed ? "" : ", not confirmed by a person"}`,
+        );
+        button.addEventListener("click", () => handlers.onSelectSheet(row.page));
+        item.append(button);
+        registerList.append(item);
+      }
     },
 
     setOutline(entries) {

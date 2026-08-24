@@ -18,7 +18,13 @@
  * make this a test of the chrome pretending to be a test of the application.
  */
 import AxeBuilder from "@axe-core/playwright";
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+
+/** The tutorial sheet as it ships: two pages, a real outline, dense line work. */
+const TUTORIAL_SHEET = readFileSync(
+  new URL("../../desktop/src-tauri/assets/welcome.pdf", import.meta.url),
+);
 
 /** Rules an interface has to meet before anything else is worth arguing about. */
 const SERIOUS = ["critical", "serious"] as const;
@@ -34,12 +40,63 @@ function describe(violations: { id: string; impact?: string | null; nodes: { htm
     .join("\n");
 }
 
+/**
+ * Serious accessibility defects in the drawing engine's own interface.
+ *
+ * These are real and they are not ours to fix: `@massingcloud/pdf-viewer` is a dependency, and its
+ * panels are its own markup. They are excused here rather than hidden, because the alternatives
+ * are worse — excluding the engine from the scan would let this project claim an accessibility
+ * result it has not got, and deleting the test would remove the only thing that would notice a
+ * *new* defect appearing.
+ *
+ * Every entry says what the defect actually costs somebody, because an exception list without that
+ * turns into a list of rules nobody applies.
+ *
+ * These are reported in `docs/status.md` as known limitations. They should be reported upstream
+ * too, and until they are fixed there this application has serious violations on any screen with a
+ * drawing open. That is the honest position and it is stated in that document rather than implied
+ * away here.
+ */
+const KNOWN_UPSTREAM: Record<string, string> = {
+  // Three panels — Markups, Issue pins, Saved views — declare `role="listbox"` or `role="list"`
+  // and, when empty, contain a single paragraph. A screen reader announces a list of options
+  // containing nothing selectable, so somebody navigating by list is told there is something to
+  // choose from and finds nothing. This project hit exactly this defect in its own sheet list and
+  // fixed it by dropping the role while the list is empty; the same fix applies upstream.
+  "aria-required-children":
+    "empty engine panels keep a listbox role, so a screen reader announces options that are not there",
+
+  // The drawing scroller is a scrollable region with no way to focus it, so a keyboard user cannot
+  // scroll the drawing without a pointer. Mitigated but not resolved by the engine's own keyboard
+  // navigation for paging and zoom.
+  "scrollable-region-focusable":
+    "the drawing scroller cannot be focused, so scrolling it needs a pointer",
+};
+
 test.describe("accessibility", () => {
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
+    await page.addInitScript((pdfBytes: number[]) => {
       // Present as a returning installation, so the tutorial does not open itself over the empty
       // screen this suite is checking.
       localStorage.setItem("sheetforge.tutorial-offered", "yes");
+
+      const revision = {
+        id: "0192f0c1-0000-7000-8000-0000000000aa",
+        sourceDocumentId: "0192f0c1-0000-7000-8000-0000000000bb",
+        name: "A-201",
+        revisionLabel: null,
+        pageCount: 2,
+        shortHash: "ab12cd34ef56",
+        importedAt: "2026-08-20T10:00:00.000Z",
+      };
+      const project = {
+        id: "0192f0c1-0000-7000-8000-0000000000cc",
+        name: "A-201",
+        jobNumber: null,
+        sourceCount: 1,
+        format: 1,
+      };
+      (window as unknown as { __sfFixture: unknown }).__sfFixture = { pdfBytes, revision, project };
 
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
         transformCallback: (callback: unknown) => {
@@ -60,10 +117,51 @@ test.describe("accessibility", () => {
             });
           }
           if (command === "plugin:event|listen") return Promise.resolve(1);
-          return Promise.resolve(null);
+
+          const fixture = (window as unknown as {
+            __sfFixture: { pdfBytes: number[]; revision: unknown; project: unknown };
+          }).__sfFixture;
+
+          switch (command) {
+            case "pdf_open":
+              return Promise.resolve({
+                project: fixture.project,
+                revision: fixture.revision,
+                reopened: false,
+              });
+            case "document_list":
+              return Promise.resolve([fixture.revision]);
+            case "document_bytes":
+              return Promise.resolve(new Uint8Array(fixture.pdfBytes).buffer);
+            case "sheet_list":
+              // One confirmed row and one that a heuristic guessed, so axe sees both states of
+              // the register rather than only the tidy one.
+              return Promise.resolve([
+                {
+                  page: 1,
+                  number: "T-101",
+                  title: "GETTING STARTED",
+                  discipline: null,
+                  revision: "A",
+                  source: "extracted",
+                  documentRevisionId: "0192f0c1-0000-7000-8000-0000000000aa",
+                },
+                {
+                  page: 2,
+                  number: "A-201",
+                  title: "SECOND FLOOR PLAN",
+                  discipline: "architectural",
+                  revision: "C",
+                  source: "confirmed",
+                  documentRevisionId: "0192f0c1-0000-7000-8000-0000000000aa",
+                },
+              ]);
+            default:
+              return Promise.resolve(null);
+          }
         },
       };
-    });
+    }, Array.from(TUTORIAL_SHEET));
     await page.goto("/");
   });
 
@@ -90,6 +188,52 @@ test.describe("accessibility", () => {
 
     const serious = violations.filter((v) => SERIOUS.includes(v.impact as never));
     expect(serious.length, `\n${describe(serious)}`).toBe(0);
+  });
+
+  /**
+   * The half of the interface this suite had never seen.
+   *
+   * Every other test here runs against the opening screen, where there is no drawing, no register,
+   * no outline and — most of all — none of the drawing engine's own interface, because its toolbar
+   * and panels only mount once a document is open. `docs/status.md` claimed axe covered the
+   * engine's interface "included, not excluded", and that claim was not true: nothing in this file
+   * had ever opened a document.
+   *
+   * This opens one. It is the larger and less controlled half of the page — fifty tools, panels
+   * this project did not write — so it is also where an ARIA mistake is most likely and least
+   * likely to be noticed by the person who introduced it.
+   */
+  test("a drawing open, with its register and the engine's own interface, has no new violations", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+    // The panels this project adds around the engine.
+    await expect(page.locator(".sf-register")).toBeVisible({ timeout: 15_000 });
+
+    const { violations } = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+
+    const serious = violations.filter((v) => SERIOUS.includes(v.impact as never));
+    const ours = serious.filter((violation) => !(violation.id in KNOWN_UPSTREAM));
+
+    expect(
+      ours.length,
+      `\n${describe(ours)}\n\nAnything listed here is new. The known upstream ones are in ` +
+        "KNOWN_UPSTREAM, with what they are and why they are not fixed here.",
+    ).toBe(0);
+
+    // The known ones must stay known. If one is fixed upstream this fails, which is the prompt to
+    // delete the exception rather than let it sit there forever claiming a defect that is gone.
+    const stillPresent = new Set(serious.map((violation) => violation.id));
+    for (const id of Object.keys(KNOWN_UPSTREAM)) {
+      expect(
+        stillPresent.has(id),
+        `${id} no longer fires. It was excused as an upstream defect; if the engine has fixed it, ` +
+          "remove the exception so the rule is enforced again.",
+      ).toBe(true);
+    }
   });
 
   test("every control is reachable by keyboard alone", async ({ page }) => {

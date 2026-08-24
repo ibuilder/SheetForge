@@ -67,6 +67,10 @@ async function start(): Promise<void> {
     }),
     onSelectRecent: (id) => void guard(() => openRecent(chrome, id)),
     onExtractPages: () => void guard(() => extractPagesToNewDrawing(chrome)),
+    onSelectSheet: (page) => void guard(async () => {
+      await session?.viewer.goToPage(page);
+    }),
+    onFilterRevision: (revision) => void guard(() => showRegister(chrome, revision)),
     recentProjects: () => recent,
     onVerify: () => void guard(() => verify(chrome)),
     onDiagnostics: () => void guard(() => saveDiagnostics(chrome)),
@@ -622,6 +626,55 @@ async function showOutline(chrome: Chrome, viewer: Viewer): Promise<void> {
   }
 }
 
+/**
+ * Show the sheet register, optionally narrowed to one printed revision.
+ *
+ * The unfiltered list is the register for the open drawing. A filter asks across the *project*,
+ * because that is how the question is asked — a set is issued as several files and the reviewer
+ * wants the sheets, not the containers — so the answer can name pages of documents other than the
+ * one on screen. Selecting one of those jumps to the page number within whatever is open, which is
+ * wrong for a cross-document hit and is the next thing to fix; the honest half is that the filter
+ * says which revision it is showing rather than presenting a subset as the whole.
+ *
+ * Not fatal. A register that cannot be read is a panel that does not appear, not a drawing that
+ * will not open.
+ */
+async function showRegister(chrome: Chrome, revision: string | undefined): Promise<void> {
+  const current = session;
+  if (!current) {
+    chrome.setRegister([]);
+    return;
+  }
+
+  try {
+    const rows =
+      revision === undefined
+        ? await host.sheetList(current.revision.id)
+        : await host.sheetAtRevision(revision);
+
+    chrome.setRegister(
+      rows.map((row) => ({
+        page: row.page,
+        ...(row.number === null ? {} : { number: row.number }),
+        ...(row.title === null ? {} : { title: row.title }),
+        ...(row.revision === null ? {} : { revision: row.revision }),
+        confirmed: row.source === "confirmed",
+      })),
+      revision,
+    );
+
+    if (revision !== undefined) {
+      chrome.setStatus(
+        rows.length === 0
+          ? `No sheets at revision ${revision}.`
+          : `${rows.length} sheet${rows.length === 1 ? "" : "s"} at revision ${revision}.`,
+      );
+    }
+  } catch {
+    chrome.setRegister([]);
+  }
+}
+
 async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<void> {
   chrome.setStatus(`Opening ${revision.name}…`);
 
@@ -696,6 +749,7 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
   session = { viewer, revision, stopIcons };
   chrome.setActiveRevision(revision);
   await showOutline(chrome, viewer);
+  await showRegister(chrome, undefined);
   chrome.setStatus(
     `${revision.name}${revision.revisionLabel ? ` rev ${revision.revisionLabel}` : ""} — ` +
       `${revision.pageCount} page${revision.pageCount === 1 ? "" : "s"}`,

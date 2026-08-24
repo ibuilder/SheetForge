@@ -166,12 +166,14 @@ things are missing and some of them should not be".
 ## 0.3 — The review, end to end
 
 - **Batch import** of a whole set, with sheet numbers read from title blocks rather than filenames.
-- ~~**The sheet register as a queryable table**~~ *— stored and queryable; not yet on screen.* The
-  engine had been reading title blocks all along and the host threw the result away on every save.
-  It is now kept, with a record of how each value was known, and `sheets_at_revision` answers the
-  question the item was named for. What is still missing is the interface: no panel shows the
-  register and no control runs the query, so today the win is that a corrected sheet number
-  survives a restart rather than being re-guessed.
+- ~~**The sheet register as a queryable table**~~ *Done.* The engine had been reading title blocks
+  all along and the host threw the result away on every save. It is kept now, with a record of how
+  each value was known, and it is on screen: a Sheets panel listing the set by number, with **Find
+  sheets at a revision…** narrowing it and saying which revision it is showing — a list silently
+  reduced to a subset is one somebody reads as the whole set and acts on. A number nobody has
+  checked is marked *unchecked* in words rather than in a shade of grey, because the reader who
+  cannot tell two greys apart is the same reader about to quote it.
+
 - **Saved filters and views** that travel with the project.
 - **Attachment handling**: photos from a phone camera, sized and content-addressed.
 
