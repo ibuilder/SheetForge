@@ -42,6 +42,22 @@ export interface MenuItem {
 }
 
 /** What `main` needs from the chrome once it is mounted. */
+/**
+ * One entry in a drawing's own table of contents.
+ *
+ * A construction set exported from Revit or Bluebeam usually carries an outline: disciplines at
+ * the top, sheets under them. The engine parses it and, until now, this application threw it away
+ * — leaving a reviewer to scroll a flat list of two hundred sheets looking for the mechanical
+ * drawings, on a set that already knew where they were.
+ */
+export interface OutlineEntry {
+  title: string;
+  /** Nesting level, 0 for a top-level entry. */
+  depth: number;
+  /** Where it points, when the PDF resolved the destination. Entries without one are headings. */
+  page?: number;
+}
+
 export interface Chrome {
   /** Where the drawing engine mounts. */
   readonly stage: HTMLElement;
@@ -53,6 +69,13 @@ export interface Chrome {
   /** Remove the "no drawing open" placeholder before the viewer mounts. */
   clearEmptyState(): void;
   setStatus(message: string): void;
+  /**
+   * The open drawing's own table of contents, or an empty list to hide it.
+   *
+   * Called on every document change, including with `[]`, because a set that has one and a set
+   * that does not must not leave each other's contents on screen.
+   */
+  setOutline(entries: readonly OutlineEntry[]): void;
   /** Show whether work is saved, being saved, or failed to save. */
   setSaveState(state: "saved" | "saving" | "error", detail?: string): void;
   askForProjectName(): string | undefined;
@@ -74,6 +97,8 @@ export interface ChromeHandlers {
   onOpenProject: () => void;
   onImport: () => void;
   onSelectRevision: (revision: RevisionSummary) => void;
+  /** Jump to a page named by the drawing's own outline. */
+  onSelectOutline: (page: number) => void;
   onVerify: () => void;
   onDiagnostics: () => void;
   /**
@@ -281,6 +306,21 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
   const sheetsEmpty = element("p", { class: "sf-sheets-empty" }, "No drawings yet.");
   sidebar.append(sheetsHeading, list, sheetsEmpty);
 
+  // The drawing's own contents, below the drawings. Hidden entirely when the open document has no
+  // outline, which is most single-sheet PDFs: an empty heading is furniture that says nothing.
+  const outlineSection = element("section", { class: "sf-outline", hidden: "" });
+  const outlineHeading = element(
+    "h2",
+    { class: "sf-sidebar-heading", id: "sf-outline-heading" },
+    "In this drawing",
+  );
+  const outlineList = element("ul", {
+    class: "sf-outline-list",
+    "aria-labelledby": "sf-outline-heading",
+  });
+  outlineSection.append(outlineHeading, outlineList);
+  sidebar.append(outlineSection);
+
   const stage = element("main", { class: "sf-stage", "aria-label": "Drawing" });
 
   const empty = element("div", { class: "sf-empty" });
@@ -421,6 +461,38 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       revisions = next;
       focusIndex = 0;
       renderList();
+    },
+
+    setOutline(entries) {
+      outlineList.replaceChildren();
+      outlineSection.hidden = entries.length === 0;
+      if (entries.length === 0) return;
+
+      for (const entry of entries) {
+        const item = element("li");
+        // Indentation is a style, so the nesting is also stated to assistive technology rather
+        // than implied by a margin nobody can hear.
+        item.style.setProperty("--depth", String(Math.min(entry.depth, 5)));
+
+        if (entry.page === undefined) {
+          // A heading with no destination. Not a button: pressing it could do nothing, and a
+          // control that does nothing is worse than text that never claimed it would.
+          item.append(element("span", { class: "sf-outline-heading" }, entry.title));
+        } else {
+          const page = entry.page;
+          const button = element(
+            "button",
+            { type: "button", class: "sf-outline-link" },
+            entry.title,
+          );
+          // The page number is announced as part of the name rather than shown beside it, so a
+          // screen-reader user gets the same information a sighted one reads from the layout.
+          button.setAttribute("aria-label", `${entry.title}, page ${page}`);
+          button.addEventListener("click", () => handlers.onSelectOutline(page));
+          item.append(button);
+        }
+        outlineList.append(item);
+      }
     },
 
     setActiveRevision(revision) {

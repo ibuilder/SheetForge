@@ -50,10 +50,12 @@ The README calls this early. This page says exactly how early, because "producti
 | An unmarked sheet exports with no colour on it | Browser test counts saturated pixels in the exported image | `apps/ui/e2e/open-drawing.spec.ts` |
 | An export name with accents, an em dash or an emoji survives the ASCII header it travels in | Rust round-trip tests over what `encodeURIComponent` produces | `apps/desktop/src-tauri/src/commands.rs` |
 | A malformed export name is refused rather than repaired | Rust tests over truncated, non-hex and non-UTF-8 escapes | `apps/desktop/src-tauri/src/commands.rs` |
+| A drawing's own outline is listed and jumps to the page it names | Browser test against the tutorial sheet, which carries a real outline | `apps/ui/e2e/open-drawing.spec.ts` |
+| A drawing with no outline shows no empty panel | Browser test against a document with no bookmarks | `apps/ui/e2e/open-drawing.spec.ts` |
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 220 Rust tests, 42 TypeScript unit tests, 28 browser tests.** The Rust figure includes
+**Totals: 220 Rust tests, 42 TypeScript unit tests, 30 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and

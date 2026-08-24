@@ -716,3 +716,65 @@ async function saturatedPixels(page: Page, bytes: number[]): Promise<number> {
     return saturated;
   }, bytes);
 }
+
+
+/**
+ * The drawing's own table of contents.
+ *
+ * A construction set exported from Revit or Bluebeam carries an outline — disciplines at the top,
+ * sheets under them — and until recently this application parsed it and threw it away, leaving a
+ * reviewer to scroll two hundred sheets looking for the mechanical drawings on a set that already
+ * knew where they were.
+ *
+ * Driven against the tutorial sheet because it is the one document in this repository that
+ * genuinely has an outline, which also means this test fails if the generator ever stops emitting
+ * one.
+ */
+test.describe("the drawing's own contents", () => {
+  test("are listed, and jump to the page they name", async ({ page }) => {
+    await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
+    await page.goto("/");
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    const contents = page.getByRole("navigation", { name: "Drawings" }).locator(".sf-outline");
+    await expect(contents).toBeVisible({ timeout: 15_000 });
+
+    // Named as the sheet names them, not as "Bookmark 1".
+    const practice = contents.getByRole("button", { name: /A-201 Practice sheet/ });
+    await expect(practice).toBeVisible();
+    await expect(contents.getByRole("button", { name: /T-101 Getting started/ })).toBeVisible();
+
+    // The page number is part of the accessible name, so somebody using a screen reader is told
+    // where a link goes rather than having to follow it to find out.
+    await expect(practice).toHaveAttribute("aria-label", "A-201 Practice sheet, page 2");
+
+    await practice.click();
+
+    // The engine reports the current page in its own toolbar. Polled rather than asserted once:
+    // the jump scrolls, and scrolling is not instantaneous.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const field = document.querySelector<HTMLInputElement>(
+              ".sf-stage input[type='number'], .sf-stage input[aria-label*='age' i]",
+            );
+            return field ? Number(field.value) : 0;
+          }),
+        { timeout: 15_000 },
+      )
+      .toBe(2);
+  });
+
+  test("a drawing with no outline shows no empty panel", async ({ page }) => {
+    // The generated test drawing has no bookmarks. An empty "In this drawing" heading would be
+    // furniture that says nothing, and a reviewer would reasonably read it as "this set has no
+    // structure" rather than "this file carries none".
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    await expect(page.locator(".sf-outline")).toBeHidden();
+  });
+});

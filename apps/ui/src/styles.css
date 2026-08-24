@@ -191,6 +191,56 @@ body {
 }
 .sf-empty-title { font-size: 1.05rem; font-weight: 600; margin: 0; }
 .sf-empty-hint { color: var(--sf-muted); margin: 0; max-width: 44ch; }
+/* ---- the drawing's own contents ---- */
+
+.sf-outline {
+  border-top: 1px solid var(--sf-line);
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+}
+.sf-outline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sf-outline-list li {
+  /* Set per entry from its depth. A construction set nests two or three deep; the clamp stops a
+     pathological outline from indenting itself off the edge of the panel. */
+  padding-left: calc(var(--depth, 0) * 0.75rem);
+}
+.sf-outline-heading,
+.sf-outline-link {
+  display: block;
+  font-size: 0.82rem;
+  padding: 0.22rem 0.35rem;
+  text-align: left;
+  width: 100%;
+  /* Long sheet titles wrap rather than being cut off: "MECHANICAL - SECOND FLOOR PLAN - AREA B"
+     truncated at the panel edge is indistinguishable from the sheet next to it. */
+  overflow-wrap: anywhere;
+}
+.sf-outline-heading {
+  color: var(--sf-muted);
+  font-weight: 600;
+}
+.sf-outline-link {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+}
+.sf-outline-link:hover {
+  background: var(--sf-panel);
+  border-color: var(--sf-line);
+}
+.sf-outline-link:focus-visible {
+  outline: 2px solid var(--sf-focus);
+  outline-offset: 1px;
+}
+
 .sf-empty-actions {
   align-items: center;
   display: flex;

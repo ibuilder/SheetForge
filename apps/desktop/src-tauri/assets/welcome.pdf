@@ -1,7 +1,7 @@
 %PDF-1.7
 %‚„œ”
 1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
+<< /Type /Catalog /Pages 2 0 R /Outlines 10 0 R /PageMode /UseOutlines >>
 endobj
 2 0 obj
 << /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
@@ -280,20 +280,32 @@ endobj
 9 0 obj
 << /Title (SheetForge - tutorial sheet) /Author (SheetForge) /Subject (A drawing to practise on) /Creator (SheetForge) >>
 endobj
+10 0 obj
+<< /Type /Outlines /First 11 0 R /Last 12 0 R /Count 2 >>
+endobj
+11 0 obj
+<< /Title (T-101 Getting started) /Parent 10 0 R /Next 12 0 R /Dest [3 0 R /Fit] >>
+endobj
+12 0 obj
+<< /Title (A-201 Practice sheet) /Parent 10 0 R /Prev 11 0 R /Dest [5 0 R /Fit] >>
+endobj
 xref
-0 10
+0 13
 0000000000 65535 f 
 0000000015 00000 n 
-0000000064 00000 n 
-0000000127 00000 n 
-0000000265 00000 n 
-0000009349 00000 n 
-0000009487 00000 n 
-0000017764 00000 n 
-0000017834 00000 n 
-0000017909 00000 n 
+0000000104 00000 n 
+0000000167 00000 n 
+0000000305 00000 n 
+0000009389 00000 n 
+0000009527 00000 n 
+0000017804 00000 n 
+0000017874 00000 n 
+0000017949 00000 n 
+0000018086 00000 n 
+0000018160 00000 n 
+0000018260 00000 n 
 trailer
-<< /Size 10 /Root 1 0 R /Info 9 0 R >>
+<< /Size 13 /Root 1 0 R /Info 9 0 R >>
 startxref
-18046
+18359
 %%EOF

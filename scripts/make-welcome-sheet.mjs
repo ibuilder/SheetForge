@@ -435,8 +435,20 @@ function pageTwo() {
 
 const streams = [pageOne(), pageTwo()];
 
+// Object numbers are positional and referenced by hand throughout, so they are named once here
+// rather than counted at each use. Getting one wrong produces a file that opens and is subtly
+// wrong, which is the worst kind of PDF bug to chase.
+const INFO = 9;
+const OUTLINES = 10;
+const OUTLINE_GETTING_STARTED = 11;
+const OUTLINE_PRACTICE = 12;
+
 const objects = [
-  "<< /Type /Catalog /Pages 2 0 R >>",
+  // The outline is what a construction set carries and what makes a 200-sheet PDF navigable. Two
+  // entries is not much of a table of contents, but a tutorial that demonstrates the feature is
+  // worth more than one that describes it — and it gives the interface's own outline panel
+  // something real to be tested against.
+  `<< /Type /Catalog /Pages 2 0 R /Outlines ${OUTLINES} 0 R /PageMode /UseOutlines >>`,
   `<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>`,
   `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 7 0 R /F2 8 0 R >> >> /Contents 4 0 R >>`,
   { stream: streams[0] },
@@ -446,6 +458,15 @@ const objects = [
   "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
   `<< /Title ${lit("SheetForge - tutorial sheet")} /Author (SheetForge) ` +
     `/Subject ${lit("A drawing to practise on")} /Creator (SheetForge) >>`,
+
+  // The outline tree: a root, then one entry per sheet. `/Fit` rather than an explicit position,
+  // because the reader should land on the whole sheet rather than at some point on it.
+  `<< /Type /Outlines /First ${OUTLINE_GETTING_STARTED} 0 R /Last ${OUTLINE_PRACTICE} 0 R ` +
+    `/Count 2 >>`,
+  `<< /Title ${lit("T-101 Getting started")} /Parent ${OUTLINES} 0 R ` +
+    `/Next ${OUTLINE_PRACTICE} 0 R /Dest [3 0 R /Fit] >>`,
+  `<< /Title ${lit("A-201 Practice sheet")} /Parent ${OUTLINES} 0 R ` +
+    `/Prev ${OUTLINE_GETTING_STARTED} 0 R /Dest [5 0 R /Fit] >>`,
 ];
 
 const chunks = [];
@@ -471,7 +492,7 @@ const xref = length;
 push(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`);
 for (const offset of offsets) push(`${String(offset).padStart(10, "0")} 00000 n \n`);
 push(
-  `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${objects.length} 0 R >>\n` +
+  `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${INFO} 0 R >>\n` +
     `startxref\n${xref}\n%%EOF\n`,
 );
 
@@ -480,6 +501,13 @@ const file = join(OUT, "welcome.pdf");
 writeFileSync(file, Buffer.concat(chunks));
 
 console.log(`Wrote ${file} (${(length / 1024).toFixed(1)} KB, 2 pages, ARCH D).`);
+
+// A guard against the hazard of hand-numbered objects: the Info dictionary is referenced by
+// number in the trailer, and a reference to the wrong object produces a file that opens fine and
+// reports somebody else's data as its metadata.
+if (objects[INFO - 1] === undefined || !String(objects[INFO - 1]).includes("/Creator")) {
+  throw new Error(`object ${INFO} is not the Info dictionary - the object numbering has drifted`);
+}
 console.log(
   `The dimension is ${DIMENSION_POINTS} points = ${DIMENSION_FEET} ft at 1/8" = 1'-0", so the ` +
     `tutorial's answer is checkable rather than asserted.`,

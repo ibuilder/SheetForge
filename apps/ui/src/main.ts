@@ -49,6 +49,9 @@ async function start(): Promise<void> {
     onOpenProject: () => void guard(() => openProject(chrome)),
     onImport: () => void guard(() => importDrawings(chrome)),
     onSelectRevision: (revision) => void guard(() => openRevision(chrome, revision)),
+    onSelectOutline: (page) => void guard(async () => {
+      await session?.viewer.goToPage(page);
+    }),
     onVerify: () => void guard(() => verify(chrome)),
     onDiagnostics: () => void guard(() => saveDiagnostics(chrome)),
     exportItems,
@@ -338,6 +341,28 @@ async function importDrawings(chrome: Chrome): Promise<void> {
   if (first) await openRevision(chrome, first);
 }
 
+/**
+ * Show the drawing's own table of contents, when it has one.
+ *
+ * Deliberately not fatal. A set with a malformed outline is still a set worth reviewing, and an
+ * application that refused to open one because its bookmarks were broken would be trading a
+ * navigational convenience for the whole document.
+ */
+async function showOutline(chrome: Chrome, viewer: Viewer): Promise<void> {
+  try {
+    const entries = (await viewer.doc?.outline()) ?? [];
+    chrome.setOutline(
+      entries.map((entry) => ({
+        title: entry.title,
+        depth: entry.depth,
+        ...(entry.page === undefined ? {} : { page: entry.page }),
+      })),
+    );
+  } catch {
+    chrome.setOutline([]);
+  }
+}
+
 async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<void> {
   chrome.setStatus(`Opening ${revision.name}…`);
 
@@ -396,6 +421,7 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
   const stopIcons = applyIcons(chrome.stage);
   session = { viewer, revision, stopIcons };
   chrome.setActiveRevision(revision);
+  await showOutline(chrome, viewer);
   chrome.setStatus(
     `${revision.name}${revision.revisionLabel ? ` rev ${revision.revisionLabel}` : ""} — ` +
       `${revision.pageCount} page${revision.pageCount === 1 ? "" : "s"}`,

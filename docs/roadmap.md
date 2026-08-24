@@ -116,8 +116,13 @@ things are missing and some of them should not be".
   removed and there is a test that greps the output for the text that was supposed to be gone. Like
   everything else here it produces a **copy**; the issued drawing is never modified.
 
-- **Bookmarks and document outline.** Already parsed by the engine and currently thrown away. A
-  200-sheet set with a discipline outline is much faster to move around than a flat list.
+- ~~**Bookmarks and document outline.**~~ *Done.* The engine parsed the outline and this
+  application threw it away, leaving a reviewer to scroll two hundred sheets looking for the
+  mechanical drawings on a set that already knew where they were. It now appears in the sidebar
+  under the drawing list, indented by depth, each entry announcing the page it goes to. Absent
+  entirely when the document carries no outline, because an empty heading reads as "this set has
+  no structure" rather than "this file carries none". The tutorial sheet gained one, so the
+  feature demonstrates itself and the test has a real document to run against.
 
 - **Interface language and right-to-left.** They ship 39 languages with RTL. We ship one, and there
   is not a string catalogue in the codebase — every label is a literal. That is a structural gap,

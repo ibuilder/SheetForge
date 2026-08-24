@@ -64,10 +64,17 @@ First release. The core is built and tested; the shell is young. See
   percent-encoded headers, so a drawing called `Plan étage` keeps its accent. This is what makes a
   plot-resolution image an export rather than a frozen window.
 
+**Navigating**
+- The drawing's own outline, in the sidebar. A construction set exported from Revit or Bluebeam
+  carries one — disciplines at the top, sheets under them — and a 200-sheet set is much faster to
+  move around by it than by a flat list. Hidden entirely when the document has none.
+
 **Getting started**
 - A tutorial drawing ships with the application: a two-page ARCH D sheet with a title block, a
   column grid, a legend and a graphic scale. It opens itself once, on a genuinely first run, and
   is available afterwards from the Project menu and from the empty screen.
+- The tutorial carries its own outline, so the contents panel demonstrates itself on the first
+  document a new user ever opens.
 - The practice sheet carries a dimension printed as `144'-0"` whose geometry is exactly 1296 PDF
   points — 144 feet at 1/8" = 1'-0". Calibrating against it and measuring the far side gives an
   answer the sheet itself can confirm, so the calibration lesson is checkable rather than asserted.
