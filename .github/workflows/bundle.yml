@@ -1,0 +1,95 @@
+# Does this actually package, on every platform?
+#
+# The main CI job builds the application with `--no-bundle`, which proves the code compiles and
+# proves nothing about whether an installer can be produced from it. Those are different failures
+# with different causes: WiX and NSIS on Windows, the `.app` layout and `minimumSystemVersion` on
+# macOS, the `.deb`/`.rpm`/AppImage tooling on Linux, the icon set, and the path to the licence
+# file. None of that is exercised by a compile.
+#
+# Until this existed, the packaging had been run exactly once — on Windows, on one developer's
+# machine. The macOS and Linux bundles had never been produced by anything. Finding that out at
+# the moment of a release, with a tag already pushed, is the worst possible time.
+#
+# So: bundle on all three, on demand and weekly, and whenever anything that governs bundling
+# changes. Updater artifacts are off, because those need the signing key and this is not a release
+# — the point is to learn whether the packaging works, not to produce something installable by the
+# public.
+name: Bundle dry run
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly rather than per-push: it is a fifteen-minute job per platform and the things it
+    # catches drift in slowly — a toolchain change, a bundler release, a dependency that stops
+    # being packageable.
+    - cron: "0 6 * * 1"
+  push:
+    paths:
+      - "apps/desktop/src-tauri/tauri.conf.json"
+      - "apps/desktop/src-tauri/Cargo.toml"
+      - "apps/desktop/src-tauri/icons/**"
+      - ".github/workflows/bundle.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Every platform reports, rather than the first failure hiding the other two. The whole
+      # point is to learn what breaks, and "macOS failed" is half an answer.
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows
+            os: windows-latest
+          - label: macOS
+            os: macos-latest
+          - label: Linux
+            os: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+      - name: Linux build dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: npm ci --foreground-scripts
+
+      # `createUpdaterArtifacts` is on in the committed configuration because a real release must
+      # produce signed update payloads. Overridden here rather than removed there: this job has no
+      # signing key and should not have one, and a dry run that quietly changed what a release
+      # produces would be testing the wrong thing.
+      # A file rather than inline JSON: this runs under three different shells, and a brace-heavy
+      # argument quoted correctly for bash is quoted wrongly for PowerShell. The override lives
+      # beside the real configuration so it is reviewable, and says in one line what it changes.
+      - name: Build installers
+        run: npm run tauri -- build --config apps/desktop/src-tauri/tauri.dryrun.conf.json
+
+      # Kept briefly so a human can install one and see what the operating system says about an
+      # unsigned binary — which is the other half of this, and the half CI cannot judge.
+      - name: Collect what was produced
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.label }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            target/release/bundle/**/*.msi
+            target/release/bundle/**/*.exe
+            target/release/bundle/**/*.dmg
+            target/release/bundle/**/*.app
+            target/release/bundle/**/*.deb
+            target/release/bundle/**/*.rpm
+            target/release/bundle/**/*.AppImage
