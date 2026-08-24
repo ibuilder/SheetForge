@@ -52,11 +52,14 @@ The README calls this early. This page says exactly how early, because "producti
 | A malformed export name is refused rather than repaired | Rust tests over truncated, non-hex and non-UTF-8 escapes | `apps/desktop/src-tauri/src/commands.rs` |
 | A drawing's own outline is listed and jumps to the page it names | Browser test against the tutorial sheet, which carries a real outline | `apps/ui/e2e/open-drawing.spec.ts` |
 | A drawing with no outline shows no empty panel | Browser test against a document with no bookmarks | `apps/ui/e2e/open-drawing.spec.ts` |
+| The page counter survives adversarial input and stays inside the domain ceiling | Property tests over generated near-miss PDF tokens, plus every prefix of each | `apps/desktop/src-tauri/src/commands.rs` |
+| A file that is nothing but page markers stops rather than counting forever | Unit test against a file crafted to exceed the ceiling | `apps/desktop/src-tauri/src/commands.rs` |
+| Counting pages stays linear in file size | 8 MB of non-matching bytes against a ceiling that catches a scan inside a scan | `apps/desktop/src-tauri/src/commands.rs` |
 | Every sheet exports as one ZIP with an entry per page | Browser test reads the entry names out of the archive it produced | `apps/ui/e2e/open-drawing.spec.ts` |
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 220 Rust tests, 42 TypeScript unit tests, 31 browser tests.** The Rust figure includes
+**Totals: 225 Rust tests, 42 TypeScript unit tests, 31 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -74,7 +77,7 @@ Listed because omitting them would make the table above dishonest.
 |---|---|---|
 | **The IPC seam is stubbed, not driven** | The browser suite mocks `invoke` at the Tauri boundary, so everything above it is real code and everything below it — the commands, the dialogs — is covered only by Rust tests and by hand. A test that drives the packaged application has not been written | 0.2 |
 | **The native file dialogs are not driven by any test** | They sit below the stub. Exercised by hand only | 0.2 |
-| **The PDF parser itself is not fuzzed** | Path containment, format sniffing, size arithmetic and the audit chain now have property tests generating thousands of inputs each, and one found a real defect. pdf.js itself — the actual parser — is upstream and is not fuzzed by us | 0.3 |
+| **The PDF parser itself is not fuzzed** | Path containment, format sniffing, size arithmetic, the audit chain and now the page counter have property tests generating thousands of inputs each, and one found a real defect. The page counter is the only PDF parsing this repository does, and it is covered; pdf.js — the parser that reads the document properly — is upstream and is not fuzzed by us. That is the part still open | 0.3 |
 | **Rendering performance is unmeasured** | The *store* is now benchmarked against a realistic project — 5,000 markups over 200 sheets — with ceilings in CI that catch order-of-magnitude regressions, and the numbers are printed on every run. What is still unmeasured is the part users feel most: time to first page, tile latency at high zoom, and memory on a 200-sheet set | 0.3 |
 | **Power loss is untested** | A committed write is now proven to survive the process being *killed* — a real child process, `TerminateProcess`/`SIGKILL`, no destructors. That proves SQLite committed, not that the platter did; testing the latter honestly needs hardware or a fault injector | 0.4 |
 | **Built and run on Windows only** | macOS, Linux, iOS and Android are configured and compile in CI, but have not been run by a human | 0.2 |

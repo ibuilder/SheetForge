@@ -42,5 +42,10 @@ tauri-plugin-opener = "2"
 tauri-plugin-os = "2"
 tauri-plugin-process = "2"
 
+[dev-dependencies]
+# The page counter reads bytes a stranger sent. Generated adversarial input is the only honest way
+# to test something whose whole job is not to be surprised.
+proptest = "1"
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"

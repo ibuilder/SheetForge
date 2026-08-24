@@ -1434,6 +1434,7 @@ fn count_pages(bytes: &[u8]) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
     use super::*;
 
     #[test]
@@ -1546,6 +1547,126 @@ mod tests {
             "../etc/passwd"
         );
         assert!(sf_security::check_name("../etc/passwd").is_err());
+    }
+
+    // ---------------------------------------------------------------------------
+    // The page counter, against input a stranger wrote
+    // ---------------------------------------------------------------------------
+    //
+    // `count_pages` is the one parser in this crate that reads bytes nobody here produced. It runs
+    // before the renderer has seen the file, on whatever a drop or a file picker handed over, and
+    // its result becomes a stored page count. Everything below exists because "it worked on the
+    // PDFs I tried" is not a claim worth making about hostile input.
+    //
+    // These are property tests rather than a corpus of binary fixtures. A committed malformed PDF
+    // is a file nobody can review; a generator is code, and it goes on finding new inputs on every
+    // run rather than the same twelve for ever.
+
+    /// Bytes that look enough like a PDF to reach the interesting paths.
+    ///
+    /// Purely random bytes almost never contain `/Type`, so a naive generator tests only the
+    /// "found nothing" branch. This one deliberately seeds the tokens the scanner looks for,
+    /// including the near-misses — `/Pages` must not count, and `/Typewriter` must not either.
+    fn adversarial_pdf() -> impl Strategy<Value = Vec<u8>> {
+        let fragment = prop_oneof![
+            Just(b"/Type /Page".to_vec()),
+            Just(b"/Type/Page".to_vec()),
+            Just(b"/Type   \n\r\t /Page".to_vec()),
+            // Must not count: a page *tree* node, not a page.
+            Just(b"/Type /Pages".to_vec()),
+            // Must not count: a longer token that merely starts the same way.
+            Just(b"/Type /Pagemaker".to_vec()),
+            // A `/Count` claiming something enormous. The scanner ignores it on purpose, and this
+            // asserts it goes on ignoring it.
+            Just(b"/Count 4294967295".to_vec()),
+            // `/Type` at the very end, with nothing after it to inspect.
+            Just(b"/Type".to_vec()),
+            Just(b"%PDF-1.7\n".to_vec()),
+            Just(b"stream\n".to_vec()),
+            Just(vec![0u8; 32]),
+            proptest::collection::vec(any::<u8>(), 0..64),
+        ];
+        proptest::collection::vec(fragment, 0..80).prop_map(|parts| parts.concat())
+    }
+
+    proptest! {
+        /// The whole contract, on anything.
+        ///
+        /// It must not panic, must not run away, and must report a number the rest of the
+        /// application can store — a page count above the domain's ceiling would be rejected
+        /// downstream *after* the file had already been copied into the package.
+        #[test]
+        fn the_page_counter_survives_anything_and_stays_within_the_domain_ceiling(
+            bytes in adversarial_pdf(),
+        ) {
+            let counted = count_pages(&bytes);
+            prop_assert!(counted >= 1, "a page count of zero is not a document");
+            prop_assert!(
+                counted <= sf_domain::DocumentRevision::MAX_PAGES + 1,
+                "counted {counted}, past the ceiling the store will accept",
+            );
+        }
+
+        /// Truncation is the commonest corruption there is — an interrupted copy, a half-written
+        /// download, a file plucked off a failing disk. Every prefix of a document must be as safe
+        /// to read as the whole of it.
+        #[test]
+        fn every_prefix_of_a_document_is_safe_to_count(
+            bytes in adversarial_pdf(),
+            cut in 0usize..4096,
+        ) {
+            let end = cut.min(bytes.len());
+            let counted = count_pages(&bytes[..end]);
+            prop_assert!(counted >= 1);
+        }
+    }
+
+    /// The near-misses, stated exactly rather than left to the generator to stumble on.
+    ///
+    /// `/Pages` is the page *tree* node and appears once per document; counting it would inflate
+    /// every set by one. `/Pagemaker` is not a real PDF token but a prefix match would accept it,
+    /// and the failure mode of a loose prefix check is a number that is quietly wrong rather than
+    /// an error anybody sees.
+    #[test]
+    fn the_page_counter_does_not_mistake_a_page_tree_for_a_page() {
+        assert_eq!(count_pages(b"/Type /Pages /Count 40"), 1, "a tree is not a page");
+        assert_eq!(count_pages(b"/Type /Pagemaker"), 1, "a prefix is not a token");
+        assert_eq!(count_pages(b"/Type /Page /Type /Page"), 2);
+        assert_eq!(count_pages(b"/Type\n\t /Page"), 1, "whitespace between tokens is legal");
+        // The claim a file makes about itself is not evidence.
+        assert_eq!(count_pages(b"/Count 999999 /Type /Page"), 1);
+    }
+
+    /// A file that is nothing but page markers must stop at the ceiling rather than counting to
+    /// four billion. The break is what makes this bounded, and a regression that removed it would
+    /// otherwise show up only as a hang on a crafted file.
+    #[test]
+    fn a_file_that_is_all_page_markers_stops_at_the_ceiling() {
+        let bytes = b"/Type /Page ".repeat(sf_domain::DocumentRevision::MAX_PAGES as usize + 500);
+        let counted = count_pages(&bytes);
+        assert!(
+            counted <= sf_domain::DocumentRevision::MAX_PAGES + 1,
+            "counted {counted} without stopping",
+        );
+    }
+
+    /// Cost has to stay linear in the size of the file.
+    ///
+    /// The ceiling is loose — this runs on shared CI hardware — because what it catches is a
+    /// change from one pass to a quadratic scan, which on a 512 MB drawing is the difference
+    /// between a second and an afternoon. That is a denial of service delivered as a drawing.
+    #[test]
+    fn counting_a_large_file_stays_linear() {
+        // 8 MB of bytes that never match, which is the worst case for a scanner: it cannot skip.
+        let haystack = vec![b'x'; 8 * 1024 * 1024];
+        let started = std::time::Instant::now();
+        let counted = count_pages(&haystack);
+        let elapsed = started.elapsed();
+        assert_eq!(counted, 1, "nothing here is a page");
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "8 MB took {elapsed:?} — this should be one pass, so look for a scan inside a scan",
+        );
     }
 
     /// The tutorial sheet is compiled in, so a missing or truncated asset is a build failure
