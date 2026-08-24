@@ -582,20 +582,82 @@ test.describe("exporting a sheet as an image", () => {
   });
 });
 
-/*
- * Not covered here: that the **markup overlay** reaches the exported PNG.
+/**
+ * A markup the host already holds, in the shape `markup_list` returns it.
  *
- * It should be, and it is the half of `sheet-image.ts` most likely to be wrong — an export that
- * silently drops the markups is the failure that would actually hurt somebody. Five attempts at
- * setting it up failed for reasons that had nothing to do with the exporter: driving the engine's
- * gesture loop from a test armed the wrong control, then dragged across a thumbnail; seeding a
- * markup through `markup_list` produced an annotation the store did not render, and working out
- * why is a piece of work about the harness rather than about the product.
+ * The engine's annotation travels verbatim inside `geometry` — that is the whole point of the
+ * mapping layer — so this is a real annotation the store accepts and the renderer draws.
  *
- * Rather than leave a test that passes for the wrong reason, the gap is recorded in
- * docs/status.md. The control below at least proves the unmarked case is genuinely colourless, so
- * whatever eventually asserts the marked case has something to compare against.
+ * Seeded through the host rather than drawn with the mouse. Driving the engine's gesture loop from
+ * a test armed the wrong control (three buttons match /cloud/i, and the first is a compare action)
+ * and then dragged across a thumbnail; both times the failure looked like a broken exporter. This
+ * arrives the way a reopened project's markups do, through the same mapping into the same store
+ * the exporter reads.
+ *
+ * The field is `points`, not `pts`, and `sheetId` is not optional. An earlier version of this
+ * helper got both wrong, so the annotation had no geometry at all and rendered as nothing — which
+ * again looked like a broken exporter. The type is the authority here, not memory.
  */
+function seededCloud(): Record<string, unknown> {
+  const annotation = {
+    id: "0192f0c1-0000-7000-8000-0000000000d1",
+    kind: "cloud",
+    sheetId: REVISION.id,
+    page: 1,
+    points: [
+      { x: 120, y: 200 },
+      { x: 460, y: 200 },
+      { x: 460, y: 430 },
+      { x: 120, y: 430 },
+    ],
+    // An explicit colour rather than one inherited from the discipline, because what the image
+    // test asserts is that *this colour* reaches the exported PNG.
+    style: { color: "#e07a1f", width: 3 },
+    status: "open",
+    author: "a.reviewer@example.com",
+    createdAt: "2026-08-20T10:00:00.000Z",
+    updatedAt: "2026-08-20T10:00:00.000Z",
+    version: 1,
+  };
+  return {
+    id: annotation.id,
+    sourceDocumentId: REVISION.sourceDocumentId,
+    documentRevisionId: REVISION.id,
+    page: 1,
+    kind: "cloud",
+    geometrySchema: 1,
+    geometry: annotation,
+    metadata: {},
+    quantity: null,
+    status: "open",
+    version: 1,
+    createdBy: "a.reviewer@example.com",
+    createdAt: annotation.createdAt,
+    updatedAt: annotation.updatedAt,
+  };
+}
+
+test.describe("exporting a sheet that has been marked up", () => {
+  test("the markups are on the picture, not just on the screen", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()), { markups: [seededCloud()] });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    // On screen first. Without this the assertion below cannot tell "the exporter dropped the
+    // overlay" from "the markup never arrived", and those want opposite fixes. It is the check
+    // that finally distinguished them.
+    await expect(page.locator(".sf-stage [data-annot]").first()).toBeAttached({ timeout: 15_000 });
+
+    await exportSheet(page);
+
+    expect(
+      await saturatedPixels(page, await lastExport(page)),
+      "the markup is on screen but not in the exported picture - the overlay was dropped, so " +
+        "somebody would send a clean sheet believing they had sent their comments",
+    ).toBeGreaterThan(200);
+  });
+});
 
 /** Drive the export menu, and wait for the bytes to reach the host stub. */
 async function exportSheet(page: Page): Promise<void> {

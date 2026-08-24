@@ -48,9 +48,10 @@ The README calls this early. This page says exactly how early, because "producti
 | The tutorial opens on a first run, and does not open itself again | Browser tests over both halves of the behaviour | `apps/ui/e2e/open-drawing.spec.ts` |
 | A sheet exports as a real PNG at the resolution asked for | Browser test decodes the exported bytes and checks the PNG header and IHDR dimensions | `apps/ui/e2e/open-drawing.spec.ts` |
 | An unmarked sheet exports with no colour on it | Browser test counts saturated pixels in the exported image | `apps/ui/e2e/open-drawing.spec.ts` |
+| The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 217 Rust tests, 42 TypeScript unit tests, 27 browser tests.** The Rust figure includes
+**Totals: 217 Rust tests, 42 TypeScript unit tests, 28 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -73,7 +74,6 @@ Listed because omitting them would make the table above dishonest.
 | **Power loss is untested** | A committed write is now proven to survive the process being *killed* — a real child process, `TerminateProcess`/`SIGKILL`, no destructors. That proves SQLite committed, not that the platter did; testing the latter honestly needs hardware or a fault injector | 0.4 |
 | **Built and run on Windows only** | macOS, Linux, iOS and Android are configured and compile in CI, but have not been run by a human | 0.2 |
 | **Binaries are unsigned** | SmartScreen and Gatekeeper will warn | 0.2 |
-| **The markup overlay on an exported image is untested** | `sheet-image.ts` composites markups onto the rasterised page, and an export that silently dropped them is the failure that would actually hurt somebody — they would send a clean sheet believing they had sent their comments. The unmarked case is covered; the marked one is not, because getting a markup into the store from a test proved to be a piece of work about the harness rather than the product. The next person to touch that file should fix this first | 0.2 |
 | **Bundling runs in CI only at release** | The CI desktop job builds with `--no-bundle`, so the installer packaging — WiX, NSIS, the icon set, the licence file — is exercised only by the release workflow and by hand. It has been run once on Windows and produced both installers; the macOS and Linux bundles have never been produced at all | 0.2 |
 | **No release has been cut** | The release workflow has never run. It needs `TAURI_SIGNING_PRIVATE_KEY` in the repository secrets, without which every installed copy would be unable to update | 0.2 |
 | **No third-party security review** | No audit, no penetration test | 1.0 |
