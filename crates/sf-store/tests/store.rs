@@ -1076,3 +1076,66 @@ fn a_re_extraction_does_not_overwrite_a_number_a_person_confirmed() {
         Some("A-202"),
     );
 }
+
+/// Saved views round-trip, and replacing the set is how a deletion travels.
+///
+/// The engine holds the whole list and sends it whole, so the store replaces rather than merges. A
+/// merge would make deletion impossible from the interface: a view the reviewer removed would come
+/// straight back on the next save, which is the kind of bug that gets reported as "it keeps coming
+/// back" and takes a day to understand.
+#[test]
+fn saved_views_round_trip_and_a_deletion_actually_deletes() {
+    use sf_domain::SavedView;
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(&dir.path().join("database.sqlite")).unwrap();
+    let actor = ActorId::local();
+
+    let project = Project::new("Riverside Tower", None, None, actor.clone()).unwrap();
+    store.create_project(&project).unwrap();
+    let document = SourceDocument::new(project.id, "Set", None).unwrap();
+    store.insert_source_document(&document).unwrap();
+    let revision = DocumentRevision::new(
+        project.id,
+        document.id,
+        None,
+        ContentHash::from_bytes([0x55; 32]),
+        2048,
+        20,
+        actor,
+    )
+    .unwrap();
+    store.insert_revision(&revision).unwrap();
+
+    let mut clash = SavedView::new(&revision, "Clash at F/4", 7, 3.5, (120.5, 340.25), 90).unwrap();
+    clash.filter = Some(r#"{"discipline":["mechanical"]}"#.to_owned());
+
+    let plant = SavedView::new(&revision, "Plant room", 12, 1.0, (0.0, 0.0), 0).unwrap();
+
+    store
+        .replace_views(revision.id, &[clash.clone(), plant])
+        .unwrap();
+
+    let read = store.views(revision.id).unwrap();
+    assert_eq!(read.len(), 2);
+
+    let restored = read.iter().find(|v| v.name == "Clash at F/4").unwrap();
+    assert_eq!(restored.page, 7);
+    assert_eq!(restored.rotation, 90);
+    assert!((restored.zoom - 3.5).abs() < f64::EPSILON);
+    // The position has to survive exactly, or a restored view lands somewhere near the thing
+    // rather than on it.
+    assert!((restored.center_x - 120.5).abs() < f64::EPSILON);
+    assert!((restored.center_y - 340.25).abs() < f64::EPSILON);
+    // The filter travels verbatim: without it the view restores the geometry and not the point.
+    assert_eq!(
+        restored.filter.as_deref(),
+        Some(r#"{"discipline":["mechanical"]}"#)
+    );
+
+    // The reviewer deletes one. The engine sends what is left, and what is left is what remains.
+    store.replace_views(revision.id, &[clash]).unwrap();
+    let after = store.views(revision.id).unwrap();
+    assert_eq!(after.len(), 1, "a deleted view came back");
+    assert_eq!(after[0].name, "Clash at F/4");
+}

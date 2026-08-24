@@ -33,6 +33,7 @@ pub mod measurement;
 pub mod project;
 pub mod sheet;
 pub mod status;
+pub mod view;
 
 pub use document::{ContentHash, DocumentRevision, SourceDocument};
 pub use error::{DomainError, Result};
@@ -42,6 +43,7 @@ pub use measurement::{Calibration, MeasureKind, Quantity, ScaleSource, FORMULA_V
 pub use project::Project;
 pub use sheet::{Sheet, SheetSource};
 pub use status::MarkupStatus;
+pub use view::SavedView;
 
 /// The current time, at the resolution the model actually keeps.
 ///

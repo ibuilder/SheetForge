@@ -58,6 +58,8 @@ The README calls this early. This page says exactly how early, because "producti
 | Counting pages stays linear in file size | 8 MB of non-matching bytes against a ceiling that catches a scan inside a scan | `apps/desktop/src-tauri/src/commands.rs` |
 | What the engine reads off a title block is sent to the host as a guess, never as confirmed | Browser test inspects every row that crossed the boundary | `apps/ui/e2e/open-drawing.spec.ts` |
 | A register row survives the round trip in both directions | 4 unit tests over the mapping, including absent-versus-empty | `apps/ui/test/mapping.test.ts` |
+| A saved view survives a restart, and deleting one actually deletes it | Store round-trip test replacing the set, plus a browser test that the restore runs on open | `crates/sf-store/tests/store.rs`, `apps/ui/e2e/open-drawing.spec.ts` |
+| A view whose zoom or centre could not be restored is refused rather than stored | Domain tests over non-finite, zero, negative and absurd values | `crates/sf-domain/src/view.rs` |
 | A sheet number a machine guessed never overwrites one a person confirmed | Store test: an OCR re-read of `A-201` as `A-2O1` is rejected, and a person correcting it afterwards still lands | `crates/sf-store/tests/store.rs` |
 | The register answers "which sheets are at Rev C?" across the project | Store test, case-insensitively and sorted by number | `crates/sf-store/tests/store.rs` |
 | A project two schema versions behind reaches the current one | Migration test asks the schema itself rather than trusting the recorded version | `crates/sf-store/tests/migration.rs` |
@@ -78,7 +80,7 @@ The README calls this early. This page says exactly how early, because "producti
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 255 Rust tests, 54 TypeScript unit tests, 45 browser tests.** The Rust figure includes
+**Totals: 261 Rust tests, 54 TypeScript unit tests, 46 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and

@@ -117,6 +117,7 @@ async function stubHost(
       (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened = [];
       (window as unknown as { __sfDerived: unknown[] }).__sfDerived = [];
       (window as unknown as { __sfSheets: unknown[] }).__sfSheets = [];
+      (window as unknown as { __sfViews: unknown[] }).__sfViews = [];
 
       // event name -> the callback ids listening for it, mirroring what the Rust side tracks.
       const listeners = new Map<string, number[]>();
@@ -246,6 +247,23 @@ async function stubHost(
               return Promise.resolve(new Uint8Array(pdfBytes).buffer);
             case "markup_list":
               return Promise.resolve(seeded);
+            case "view_list":
+              // One saved view, so the restore path runs rather than being skipped as empty.
+              return Promise.resolve([
+                {
+                  name: "Clash at F/4",
+                  page: 2,
+                  zoom: 2.5,
+                  centerX: 120.5,
+                  centerY: 340.25,
+                  rotation: 0,
+                  filter: null,
+                },
+              ]);
+            case "view_replace": {
+              (window as unknown as { __sfViews: unknown[] }).__sfViews.push(args["views"]);
+              return Promise.resolve((args["views"] as unknown[]).length);
+            }
             case "sheet_list":
             case "sheet_at_revision": {
               const wanted = args["revision"] as string | undefined;
@@ -1201,5 +1219,25 @@ test.describe("the sheet register on screen", () => {
     // And it can be put back.
     await register.getByRole("button", { name: /show all/ }).click();
     await expect(register.getByRole("button", { name: /T-101/ })).toBeVisible();
+  });
+});
+
+/**
+ * Saved views surviving a restart.
+ *
+ * Views are the one thing the engine holds that its storage adapter has no channel for — absent
+ * from both `LoadResult` and `Mutation` — so they travel over the bus instead. That makes this the
+ * most easily broken of the persistence paths and the one least likely to be noticed, because a
+ * lost view looks like one nobody saved.
+ */
+test.describe("saved views", () => {
+  test("a stored view is put back when the drawing opens", async ({ page }) => {
+    await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
+    await page.goto("/");
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    // The engine's own Saved views panel lists what it holds. If the restore did not run, this is
+    // the empty-state text instead.
+    await expect(page.getByText("Clash at F/4")).toBeVisible({ timeout: 20_000 });
   });
 });

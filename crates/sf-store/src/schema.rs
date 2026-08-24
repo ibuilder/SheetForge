@@ -213,6 +213,34 @@ CREATE INDEX idx_sheets_number ON sheets(project_id, number);
 CREATE INDEX idx_sheets_revision ON sheets(project_id, sheet_revision);
 ",
     },
+    Migration {
+        version: 4,
+        description: "saved views: a place in a drawing somebody wants to come back to",
+        sql: r"
+-- The page, the zoom, the position and the markup filter that was active. Without the filter a
+-- restored view has the geometry and not the point: half the reason to save one is that everything
+-- else was hidden.
+--
+-- Keyed on (document, name) rather than an id: a view is found by what it is called, saving one
+-- twice under the same name means replacing it, and a surrogate key would quietly allow two
+-- entries a reviewer cannot tell apart.
+CREATE TABLE saved_views (
+    document_revision_id TEXT NOT NULL REFERENCES document_revisions(id) ON DELETE CASCADE,
+    name                 TEXT NOT NULL,
+    project_id           TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    page                 INTEGER NOT NULL,
+    zoom                 REAL NOT NULL,
+    center_x             REAL NOT NULL,
+    center_y             REAL NOT NULL,
+    rotation             INTEGER NOT NULL,
+    -- The engine's own filter vocabulary, stored verbatim. Modelling it here would be a second
+    -- copy of a vocabulary to keep in step, for no gain -- the same decision as markup geometry.
+    filter               TEXT,
+    created_at           TEXT NOT NULL,
+    PRIMARY KEY (document_revision_id, name)
+) STRICT;
+",
+    },
 ];
 
 #[cfg(test)]

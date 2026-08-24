@@ -7,7 +7,7 @@
  * lets both be tested without a window.
  */
 
-import { createViewer, type Viewer } from "@massingcloud/pdf-viewer";
+import { createViewer, type AnnotFilter, type Viewer } from "@massingcloud/pdf-viewer";
 import "@massingcloud/pdf-viewer/style.css";
 // Bundled, never fetched from a CDN. The application has to work with the network off, and a
 // worker that 404s at the moment somebody opens a drawing on a site with no signal is the exact
@@ -675,6 +675,58 @@ async function showRegister(chrome: Chrome, revision: string | undefined): Promi
   }
 }
 
+/**
+ * Put the saved views back, and keep them.
+ *
+ * Views are the one thing the engine holds that its storage adapter has no channel for: they are
+ * absent from both `LoadResult` and `Mutation`, so unlike markups, calibrations and the sheet
+ * register they cannot travel that way. They come back through the bus instead — the engine
+ * announces `view:saved`, and the whole list is written each time.
+ *
+ * The list is written whole rather than appended to, because that is the only way a *deletion*
+ * reaches the host: the engine says what exists now, and what exists now is what is stored.
+ *
+ * Restoring re-adds each view through the engine's own `addView`, which mints a fresh id. Nothing
+ * refers to a view by id across a session, so that costs nothing — and storing the engine's id
+ * would mean keeping two records of one identity in step for no gain.
+ *
+ * None of this is fatal. A drawing whose views cannot be read is still a drawing worth reviewing.
+ */
+async function restoreViews(viewer: Viewer, revision: string): Promise<void> {
+  try {
+    for (const view of await host.viewList(revision)) {
+      viewer.store.addView({
+        name: view.name,
+        page: view.page,
+        zoom: view.zoom,
+        center: { x: view.centerX, y: view.centerY },
+        rotation: view.rotation,
+        ...(view.filter === null ? {} : { filter: JSON.parse(view.filter) as AnnotFilter }),
+      });
+    }
+  } catch {
+    // Nothing to restore, or nothing readable. The engine starts with an empty list, which is the
+    // state a new document is in anyway.
+  }
+
+  viewer.bus.on("view:saved", () => {
+    void guard(async () => {
+      await host.viewReplace(
+        revision,
+        viewer.store.savedViews().map((view) => ({
+          name: view.name,
+          page: view.page,
+          zoom: view.zoom,
+          centerX: view.center.x,
+          centerY: view.center.y,
+          rotation: view.rotation,
+          filter: view.filter === undefined ? null : JSON.stringify(view.filter),
+        })),
+      );
+    });
+  });
+}
+
 async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<void> {
   chrome.setStatus(`Opening ${revision.name}…`);
 
@@ -750,6 +802,7 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
   chrome.setActiveRevision(revision);
   await showOutline(chrome, viewer);
   await showRegister(chrome, undefined);
+  await restoreViews(viewer, revision.id);
   chrome.setStatus(
     `${revision.name}${revision.revisionLabel ? ` rev ${revision.revisionLabel}` : ""} — ` +
       `${revision.pageCount} page${revision.pageCount === 1 ? "" : "s"}`,

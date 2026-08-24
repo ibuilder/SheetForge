@@ -86,6 +86,18 @@ export interface RecentProject {
   available: boolean;
 }
 
+/** A saved view as the host holds it. */
+export interface HostView {
+  name: string;
+  page: number;
+  zoom: number;
+  centerX: number;
+  centerY: number;
+  rotation: number;
+  /** The engine's markup filter, serialised. */
+  filter: string | null;
+}
+
 /** How a value in the register came to be known, worst first. */
 export type SheetSource = "recognised" | "extracted" | "imported" | "confirmed";
 
@@ -369,6 +381,16 @@ export const host = {
   sheetAtRevision: (revision: string) => call<HostSheet[]>("sheet_at_revision", { revision }),
   sheetRecord: (revision: string, sheets: NewSheet[]) =>
     call<number>("sheet_record", { revision, sheets }),
+
+  /**
+   * Saved views — a named place in a drawing, with the markup filter that was active.
+   *
+   * Replaced whole rather than appended, because the engine holds the list and sends it whole. A
+   * merge would make deleting one impossible from here: it would return on the next save.
+   */
+  viewList: (revision: string) => call<HostView[]>("view_list", { revision }),
+  viewReplace: (revision: string, views: HostView[]) =>
+    call<number>("view_replace", { revision, views }),
   markupCreate: (markup: NewMarkupPayload) => call<HostMarkup>("markup_create", { markup }),
   /**
    * Raise many at once — what an XFDF or BCF import uses.

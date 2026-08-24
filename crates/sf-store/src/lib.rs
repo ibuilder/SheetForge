@@ -33,7 +33,8 @@ use sf_audit::{AuditError, AuditEvent, Outcome, Record};
 use sf_domain::{
     ActorId, Calibration, CalibrationId, ContentHash, DocumentRevision, DocumentRevisionId,
     DomainError, Geometry, Markup, MarkupKind, MarkupMetadata, MarkupPatch, MarkupStatus, Project,
-    ProjectId, Quantity, Sheet, SheetSource, SourceDocument, SourceDocumentId, MODEL_VERSION,
+    ProjectId, Quantity, SavedView, Sheet, SheetSource, SourceDocument, SourceDocumentId,
+    MODEL_VERSION,
 };
 use std::path::Path;
 use std::str::FromStr;
@@ -487,6 +488,71 @@ impl Store {
     }
 
     // -----------------------------------------------------------------------
+    // Saved views
+    // -----------------------------------------------------------------------
+
+    /// Replace the saved views of one document with this set.
+    ///
+    /// Replace rather than merge, because the engine holds the whole list and sends it whole. A
+    /// merge would make deleting a view impossible from this side: it would come straight back on
+    /// the next save.
+    ///
+    /// # Errors
+    /// If the write fails.
+    pub fn replace_views(
+        &mut self,
+        revision: DocumentRevisionId,
+        views: &[SavedView],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM saved_views WHERE document_revision_id = ?1",
+            params![revision.to_string()],
+        )?;
+        {
+            let mut statement = tx.prepare(
+                "INSERT INTO saved_views
+                   (document_revision_id, name, project_id, page, zoom, center_x, center_y,
+                    rotation, filter, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            )?;
+            let now = stamp(sf_domain::now());
+            for view in views {
+                statement.execute(params![
+                    view.document_revision_id.to_string(),
+                    view.name,
+                    view.project_id.to_string(),
+                    view.page,
+                    view.zoom,
+                    view.center_x,
+                    view.center_y,
+                    view.rotation,
+                    view.filter,
+                    now,
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// The saved views of one document, in the order they were created.
+    ///
+    /// # Errors
+    /// If the query fails or a row does not parse.
+    pub fn views(&self, revision: DocumentRevisionId) -> Result<Vec<SavedView>> {
+        let mut statement = self.conn.prepare(
+            "SELECT document_revision_id, name, project_id, page, zoom, center_x, center_y,
+                    rotation, filter
+             FROM saved_views WHERE document_revision_id = ?1 ORDER BY created_at, name",
+        )?;
+        let rows = statement.query_map(params![revision.to_string()], read_view)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .collect()
+    }
+
+    // -----------------------------------------------------------------------
     // Calibration
     // -----------------------------------------------------------------------
 
@@ -921,6 +987,32 @@ fn read_sheet(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<Sheet>> {
             discipline,
             revision,
             source: SheetSource::from_str(&source)?,
+        })
+    })())
+}
+
+fn read_view(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<SavedView>> {
+    let document_revision_id: String = row.get(0)?;
+    let name: String = row.get(1)?;
+    let project_id: String = row.get(2)?;
+    let page: u32 = row.get(3)?;
+    let zoom: f64 = row.get(4)?;
+    let center_x: f64 = row.get(5)?;
+    let center_y: f64 = row.get(6)?;
+    let rotation: u32 = row.get(7)?;
+    let filter: Option<String> = row.get(8)?;
+
+    Ok((|| {
+        Ok(SavedView {
+            document_revision_id: DocumentRevisionId::from_str(&document_revision_id)?,
+            name,
+            project_id: ProjectId::from_str(&project_id)?,
+            page,
+            zoom,
+            center_x,
+            center_y,
+            rotation,
+            filter,
         })
     })())
 }

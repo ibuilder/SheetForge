@@ -174,7 +174,12 @@ things are missing and some of them should not be".
   checked is marked *unchecked* in words rather than in a shade of grey, because the reader who
   cannot tell two greys apart is the same reader about to quote it.
 
-- **Saved filters and views** that travel with the project.
+- ~~**Saved filters and views** that travel with the project.~~ *Done.* A named place in a drawing
+  — page, zoom, position, and the markup filter that was active — kept with the project rather than
+  lost on close. The filter travels with it because without it a restored view has the geometry and
+  not the point: half the reason to save one is that everything else was hidden. Views are the one
+  thing the engine holds that its storage adapter has no channel for, so these travel over the bus
+  instead, and the list is written whole because that is the only way a deletion reaches the host.
 - **Attachment handling**: photos from a phone camera, sized and content-addressed.
 
 ## 0.4 — Mobile in earnest

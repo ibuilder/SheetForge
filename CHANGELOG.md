@@ -90,6 +90,8 @@ First release. The core is built and tested; the shell is young. See
   through a native dialog. A project that has moved is listed and disabled rather than hidden.
 
 **Navigating**
+- Saved views that survive closing the project: a named place in a drawing, with the markup filter
+  that was active when you saved it.
 - The sheet register in the sidebar: the set listed by sheet number and title, with **Find sheets
   at a revision…** to answer "which sheets are at Rev C?". A sheet number nobody has checked is
   marked *unchecked* — most of them are read off title blocks by a heuristic, and on a scanned set

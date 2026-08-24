@@ -194,6 +194,15 @@ fn a_version_one_database_reaches_every_later_migration() {
         )
         .unwrap();
     assert_eq!(register, 1, "migration 3 did not run");
+
+    let views: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'saved_views'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(views, 1, "migration 4 did not run");
 }
 
 /// A database from a *newer* build must be refused rather than opened and half-understood. Reading

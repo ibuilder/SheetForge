@@ -133,6 +133,8 @@ pub fn run() {
             commands::sheet_list,
             commands::sheet_at_revision,
             commands::sheet_record,
+            commands::view_list,
+            commands::view_replace,
             commands::markup_create,
             commands::markup_create_many,
             commands::markup_update,
