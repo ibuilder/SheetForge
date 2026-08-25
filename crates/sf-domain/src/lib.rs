@@ -25,6 +25,7 @@
 //! Timestamps are RFC 3339 UTC ([`chrono::DateTime<Utc>`]). Identifiers are UUIDv7, which sorts
 //! chronologically — see [`ids`].
 
+pub mod delta;
 pub mod document;
 pub mod error;
 pub mod ids;
@@ -36,6 +37,7 @@ pub mod sheet;
 pub mod status;
 pub mod view;
 
+pub use delta::{compare as compare_totals, total as total_quantities, Change, Line, Movement};
 pub use document::{ContentHash, DocumentRevision, SourceDocument};
 pub use error::{DomainError, Result};
 pub use ids::{ActorId, CalibrationId, DocumentRevisionId, MarkupId, ProjectId, SourceDocumentId};

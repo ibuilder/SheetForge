@@ -1003,6 +1003,154 @@ pub fn scale_check(expected: f64, measured: f64) -> CommandResult<sf_domain::Sca
     Ok(sf_domain::check_scale(expected, measured)?)
 }
 
+/// One line of a revision comparison, on the wire.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeDto {
+    /// The cost code the quantities were grouped under, when they carried one.
+    pub code: Option<String>,
+    /// The unit. Part of the grouping, because a length and an area under one code are two lines.
+    pub unit: String,
+    /// The total in the earlier issue.
+    pub before: f64,
+    /// The total in the later issue.
+    pub after: f64,
+    /// `after - before`, signed.
+    pub difference: f64,
+    /// The proportion of the earlier total, when there was one to be a proportion of.
+    pub proportion: Option<f64>,
+    /// `added`, `removed`, `changed` or `held`.
+    pub movement: String,
+}
+
+/// What a comparison left out, and why.
+///
+/// Reported rather than silently dropped. A variation schedule that quietly omitted three
+/// measurements is a schedule somebody prices as complete, and the omission is invisible precisely
+/// because the numbers that remain look fine.
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Excluded {
+    /// Measurements whose page has no scale, so they have no number at all. Left out rather than
+    /// counted as zero: a measurement whose scale is gone is not a measurement of nothing, and
+    /// adding it as nought makes a line look smaller rather than incomplete.
+    pub underived: usize,
+    /// Measurements derived from a scale nobody has confirmed — read off a title block by OCR, or
+    /// imported. They have numbers, and those numbers have not been stood behind by a person. A
+    /// variation schedule is the last place to present one as settled.
+    pub unconfirmed: usize,
+}
+
+/// The whole answer: what moved, and what was not counted.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevisionDelta {
+    /// Every line in either issue, including the ones that did not move.
+    pub changes: Vec<ChangeDto>,
+    /// What was left out of the totals on each side.
+    pub excluded: Excluded,
+}
+
+/// Compare the quantities of two issues of a drawing.
+///
+/// Deliberately not a geometric comparison — the engine already does that, aligning two sheets and
+/// clouding what moved. This answers the other question, the one somebody deciding on a variation
+/// is actually asking: **which numbers moved, and by how much**. A wall that shifted 50 mm may
+/// change nothing; a wall that did not move at all may have been re-clad and changed everything.
+///
+/// Both revisions must be in the open project. Comparing against a document from somewhere else
+/// would produce a schedule of differences between things that were never alternatives.
+///
+/// # Errors
+/// [`CommandError::no_project`], or a store error if either revision is unknown.
+#[tauri::command]
+pub fn revision_delta(
+    app: AppHandle,
+    before: String,
+    after: String,
+) -> CommandResult<RevisionDelta> {
+    let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
+    let earlier = revision_id(&before)?;
+    let later = revision_id(&after)?;
+
+    if earlier == later {
+        return Err(CommandError::invalid_request(
+            "That is the same issue on both sides, so there is nothing to compare.",
+        ));
+    }
+
+    with_open(&state, |package| {
+        // Both are read through the store, so a revision the interface named but the project does
+        // not hold is refused here rather than producing an empty column that reads as "everything
+        // was removed".
+        let mut excluded = Excluded::default();
+        let earlier_totals = quantities_of(package, earlier, &mut excluded)?;
+        let later_totals = quantities_of(package, later, &mut excluded)?;
+
+        let changes = sf_domain::compare_totals(&earlier_totals, &later_totals)
+            .into_iter()
+            .map(|change| ChangeDto {
+                code: change.line.code.clone(),
+                unit: change.line.unit.clone(),
+                before: change.before,
+                after: change.after,
+                difference: change.difference,
+                proportion: change.proportion(),
+                movement: match change.movement {
+                    sf_domain::Movement::Added => "added",
+                    sf_domain::Movement::Removed => "removed",
+                    sf_domain::Movement::Changed => "changed",
+                    sf_domain::Movement::Held => "held",
+                }
+                .to_owned(),
+            })
+            .collect();
+
+        Ok(RevisionDelta { changes, excluded })
+    })
+}
+
+/// Every measured quantity in a revision, totalled by cost code and unit.
+fn quantities_of(
+    package: &mut Package,
+    revision: sf_domain::DocumentRevisionId,
+    excluded: &mut Excluded,
+) -> CommandResult<std::collections::BTreeMap<sf_domain::Line, f64>> {
+    // Confirms the revision exists before reading markups against it: an unknown id would
+    // otherwise return no markups, which is indistinguishable from an issue nobody marked up.
+    package.store().revision(revision)?;
+
+    let mut rows = Vec::new();
+    for markup in package.store().markups(revision)? {
+        let Some(quantity) = markup.quantity else {
+            continue;
+        };
+
+        // No calibration, so no number. Counted as excluded rather than as zero: a measurement
+        // whose scale is gone is not a measurement of nothing.
+        let Some(value) = quantity.value else {
+            excluded.underived += 1;
+            continue;
+        };
+
+        // Derived, but from a scale nobody confirmed. It has a number and that number has not been
+        // stood behind, and this is the last document to blur that.
+        if quantity.provisional {
+            excluded.unconfirmed += 1;
+            continue;
+        }
+
+        rows.push((
+            markup.metadata.cost_code.clone(),
+            quantity.unit.clone(),
+            value,
+        ));
+    }
+
+    Ok(sf_domain::total_quantities(&rows)?)
+}
+
 /// The tutorial sheet, compiled into the binary.
 ///
 /// Generated by `scripts/make-welcome-sheet.mjs` rather than committed as an opaque blob, so the

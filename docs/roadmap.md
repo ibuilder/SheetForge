@@ -223,10 +223,11 @@ than evidence of a house style:
   and count markers where things were tallied, so the marked-up drawing reads as a takeoff rather
   than as a set of shapes with numbers in a spreadsheet somewhere else.
 
-- **Quantity-level revision deltas.** Their revision compare exports *"which numbers moved, not
-  which wall did"*. Ours is geometric — it clouds what changed on the sheet. Both are useful and
-  they answer different questions; a quantity delta is what goes in front of somebody deciding
-  whether a variation is real.
+- **Quantity-level revision deltas.** *Computed; no interface yet.* `revision_delta` totals the
+  measured quantities of two issues by cost code and unit and reports which lines moved, appeared
+  or vanished — the question somebody deciding on a variation is actually asking, as against the
+  geometric compare already on screen, which answers what moved on the sheet. What is missing is a
+  control to run it and somewhere to show the answer.
 
 - **Waste applied to the ordered quantity, never to the measured one.** A clean distinction we do
   not model at all, because there is no materials layer here yet. If one ever arrives, this is the

@@ -159,7 +159,17 @@ async function markupOverlay(
   for (const annotation of annotations) {
     // `zoom: scale` puts the geometry in the same space as the rasterised page: both are page
     // units multiplied by the same factor.
-    svg.append(drawAnnotation(annotation, { zoom: scale, feetInches: viewer.feetInches }));
+    // `labels: true` stated rather than inherited. The engine suppresses quantity text when this
+    // is false and draws it otherwise, so the default already does the right thing — but an
+    // exported takeoff whose numbers silently vanished because a default changed upstream is a
+    // failure nobody would notice until a recipient asked what the clouded areas measured.
+    svg.append(
+      drawAnnotation(annotation, {
+        zoom: scale,
+        labels: true,
+        feetInches: viewer.feetInches,
+      }),
+    );
   }
 
   // A blob URL rather than a data: URL. The markup on a busy sheet runs to hundreds of kilobytes
