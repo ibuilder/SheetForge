@@ -90,8 +90,9 @@ function readable(name: string): string {
 /**
  * Draw the cover.
  *
- * Rendered at the same size as the sheets it fronts, so an archive of pages does not open with one
- * item a different shape from all the others.
+ * Sized from the document's first page, so an archive does not open with one item a different
+ * shape from the rest. On a set of mixed sizes — a D-size plan set behind an A4 cover — it matches
+ * the first page rather than all of them, which is the best a single cover can do.
  *
  * @throws if a drawing surface cannot be obtained.
  */
@@ -183,6 +184,7 @@ export async function legendSheet(
   if (!blob) throw new Error("The legend could not be encoded.");
   return blob;
 }
+
 
 /** One block of swatches. Returns the y it finished at. */
 function drawKey(

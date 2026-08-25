@@ -104,31 +104,33 @@ export async function sheetAsPng(
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, width, height);
 
-  const proxy = await doc.page(page);
-  await proxy.render({
-    canvas,
-    canvasContext: context,
-    viewport: proxy.getViewport({ scale }),
-  }).promise;
+  // `finally`, not a trailing statement. A render that throws would otherwise leave the backing
+  // store held until the collector got to it, and at plot resolution that is hundreds of megabytes
+  // per failure — on exactly the path somebody retries.
+  try {
+    const proxy = await doc.page(page);
+    await proxy.render({
+      canvas,
+      canvasContext: context,
+      viewport: proxy.getViewport({ scale }),
+    }).promise;
 
-  const overlay = await markupOverlay(viewer, page, scale, width, height);
-  if (overlay) {
-    context.drawImage(overlay, 0, 0);
-    // A bitmap holds GPU-side memory until it is closed, and these are large.
-    overlay.close();
+    const overlay = await markupOverlay(viewer, page, scale, width, height);
+    if (overlay) {
+      context.drawImage(overlay, 0, 0);
+      // A bitmap holds GPU-side memory until it is closed, and these are large.
+      overlay.close();
+    }
+
+    if (stamp) drawIssueStamp(context, width, height, stamp);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("The image could not be encoded.");
+    return { blob, width, height, page };
+  } finally {
+    canvas.width = 0;
+    canvas.height = 0;
   }
-
-  if (stamp) drawIssueStamp(context, width, height, stamp);
-
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) throw new Error("The image could not be encoded.");
-
-  // Release the backing store rather than waiting for the collector; at plot resolution this is
-  // hundreds of megabytes.
-  canvas.width = 0;
-  canvas.height = 0;
-
-  return { blob, width, height, page };
 }
 
 /**

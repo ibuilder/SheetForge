@@ -237,34 +237,37 @@ async function rasteriseRedacted(
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, canvas.width, canvas.height);
 
-  const proxy = await doc.page(page);
-  await proxy.render({
-    canvas,
-    canvasContext: context,
-    viewport: proxy.getViewport({ scale }),
-  }).promise;
+  try {
+    const proxy = await doc.page(page);
+    await proxy.render({
+      canvas,
+      canvasContext: context,
+      viewport: proxy.getViewport({ scale }),
+    }).promise;
 
-  context.fillStyle = "#000000";
-  for (const redaction of redactions) {
-    const box = bounds(redaction);
-    if (!box) continue;
-    // Page space is y-up and canvas space is y-down, which is the classic way to paint a black
-    // box over the wrong half of a document.
-    context.fillRect(
-      box.x * scale,
-      canvas.height - (box.y + box.height) * scale,
-      box.width * scale,
-      box.height * scale,
-    );
+    context.fillStyle = "#000000";
+    for (const redaction of redactions) {
+      const box = bounds(redaction);
+      if (!box) continue;
+      // Page space is y-up and canvas space is y-down, which is the classic way to paint a black
+      // box over the wrong half of a document.
+      context.fillRect(
+        box.x * scale,
+        canvas.height - (box.y + box.height) * scale,
+        box.width * scale,
+        box.height * scale,
+      );
+    }
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("The redacted page could not be encoded.");
+    return new Uint8Array(await blob.arrayBuffer());
+  } finally {
+    // Released whatever happened. A failure here is the one path somebody retries, and retrying
+    // while the last attempt still holds its buffer is how a webview runs out of memory.
+    canvas.width = 0;
+    canvas.height = 0;
   }
-
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) throw new Error("The redacted page could not be encoded.");
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-
-  canvas.width = 0;
-  canvas.height = 0;
-  return bytes;
 }
 
 /** The rectangle a redaction covers, in page space. */

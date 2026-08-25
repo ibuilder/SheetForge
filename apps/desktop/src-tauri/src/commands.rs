@@ -414,6 +414,7 @@ pub async fn project_open(app: AppHandle) -> CommandResult<ProjectSummary> {
 #[tauri::command]
 pub fn project_current(app: AppHandle) -> CommandResult<Option<ProjectSummary>> {
     let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
     if !state.is_open() {
         return Ok(None);
     }
@@ -426,6 +427,10 @@ pub fn project_current(app: AppHandle) -> CommandResult<Option<ProjectSummary>> 
 /// Close the open project.
 #[tauri::command]
 pub fn project_close(app: AppHandle) {
+    // Deliberately ungated. Closing is not a way to reach anything: it releases what this process
+    // already had open and reads nothing. It also returns no result, so a refusal would have
+    // nowhere to go — and a capability check that cannot report its refusal is a check nobody can
+    // act on.
     let state = app.state::<AppState>();
     state.set_package(None);
 }
@@ -439,6 +444,7 @@ pub fn project_close(app: AppHandle) {
 pub async fn project_verify(app: AppHandle) -> CommandResult<VerifyReport> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
+        state.require(Capability::ProjectRead)?;
         with_open(&state, |package| {
             let sources_checked = package.manifest().sources.len();
             let audit_entries = package
@@ -1047,7 +1053,9 @@ pub struct Excluded {
 pub struct RevisionDelta {
     /// Every line in either issue, including the ones that did not move.
     pub changes: Vec<ChangeDto>,
-    /// What was left out of the totals on each side.
+    /// What was left out, counted across both issues together rather than per side. A caller
+    /// wanting to know the schedule is incomplete needs one number, and which side a skipped
+    /// measurement sat on does not change that answer.
     pub excluded: Excluded,
 }
 
@@ -1365,6 +1373,7 @@ pub async fn document_bytes(
 #[tauri::command]
 pub fn document_list(app: AppHandle) -> CommandResult<Vec<RevisionDto>> {
     let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
     with_open(&state, |package| {
         let store = package.store();
         let project = store.project()?.ok_or_else(CommandError::no_project)?;
@@ -1671,6 +1680,7 @@ pub fn calibration_get(
     page: u32,
 ) -> CommandResult<Option<Calibration>> {
     let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
     let id = revision_id(&revision)?;
     with_open(&state, |package| {
         Ok(package.store().calibration(id, page)?)
@@ -1684,6 +1694,7 @@ pub fn calibration_get(
 #[tauri::command]
 pub fn status_counts(app: AppHandle) -> CommandResult<Vec<(MarkupStatus, u64)>> {
     let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
     with_open(&state, |package| Ok(package.store().status_counts()?))
 }
 
@@ -2414,6 +2425,71 @@ mod tests {
         assert!(
             elapsed < std::time::Duration::from_secs(5),
             "8 MB took {elapsed:?} — this should be one pass, so look for a scan inside a scan",
+        );
+    }
+
+    /// Every command either checks a capability or is named here as not needing to.
+    ///
+    /// This audit was done by hand once and found five commands that read project state without a
+    /// check. None was exploitable — every role holds `ProjectRead` — but an omission is
+    /// indistinguishable from a deliberate exemption, and it becomes a real hole the day a role
+    /// without `ProjectRead` exists. Doing it by hand again next year is not a plan, so the file
+    /// checks itself.
+    ///
+    /// Adding a command therefore forces a decision: gate it, or say here why it does not need
+    /// gating. That is the point — the failure this prevents is not a wrong answer, it is nobody
+    /// having asked the question.
+    #[test]
+    fn every_command_is_gated_or_deliberately_exempt() {
+        /// Commands that legitimately need no capability, and why.
+        const EXEMPT: &[(&str, &str)] = &[
+            (
+                "app_info",
+                "reports the build, the actor and the limits. It is how the interface learns who                  it is acting as, so requiring a capability to ask would be circular, and it                  touches no project.",
+            ),
+            (
+                "scale_check",
+                "arithmetic on two numbers the caller already had. It opens nothing and reads                  nothing.",
+            ),
+            (
+                "project_close",
+                "releases what this process already had open, reads nothing, and returns nothing                  — so a refusal would have nowhere to go.",
+            ),
+            (
+                "diagnostics_save",
+                "writes the bundle ADR-0007 offers in place of telemetry. It reports counts                  rather than contents, and a person unable to produce a support bundle cannot ask                  for help.",
+            ),
+        ];
+
+        let source = include_str!("commands.rs");
+        let mut ungated = Vec::new();
+
+        for chunk in source.split("#[tauri::command]").skip(1) {
+            let Some(signature) = chunk.find("pub ") else {
+                continue;
+            };
+            let after = &chunk[signature..];
+            let name: String = after
+                .trim_start_matches("pub ")
+                .trim_start_matches("async ")
+                .trim_start_matches("fn ")
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+
+            // The body up to the next command, which is where a check would be.
+            if chunk.contains("state.require(") {
+                continue;
+            }
+            if EXEMPT.iter().any(|(exempt, _)| *exempt == name) {
+                continue;
+            }
+            ungated.push(name);
+        }
+
+        assert!(
+            ungated.is_empty(),
+            "these commands check no capability and are not listed as exempt: {ungated:?}.              Either gate them, or add them to EXEMPT with the reason they do not need it.",
         );
     }
 
