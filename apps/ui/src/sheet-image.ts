@@ -27,6 +27,7 @@
 import { drawAnnotation, SVG_NS, zip, type Viewer, type ZipEntry } from "@massingcloud/pdf-viewer";
 
 import { asBlobPart } from "./bytes";
+import { legendSheet, summarise } from "./legend";
 
 /** What a chosen resolution is actually for. */
 export interface Resolution {
@@ -253,8 +254,13 @@ export interface SheetSet {
  * Uncompressed entries, because the engine's zip stores rather than deflates and PNGs are already
  * compressed — deflating them again would spend time to save almost nothing.
  *
- * @param onProgress Called before each page. A 200-sheet set takes minutes, and a window that
- *   says nothing for minutes is indistinguishable from one that has hung.
+ * The archive opens with a legend: what the colours mean, how many of each, and how much of the
+ * set carries any markup at all. That last number is the one a recipient most needs and would
+ * never think to ask for.
+ *
+ * @param onProgress Called before each page, and once for the cover. A 200-sheet set takes
+ *   minutes, and a window that says nothing for minutes is indistinguishable from one that has
+ *   hung.
  * @throws if no document is open, or the archive would be too large to hold in memory.
  */
 export async function sheetsAsZip(
@@ -269,6 +275,24 @@ export async function sheetsAsZip(
   const pages = doc.numPages;
   const entries: ZipEntry[] = [];
   let total = 0;
+
+  // The cover goes in first and sorts first. A set arriving with coloured markup and no key leaves
+  // the recipient guessing which colour meant which discipline — and, more importantly, with no
+  // way to tell an unmarked sheet that was reviewed from one nobody opened.
+  onProgress(0, pages);
+  const first = await doc.pageInfo(1);
+  const cover = await legendSheet(
+    summarise(viewer),
+    viewer.doc?.name ?? "Drawing set",
+    first.width,
+    first.height,
+    dpi,
+  );
+  entries.push({
+    name: "000-legend.png",
+    data: new Uint8Array(await cover.arrayBuffer()),
+  });
+  total += cover.size;
 
   for (let page = 1; page <= pages; page += 1) {
     onProgress(page, pages);

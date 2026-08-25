@@ -905,6 +905,11 @@ test.describe("the drawing's own contents", () => {
  * export whose test only ever saw one page would not be testing the bulk part.
  */
 test.describe("exporting every sheet", () => {
+  // Rendering three full ARCH D sheets — a legend and two pages — at 96 DPI is genuinely slow, and
+  // the default 30 seconds is not enough on a loaded machine. Raised rather than made faster: the
+  // work is real, and a test that hurries it would be testing something the product does not do.
+  test.setTimeout(120_000);
+
   test("produces a ZIP with one entry per sheet", async ({ page }) => {
     await stubHost(page, Array.from(TUTORIAL_SHEET), { firstRun: true });
     await page.goto("/");
@@ -940,8 +945,9 @@ test.describe("exporting every sheet", () => {
     }, archive);
 
     // Zero-padded, so an archive of a 200-sheet set sorts the way the set is ordered rather than
-    // putting sheet 10 before sheet 2.
-    expect(names).toEqual(["001.png", "002.png"]);
+    // putting sheet 10 before sheet 2 — and the legend sorts before both, because a recipient
+    // opening the archive should meet the key before the drawings.
+    expect(names).toEqual(["000-legend.png", "001.png", "002.png"]);
   });
 });
 

@@ -422,7 +422,11 @@ async function exportSheetSet(
     viewer,
     dpi,
     (page, of) => {
-      chrome.setStatus(`Rendering sheet ${page} of ${of} at ${dpi} DPI…`);
+      chrome.setStatus(
+        page === 0
+          ? "Building the legend…"
+          : `Rendering sheet ${page} of ${of} at ${dpi} DPI…`,
+      );
     },
     stamp,
   );

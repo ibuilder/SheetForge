@@ -151,6 +151,18 @@ things are missing and some of them should not be".
 
 ### Done, prompted by this comparison
 
+- **A legend cover, and a review tally.** An exported set now opens with a cover sheet: what each
+  colour means, in words beside the swatch, with counts by discipline and by status.
+
+  The part worth the work is the tally. It says *how many sheets carry any markup at all* — "14 of
+  200" — and says explicitly that the rest may simply not have been looked at. A recipient
+  otherwise reads an unmarked sheet as reviewed and found correct, which is the most consequential
+  wrong assumption anybody makes about a marked-up set, and nothing in the file corrects them.
+
+  Counted by sheet rather than by markup, because forty comments on one page is one page reviewed.
+  Redactions are excluded: a redaction is an instruction to the exporter, not something anybody
+  said about the drawing.
+
 - **A sheet as a picture.** One page, with its markups on it, as a PNG at 96, 150 or 300 DPI —
   because the request a reviewer actually gets is "send me a picture of the bit you clouded", and
   the answer until now was a screenshot cropped to whatever was on screen. The markups are
@@ -202,16 +214,14 @@ than evidence of a house style:
 
 - **Checking a dimension, graded.** *Shipped* — see below.
 
-- **A review tally on the exported set.** Their marked-up PDF carries "a tally of how much of the
-  set a person has actually reviewed". That is arguably more on-mission for a review desk than for
-  an estimating tool, and the sheet register already holds what is needed to compute it. Scheduled.
+- **A review tally on the exported set.** *Shipped* — see below.
 
 ### Worth having, and scheduled
 
-- **Colour and hatch by condition, with a legend cover page.** Their export "burns the work into
-  the drawings as drawn — condition colors, hatches, quantity chips, count markers — behind a
-  legend cover with totals". Our exports carry markups in discipline colours with no key, so a
-  recipient sees colours nobody has explained to them.
+- **Hatch and quantity chips burnt into the drawing.** *The legend half is done* — see below. What
+  is still theirs alone is drawing the *quantities* onto the sheet: chips beside each measurement
+  and count markers where things were tallied, so the marked-up drawing reads as a takeoff rather
+  than as a set of shapes with numbers in a spreadsheet somewhere else.
 
 - **Quantity-level revision deltas.** Their revision compare exports *"which numbers moved, not
   which wall did"*. Ours is geometric — it clouds what changed on the sheet. Both are useful and

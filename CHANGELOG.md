@@ -77,6 +77,10 @@ First release. The core is built and tested; the shell is young. See
 - An issue status stamped across an exported image — "NOT FOR CONSTRUCTION" or whatever you are
   issuing under. A marked-up review copy that reaches a subcontractor looking like an issued
   drawing is how somebody builds the wrong thing.
+- An exported set opens with a legend: what each colour means, in words beside the swatch, with
+  counts by discipline and status — and a tally of how many sheets carry any markup at all. Without
+  it a recipient reads an unmarked sheet as reviewed and found correct, when it may simply never
+  have been opened.
 - Every sheet as PNGs in one ZIP, at screen or print resolution. One save dialog rather than one
   per sheet, and no folder picker — which would have meant a directory handle held across calls
   and a second place for "no command takes a path" to be got wrong.
