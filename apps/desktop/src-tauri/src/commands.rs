@@ -1119,6 +1119,67 @@ pub fn revision_delta(
     })
 }
 
+/// One line of a takeoff: everything measured under one cost code, in one unit.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TotalLine {
+    /// The cost code, or `None` when the markups carried none.
+    pub code: Option<String>,
+    /// The unit. Part of the identity of the line rather than a display detail: a length and an
+    /// area under one code are two lines, and adding them would be nonsense that looked like a
+    /// total.
+    pub unit: String,
+    /// The total.
+    pub value: f64,
+}
+
+/// A takeoff of one drawing, and what it does not include.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Takeoff {
+    /// Every line, in the domain's own ordering so the list is stable between calls. A panel that
+    /// reshuffles when a markup is added is one nobody can read a running total from.
+    pub lines: Vec<TotalLine>,
+    /// What was left out of those totals, and why.
+    pub excluded: Excluded,
+}
+
+/// Total the measured quantities on one drawing.
+///
+/// The same arithmetic the comparison uses, against one revision rather than two — deliberately
+/// sharing [`quantities_of`] rather than reimplementing it, because two totalling paths that
+/// drift apart produce a schedule and a comparison that disagree, and there is no way to tell
+/// from either which one is wrong.
+///
+/// The exclusions travel with the answer for the same reason they do in the comparison: a total
+/// that quietly dropped the measurements taken at an unconfirmed scale is a total somebody prices
+/// as complete.
+///
+/// # Errors
+/// [`CommandError::no_project`], or a store error if the revision is unknown.
+#[tauri::command]
+pub fn takeoff_totals(app: AppHandle, revision: String) -> CommandResult<Takeoff> {
+    let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
+    let wanted = revision_id(&revision)?;
+
+    with_open(&state, |package| {
+        let mut excluded = Excluded::default();
+        let totals = quantities_of(package, wanted, &mut excluded)?;
+
+        let lines = totals
+            .into_iter()
+            .map(|(line, value)| TotalLine {
+                code: line.code,
+                unit: line.unit,
+                value,
+            })
+            .collect();
+
+        Ok(Takeoff { lines, excluded })
+    })
+}
+
 /// Every measured quantity in a revision, totalled by cost code and unit.
 fn quantities_of(
     package: &mut Package,

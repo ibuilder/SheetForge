@@ -28,6 +28,7 @@ import { applyIcons } from "./icons";
 import { ocrOptions } from "./ocr";
 import { asBlobPart } from "./bytes";
 import { extractPages, parsePageSelection } from "./assemble";
+import { deltaCsv, summarise as summariseDelta } from "./delta-csv";
 import { asPdfBlob, isRedaction, redactionPlugin } from "./redact";
 import { describe as describeCheck, scaleCheckPlugin } from "./scale-check";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
@@ -77,6 +78,7 @@ async function start(): Promise<void> {
       await session?.viewer.goToPage(page);
     }),
     onFilterRevision: (revision) => void guard(() => showRegister(chrome, revision)),
+    onCompareQuantities: () => void guard(() => compareQuantities(chrome)),
     recentProjects: () => recent,
     onVerify: () => void guard(() => verify(chrome)),
     onDiagnostics: () => void guard(() => saveDiagnostics(chrome)),
@@ -622,6 +624,59 @@ async function openAttachment(chrome: Chrome, attachment: { url?: string; name: 
   }
 }
 
+/**
+ * Compare this drawing's quantities with another's.
+ *
+ * Against any other drawing in the project rather than "the previous issue of this one": every
+ * import creates its own document, so that relationship does not exist in the store today. Saying
+ * so out loud beats offering a control that is permanently unavailable.
+ *
+ * The answer leaves as CSV because the next thing that happens to it is that somebody opens it
+ * beside a bill of quantities. The status line carries the headline first, so the outcome is known
+ * before the file is.
+ */
+async function compareQuantities(chrome: Chrome): Promise<void> {
+  const current = session;
+  if (!current) {
+    chrome.setStatus("Open a drawing first.");
+    return;
+  }
+
+  const others = (await host.documentList()).filter(
+    (revision) => revision.id !== current.revision.id,
+  );
+  if (others.length === 0) {
+    chrome.setStatus(
+      "There is only one drawing in this project, so there is nothing to compare it with.",
+    );
+    return;
+  }
+
+  const chosen = chrome.askWhichDrawing(others.map((revision) => revision.name));
+  if (chosen === undefined) return;
+  const other = others[chosen];
+  if (!other) return;
+
+  chrome.setStatus(`Comparing ${other.name} with ${current.revision.name}…`);
+  // The chosen drawing is the *earlier* side. Comparing "what it was" against "what is open" is
+  // the direction somebody reads a variation in, and getting it backwards would report every
+  // increase as a saving.
+  const delta = await host.revisionDelta(other.id, current.revision.id);
+
+  const csv = deltaCsv(delta.changes, delta.excluded, other.name, current.revision.name);
+  await deliverExport(
+    chrome,
+    new Blob([csv], { type: "text/csv" }),
+    `${other.name} to ${current.revision.name} (quantities).csv`,
+  );
+
+  const excluded =
+    delta.excluded.underived + delta.excluded.unconfirmed > 0
+      ? ` ${delta.excluded.underived + delta.excluded.unconfirmed} measurement(s) were left out — see the foot of the file.`
+      : "";
+  chrome.setStatus(`${summariseDelta(delta.changes)}${excluded}`);
+}
+
 async function createProject(chrome: Chrome): Promise<void> {
   const name = chrome.askForProjectName();
   if (!name) return;
@@ -690,6 +745,22 @@ async function showOutline(chrome: Chrome, viewer: Viewer): Promise<void> {
  * Not fatal. A register that cannot be read is a panel that does not appear, not a drawing that
  * will not open.
  */
+/**
+ * Put the running takeoff on screen.
+ *
+ * Every other quantity output in this application is a file. That is the wrong shape for the thing
+ * a reviewer is building *while* they measure: they want to see the total move as they go, and
+ * catch the measurement that landed under the wrong cost code at the moment they made it rather
+ * than in a spreadsheet the following week.
+ *
+ * Refreshed after each save rather than after each markup, because a save is the point at which
+ * the host — the only thing that can total anything — actually knows about the measurement.
+ */
+async function showTakeoff(chrome: Chrome, revision: string): Promise<void> {
+  const takeoff = await host.takeoffTotals(revision);
+  chrome.setTakeoff(takeoff.lines, takeoff.excluded);
+}
+
 async function showRegister(chrome: Chrome, revision: string | undefined): Promise<void> {
   const current = session;
   if (!current) {
@@ -877,6 +948,16 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
     if (state === "saving") chrome.setSaveState("saving");
     else if (state === "error") chrome.setSaveState("error", message ?? "check the project folder");
     else chrome.setSaveState("saved", pending > 0 ? `${pending} pending` : undefined);
+
+    // The totals move when a measurement is filed, and a settled adapter is when the host has
+    // actually been told of one — `idle` is the engine's name for that, and is the same branch the
+    // save indicator above reports as "saved".
+    // Deliberately not awaited and deliberately swallowing its own failure: this is a number in a
+    // side panel, and a refresh that could not reach the host must not turn a successful save into
+    // an error the reviewer sees. The panel keeps the last total it had until the next save.
+    if (state === "idle" && session) {
+      void showTakeoff(chrome, session.revision.id).catch(() => {});
+    }
   });
 
   await viewer.load(new Uint8Array(bytes));
@@ -887,6 +968,7 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
   chrome.setActiveRevision(revision);
   await showOutline(chrome, viewer);
   await showRegister(chrome, undefined);
+  await showTakeoff(chrome, revision.id);
   await restoreViews(viewer, revision.id);
   chrome.setStatus(
     `${revision.name}${revision.revisionLabel ? ` rev ${revision.revisionLabel}` : ""} — ` +

@@ -86,6 +86,7 @@ export interface RecentProject {
   available: boolean;
 }
 
+import type { DeltaExclusions, DeltaLine } from "./delta-csv";
 import type { CheckOutcome } from "./scale-check";
 
 /** Where an attachment ended up. */
@@ -94,6 +95,14 @@ export interface StoredAttachment {
   id: string;
   shortId: string;
   byteLen: number;
+}
+
+/** One line of a takeoff: everything measured under one cost code, in one unit. */
+export interface TotalLine {
+  code: string | null;
+  /** Part of the line's identity, not a display detail — a length and an area are two lines. */
+  unit: string;
+  value: number;
 }
 
 /** A saved view as the host holds it. */
@@ -417,6 +426,25 @@ export const host = {
    */
   scaleCheck: (expected: number, measured: number) =>
     call<CheckOutcome>("scale_check", { expected, measured }),
+
+  /**
+   * Compare the quantities of two drawings.
+   *
+   * Any two in the project, not two revisions of one document: every import creates its own
+   * document, so "the previous issue of this drawing" is a relationship the store does not
+   * currently hold. The host does not care either way — it takes two revisions and totals them.
+   */
+  revisionDelta: (before: string, after: string) =>
+    call<{ changes: DeltaLine[]; excluded: DeltaExclusions }>("revision_delta", { before, after }),
+
+  /**
+   * Total the measured quantities on one drawing.
+   *
+   * The same arithmetic the comparison uses, against a single revision. Asked for on every markup
+   * change, so the running total on screen is the one a reviewer is actually building.
+   */
+  takeoffTotals: (revision: string) =>
+    call<{ lines: TotalLine[]; excluded: DeltaExclusions }>("takeoff_totals", { revision }),
 
   viewList: (revision: string) => call<HostView[]>("view_list", { revision }),
   viewReplace: (revision: string, views: HostView[]) =>

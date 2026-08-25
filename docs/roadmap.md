@@ -223,11 +223,19 @@ than evidence of a house style:
   and count markers where things were tallied, so the marked-up drawing reads as a takeoff rather
   than as a set of shapes with numbers in a spreadsheet somewhere else.
 
-- **Quantity-level revision deltas.** *Computed; no interface yet.* `revision_delta` totals the
-  measured quantities of two issues by cost code and unit and reports which lines moved, appeared
-  or vanished — the question somebody deciding on a variation is actually asking, as against the
-  geometric compare already on screen, which answers what moved on the sheet. What is missing is a
-  control to run it and somewhere to show the answer.
+- **Quantity-level revision deltas.** *Done, as a file.* `revision_delta` totals the measured
+  quantities of two drawings by cost code and unit and reports which lines moved, appeared or
+  vanished — the question somebody deciding on a variation is actually asking, as against the
+  geometric compare already on screen, which answers what moved on the sheet. **Project ▾ → Compare
+  quantities with…** runs it and writes a CSV, with the unchanged lines kept so the schedule can be
+  checked rather than trusted, and the excluded measurements named at the foot. The totals for a
+  single drawing are now on screen as well — see the running takeoff, below — so the comparison is
+  the only half of this that is still file-only.
+
+- ~~**A running takeoff on screen.**~~ *Done.* Totals for the open drawing in the sidebar, by cost
+  code and unit, refreshed as each measurement is filed. Shares the host's totalling with the
+  comparison rather than reimplementing it, and a domain test pins the two together at the
+  arithmetic: a panel and a schedule that disagree give a reader no way to tell which is wrong.
 
 - **Waste applied to the ordered quantity, never to the measured one.** A clean distinction we do
   not model at all, because there is no materials layer here yet. If one ever arrives, this is the

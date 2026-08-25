@@ -346,4 +346,48 @@ mod tests {
         assert_eq!(changes[0].movement, Movement::Held);
         assert_eq!(changes[0].proportion(), None);
     }
+
+    /// The panel and the comparison must never disagree.
+    ///
+    /// The takeoff panel shows `total(x)`. The comparison shows, in its `after` column,
+    /// `compare(anything, x)`. Those are two paths to the same number, and if they ever drift
+    /// apart the result is a running total on screen that does not match the schedule somebody
+    /// exports thirty seconds later — with nothing to say which of the two is wrong.
+    ///
+    /// This pins them together at the only place they can be pinned: the arithmetic itself.
+    #[test]
+    fn a_comparison_reports_the_same_totals_the_panel_shows() {
+        let quantities = vec![
+            (Some("03 30 00".to_owned()), "m3".to_owned(), 12.5),
+            (Some("03 30 00".to_owned()), "m3".to_owned(), 7.5),
+            (Some("03 30 00".to_owned()), "m2".to_owned(), 100.0),
+            (None, "m".to_owned(), 44.0),
+        ];
+
+        let panel = total(&quantities).expect("totals");
+        let comparison = compare(&BTreeMap::new(), &panel);
+
+        // Every line the panel shows appears in the comparison carrying the identical number.
+        for (line, shown) in &panel {
+            let change = comparison
+                .iter()
+                .find(|change| &change.line == line)
+                .unwrap_or_else(|| panic!("the comparison dropped the line {line:?}"));
+            // Bit equality rather than a tolerance, deliberately. The claim is not "these are
+            // close" — it is that both paths hand back the very same f64, because `compare` reads
+            // it out of the map `total` built. A tolerance here would let real drift through.
+            assert_eq!(
+                change.after.to_bits(),
+                shown.to_bits(),
+                "the panel and the comparison disagree about {line:?}"
+            );
+        }
+
+        // And the comparison invents nothing the panel does not show.
+        assert_eq!(
+            comparison.len(),
+            panel.len(),
+            "the comparison has lines the panel does not"
+        );
+    }
 }

@@ -6,6 +6,33 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **A running takeoff on screen**, in the sidebar under the sheet register. Totals what has been
+  measured on the open drawing by cost code *and* unit, and updates as each measurement is filed.
+  Every other quantity output here is a file, which is the wrong shape for the thing a reviewer is
+  building while they measure: the point is catching the measurement that landed under the wrong
+  cost code at the moment it was made, rather than in a spreadsheet the following week.
+
+  One code in two units stays two lines. Adding a volume to an area would produce a number with a
+  plausible magnitude sitting under a real cost code — wrong in no way a reader can see.
+
+  What is not counted is said in words beneath the totals, not shown as a badge or a colour: the
+  reader who most needs to know that three measurements are missing is the one about to quote the
+  number.
+
+- **Compare the quantities on two drawings** — *Project ▾ → Compare quantities with…*. Totals the
+  measured quantities of both by cost code and unit and writes the comparison as CSV: what moved,
+  by how much, and in which direction. The lines that did **not** move are in the file too, because
+  a schedule of only the differences cannot be checked — a line that held and a line that was never
+  compared look identical without them. Measurements taken on a page with no scale, or at a scale
+  nobody has confirmed, are excluded from the totals and named at the foot of the file rather than
+  counted as zero.
+
+  It compares against any other drawing in the project rather than against "the previous issue of
+  this one": every import creates its own document, so that relationship does not exist in the
+  store today, and offering a control that could never work would be worse than asking.
+
 ## [0.1.0] — 2026-08-24
 
 First release. The core is built and tested; the shell is young. See

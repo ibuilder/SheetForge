@@ -139,6 +139,7 @@ pub fn run() {
             commands::attachment_bytes,
             commands::scale_check,
             commands::revision_delta,
+            commands::takeoff_totals,
             commands::markup_create,
             commands::markup_create_many,
             commands::markup_update,

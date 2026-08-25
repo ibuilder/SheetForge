@@ -76,6 +76,23 @@ const REVISION = {
   importedAt: "2026-08-20T10:00:00.000Z",
 };
 
+/**
+ * A second drawing in the same project.
+ *
+ * It exists so the quantity comparison has something to compare against. Every import creates its
+ * own document, so two drawings in a project are two documents — which is why the comparison asks
+ * "which one?" rather than assuming "the previous issue of this".
+ */
+const EARLIER_REVISION = {
+  id: "0192f0c1-0000-7000-8000-0000000000dd",
+  sourceDocumentId: "0192f0c1-0000-7000-8000-0000000000ee",
+  name: "Rev B — tender",
+  revisionLabel: "B",
+  pageCount: 1,
+  shortHash: "99887766aabb",
+  importedAt: "2026-08-19T10:00:00.000Z",
+};
+
 const PROJECT = {
   id: "0192f0c1-0000-7000-8000-0000000000cc",
   name: "A-201",
@@ -103,10 +120,14 @@ const PROJECT = {
 async function stubHost(
   page: Page,
   pdf: number[],
-  { firstRun = false, markups = [] }: { firstRun?: boolean; markups?: unknown[] } = {},
+  {
+    firstRun = false,
+    markups = [],
+    secondDrawing = false,
+  }: { firstRun?: boolean; markups?: unknown[]; secondDrawing?: boolean } = {},
 ): Promise<void> {
   await page.addInitScript(
-    ({ pdfBytes, revision, project, returning, seeded }) => {
+    ({ pdfBytes, revision, earlier, project, returning, seeded, alsoEarlier }) => {
       // Set before any application script runs, which is the only moment early enough: the
       // interface reads this during start-up.
       if (returning) localStorage.setItem("sheetforge.tutorial-offered", "yes");
@@ -114,6 +135,7 @@ async function stubHost(
       const saved: Record<string, unknown>[] = [];
       (window as unknown as { __sfSaved: unknown[] }).__sfSaved = saved;
       (window as unknown as { __sfExported: unknown[] }).__sfExported = [];
+      (window as unknown as { __sfCompared: unknown[] }).__sfCompared = [];
       (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened = [];
       (window as unknown as { __sfDerived: unknown[] }).__sfDerived = [];
       (window as unknown as { __sfSheets: unknown[] }).__sfSheets = [];
@@ -241,7 +263,60 @@ async function stubHost(
                 reopened: false,
               });
             case "document_list":
-              return Promise.resolve([revision]);
+              // One drawing unless a test asks for two, which is the ordinary state right after
+              // the first import. The open one is first, because `openRecent` opens whichever is.
+              return Promise.resolve(alsoEarlier ? [revision, earlier] : [revision]);
+            case "takeoff_totals":
+              return Promise.resolve({
+                lines: [
+                  // A cost code carrying a comma and a quotation mark, and two units under one
+                  // code — the two things that must stay distinct on screen.
+                  { code: 'Blockwork, 4" leaf', unit: "m2", value: 128.5 },
+                  { code: "03 30 00", unit: "m3", value: 12 },
+                  { code: "03 30 00", unit: "m2", value: 250.25 },
+                  { code: null, unit: "m", value: 44 },
+                ],
+                excluded: { underived: 2, unconfirmed: 1 },
+              });
+            case "revision_delta":
+              (window as unknown as { __sfCompared: unknown[] }).__sfCompared.push({
+                before: args["before"],
+                after: args["after"],
+              });
+              return Promise.resolve({
+                changes: [
+                  {
+                    // A comma and a quotation mark in one cost code: the case that shifts the
+                    // columns if the file is written naively.
+                    code: 'Blockwork, 4" leaf',
+                    unit: "m2",
+                    before: 100,
+                    after: 128.5,
+                    difference: 28.5,
+                    proportion: 0.285,
+                    movement: "changed",
+                  },
+                  {
+                    code: "03 30 00",
+                    unit: "m3",
+                    before: 12,
+                    after: 12,
+                    difference: 0,
+                    proportion: 0,
+                    movement: "held",
+                  },
+                  {
+                    code: null,
+                    unit: "m",
+                    before: 0,
+                    after: 44,
+                    difference: 44,
+                    proportion: null,
+                    movement: "added",
+                  },
+                ],
+                excluded: { underived: 2, unconfirmed: 1 },
+              });
             case "document_bytes":
               // The host returns raw bytes, which reach the interface as an ArrayBuffer.
               return Promise.resolve(new Uint8Array(pdfBytes).buffer);
@@ -326,7 +401,15 @@ async function stubHost(
         },
       };
     },
-    { pdfBytes: pdf, revision: REVISION, project: PROJECT, returning: !firstRun, seeded: markups },
+    {
+      pdfBytes: pdf,
+      revision: REVISION,
+      earlier: EARLIER_REVISION,
+      project: PROJECT,
+      returning: !firstRun,
+      seeded: markups,
+      alsoEarlier: secondDrawing,
+    },
   );
 }
 
@@ -1245,5 +1328,206 @@ test.describe("saved views", () => {
     // The engine's own Saved views panel lists what it holds. If the restore did not run, this is
     // the empty-state text instead.
     await expect(page.getByText("Clash at F/4")).toBeVisible({ timeout: 20_000 });
+  });
+});
+
+/**
+ * Comparing the quantities on two drawings.
+ *
+ * This is the answer somebody takes into a variation meeting, so the thing worth testing is not
+ * that a file appears — it is that the file is *readable by a spreadsheet without shifting a
+ * column*, and that it says what was left out. A comparison that quietly drops the measurements
+ * taken at an unconfirmed scale is one somebody prices as complete.
+ *
+ * The direction matters too. The chosen drawing is the earlier side; getting that backwards would
+ * report every increase as a saving, and nothing about the file would look wrong.
+ */
+test.describe("comparing quantities between two drawings", () => {
+  test("writes a CSV that survives a comma, and says what it left out", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()), { secondDrawing: true });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    // The other drawing is chosen from a numbered list. One other drawing, so "1".
+    page.on("dialog", (dialog) => void dialog.accept("1"));
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    await page.getByRole("menuitem", { name: /Compare quantities with/ }).click();
+
+    await expect
+      .poll(
+        () => page.evaluate(() => (window as unknown as { __sfExported: unknown[] }).__sfExported.length),
+        { timeout: 30_000 },
+      )
+      .toBeGreaterThan(0);
+
+    // The earlier drawing is asked for as `before`, the open one as `after`.
+    const asked = await page.evaluate(
+      () => (window as unknown as { __sfCompared: Record<string, string>[] }).__sfCompared,
+    );
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!["before"], "the chosen drawing must be the earlier side").toBe(
+      "0192f0c1-0000-7000-8000-0000000000dd",
+    );
+    expect(asked[0]!["after"]).toBe("0192f0c1-0000-7000-8000-0000000000aa");
+
+    const written = await page.evaluate(() => {
+      const all = (window as unknown as { __sfExported: Record<string, unknown>[] }).__sfExported;
+      const last = all[all.length - 1]!;
+      return {
+        name: last["suggestedName"] as string,
+        extension: last["extension"] as string,
+        text: new TextDecoder().decode(new Uint8Array(last["bytes"] as number[])),
+        firstBytes: (last["bytes"] as number[]).slice(0, 3),
+      };
+    });
+
+    expect(written.extension).toBe("csv");
+    expect(written.name).toContain("Rev B — tender");
+
+    // The byte-order mark survives the trip to the host as bytes, not just as a string in the
+    // interface. Without it Excel on Windows reads the file in the ANSI codepage and every square
+    // metre in it arrives mangled — and this is the only test that sees the actual bytes.
+    expect(written.firstBytes).toEqual([0xef, 0xbb, 0xbf]);
+
+    const rows = written.text.split("\r\n");
+    // The header names both drawings, so a file found on a desktop months later still says what
+    // it compared.
+    expect(rows[0]).toContain("Rev B — tender");
+    expect(rows[0]).toContain("A-201");
+
+    // The cost code carries a comma and a quotation mark. Quoted and doubled, it stays one field;
+    // unescaped, every number after it would sit under the wrong heading.
+    expect(written.text).toContain('"Blockwork, 4"" leaf"');
+
+    // Seven fields on the awkward row, counted the way a parser would rather than by splitting on
+    // every comma.
+    const awkward = rows.find((row) => row.startsWith('"Blockwork'))!;
+    expect(fieldsOf(awkward)).toEqual([
+      'Blockwork, 4" leaf',
+      "m2",
+      "100",
+      "128.5",
+      "28.5",
+      "28.5",
+      "changed",
+    ]);
+
+    // The line that did not move is still in the file. A schedule of only the differences cannot
+    // be checked: a line that held and a line that was never compared look identical.
+    expect(written.text).toContain("held");
+
+    // And an added line with nothing to be a percentage of leaves that cell empty rather than
+    // writing "Infinity", which a spreadsheet would happily total.
+    expect(written.text).not.toContain("Infinity");
+    expect(written.text).not.toContain("NaN");
+
+    // What was left out, at the foot of the file.
+    expect(written.text).toContain("2 measurement(s) on pages with no scale");
+    expect(written.text).toContain("1 measurement(s) taken at a scale nobody has confirmed");
+
+    // The status line carries the headline, so the outcome is known before the file is opened —
+    // including the fact that something was excluded.
+    const status = page.locator("[data-status]");
+    await expect(status).toContainText("1 changed");
+    await expect(status).toContainText("1 added");
+    await expect(status).toContainText("3 measurement(s) were left out");
+  });
+
+  test("says so rather than offering an empty comparison when there is nothing to compare", async ({
+    page,
+  }) => {
+    // No second drawing: the ordinary state right after the first import.
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    await page.getByRole("menuitem", { name: /Compare quantities with/ }).click();
+
+    await expect(page.locator("[data-status]")).toContainText("only one drawing");
+    // Nothing was written, and nothing was asked of the host.
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __sfCompared: unknown[] }).__sfCompared.length,
+      ),
+    ).toBe(0);
+  });
+});
+
+/**
+ * Split a CSV row the way a parser does, honouring quotes.
+ *
+ * Splitting on every comma is precisely the bug the quoting exists to prevent, so a test that
+ * checked the columns that way would pass on a file no spreadsheet could read.
+ */
+function fieldsOf(row: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < row.length; index += 1) {
+    const character = row[index]!;
+    if (quoted) {
+      if (character !== '"') current += character;
+      else if (row[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else quoted = false;
+    } else if (character === '"') quoted = true;
+    else if (character === ",") {
+      fields.push(current);
+      current = "";
+    } else current += character;
+  }
+  fields.push(current);
+  return fields;
+}
+
+/**
+ * The running takeoff, on screen rather than in a file.
+ *
+ * Every other quantity output here is an export, which is the wrong shape for the thing a reviewer
+ * builds *while* they measure. The point of the panel is catching the measurement that landed
+ * under the wrong cost code at the moment it was made, rather than in a spreadsheet next week.
+ *
+ * The part worth testing hardest is the exclusion line. A total that quietly dropped three
+ * measurements looks entirely reasonable, and somebody prices it as complete.
+ */
+test.describe("the running takeoff", () => {
+  test("totals by cost code and unit, and says what it has not counted", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    const takeoff = page.getByRole("table", { name: "Takeoff" });
+    await expect(takeoff).toBeVisible();
+
+    // A table, so a screen reader announces each total with the code and unit it belongs to
+    // rather than as three loose fragments.
+    const rows = takeoff.locator("tbody tr");
+    await expect(rows).toHaveCount(4);
+
+    // One code in two units stays two lines. Adding a volume to an area would produce a number
+    // with a plausible magnitude sitting under a real cost code — wrong in no way a reader sees.
+    const concrete = rows.filter({ hasText: "03 30 00" });
+    await expect(concrete).toHaveCount(2);
+    await expect(concrete.filter({ hasText: "m3" })).toContainText("12");
+    await expect(concrete.filter({ hasText: "m2" })).toContainText("250.25");
+
+    // A quantity with no cost code is named, not blank. A blank cell reads as "nobody filled this
+    // in", which is a different problem from "these carry no code".
+    await expect(rows.filter({ hasText: "(no cost code)" })).toContainText("44");
+
+    // And the omission, in words. Not a badge, not a colour: the reader who most needs this is
+    // the one about to quote the number, and they may not see colour at all.
+    const excluded = page.locator(".sf-takeoff-excluded");
+    await expect(excluded).toBeVisible();
+    await expect(excluded).toContainText("2 on pages with no scale");
+    await expect(excluded).toContainText("1 taken at a scale nobody has confirmed");
+    await expect(excluded).toContainText("left out rather than counted as zero");
   });
 });

@@ -59,6 +59,30 @@ export interface OutlineEntry {
 }
 
 /**
+ * One line of the running takeoff: everything measured under one cost code, in one unit.
+ *
+ * The unit is part of the line's identity rather than a display detail. A length and an area
+ * measured under the same code are two lines, and adding them would produce nonsense that looked
+ * exactly like a total.
+ */
+export interface TakeoffLine {
+  code: string | null;
+  unit: string;
+  value: number;
+}
+
+/**
+ * What the running takeoff leaves out, and why.
+ *
+ * Carried alongside the totals rather than folded into them. A measurement with no scale is not a
+ * measurement of nothing, and counting it as zero makes a line look small rather than incomplete.
+ */
+export interface TakeoffExclusions {
+  underived: number;
+  unconfirmed: number;
+}
+
+/**
  * One row of the register as the chrome shows it.
  *
  * `confirmed` is carried separately from the values because the difference has to be visible: a
@@ -91,6 +115,14 @@ export interface Chrome {
    */
   setOutline(entries: readonly OutlineEntry[]): void;
   /**
+   * The running takeoff for the open drawing, or an empty list to hide the panel.
+   *
+   * `excluded` is not decoration. A total that quietly dropped the measurements taken at a scale
+   * nobody confirmed is a total somebody prices as complete — and the number left on screen looks
+   * perfectly reasonable, which is precisely why the omission has to be said in words beside it.
+   */
+  setTakeoff(lines: readonly TakeoffLine[], excluded: TakeoffExclusions): void;
+  /**
    * The sheet register for the open drawing, or an empty list to hide it.
    *
    * `filter` names the revision the list has been narrowed to, so the panel can say what it is
@@ -110,6 +142,13 @@ export interface Chrome {
   askForIssueStatus(): string | undefined;
   /** Ask which pages to take, showing how many there are to choose from. */
   askForPages(pageCount: number): string | undefined;
+  /**
+   * Ask which of the other drawings to compare against.
+   *
+   * Returns the index into the list it was given, or `undefined` if the reviewer changed their
+   * mind or typed something that is not one of the choices.
+   */
+  askWhichDrawing(names: readonly string[]): number | undefined;
 }
 
 /**
@@ -138,6 +177,8 @@ export interface ChromeHandlers {
   onSelectSheet: (page: number) => void;
   /** Narrow the register to one printed revision, or clear the filter. */
   onFilterRevision: (revision: string | undefined) => void;
+  /** Compare the quantities on this drawing with those on another. */
+  onCompareQuantities: () => void;
   /**
    * The projects opened lately, read when the menu opens rather than held.
    *
@@ -338,6 +379,7 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         // other acts that add something to the project.
         { id: "extract", label: "Extract pages to a new drawing…", enabled: true },
         { id: "revision", label: "Find sheets at a revision…", enabled: true },
+        { id: "compare", label: "Compare quantities with…", enabled: true },
         { id: "open", label: "Open project…", enabled: true, separatorBefore: true },
         { id: "new", label: "New project…", enabled: true },
         // Newest first, and never more than the host keeps. A project that has moved is listed
@@ -363,6 +405,7 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         else if (id === "import") handlers.onImport();
         else if (id === "extract") handlers.onExtractPages();
         else if (id === "revision") handlers.onFilterRevision(askForRevision());
+        else if (id === "compare") handlers.onCompareQuantities();
         else if (id === "open") handlers.onOpenProject();
         else if (id === "new") handlers.onCreateProject();
         else if (id === "verify") handlers.onVerify();
@@ -404,6 +447,36 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
   });
   registerSection.append(registerHeading, registerFilter, registerList);
   sidebar.append(registerSection);
+
+  // The running takeoff, under the register. Hidden until something has actually been measured,
+  // because an empty "Takeoff" heading on every drawing is furniture that says nothing.
+  //
+  // A table rather than a list: this is the one panel whose contents a reader compares down a
+  // column, and a screen reader announcing "row, cost code 03 30 00, unit m2, total 128.5" is the
+  // whole point of the element.
+  const takeoffSection = element("section", { class: "sf-takeoff", hidden: "" });
+  const takeoffHeading = element(
+    "h2",
+    { class: "sf-sidebar-heading", id: "sf-takeoff-heading" },
+    "Takeoff",
+  );
+  const takeoffTable = element("table", {
+    class: "sf-takeoff-table",
+    "aria-labelledby": "sf-takeoff-heading",
+  });
+  const takeoffBody = element("tbody");
+  const takeoffHead = element("thead");
+  const takeoffHeadRow = element("tr");
+  takeoffHeadRow.append(
+    element("th", { scope: "col" }, "Cost code"),
+    element("th", { scope: "col" }, "Unit"),
+    element("th", { scope: "col", class: "sf-takeoff-number" }, "Total"),
+  );
+  takeoffHead.append(takeoffHeadRow);
+  takeoffTable.append(takeoffHead, takeoffBody);
+  const takeoffExcluded = element("p", { class: "sf-takeoff-excluded", hidden: "" });
+  takeoffSection.append(takeoffHeading, takeoffTable, takeoffExcluded);
+  sidebar.append(takeoffSection);
 
   // The drawing's own contents, below the drawings. Hidden entirely when the open document has no
   // outline, which is most single-sheet PDFs: an empty heading is furniture that says nothing.
@@ -562,6 +635,53 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       renderList();
     },
 
+    setTakeoff(lines, excluded) {
+      takeoffBody.replaceChildren();
+      const nothingToSay = lines.length === 0 && excluded.underived === 0 && excluded.unconfirmed === 0;
+      takeoffSection.hidden = nothingToSay;
+      if (nothingToSay) return;
+
+      for (const line of lines) {
+        const row = element("tr");
+        // An absent code is named rather than left blank. A blank cell reads as "nobody filled
+        // this in"; these quantities genuinely carry no code, which is a different thing and one
+        // somebody may want to chase.
+        row.append(
+          element("th", { scope: "row" }, line.code ?? "(no cost code)"),
+          element("td", {}, line.unit),
+          // Four places, and the trailing zeros trimmed. Rounding a takeoff for display is how a
+          // total on screen stops matching the total in the exported file.
+          element(
+            "td",
+            { class: "sf-takeoff-number" },
+            String(Number(line.value.toFixed(4))),
+          ),
+        );
+        takeoffBody.append(row);
+      }
+
+      const left = excluded.underived + excluded.unconfirmed;
+      takeoffExcluded.hidden = left === 0;
+      if (left > 0) {
+        // Spelled out rather than shown as a badge or a colour. The reader who most needs to know
+        // that three measurements are missing from this total is the one about to quote it.
+        const parts: string[] = [];
+        if (excluded.underived > 0) {
+          parts.push(
+            `${excluded.underived} on ${excluded.underived === 1 ? "a page" : "pages"} with no scale`,
+          );
+        }
+        if (excluded.unconfirmed > 0) {
+          parts.push(
+            `${excluded.unconfirmed} taken at a scale nobody has confirmed`,
+          );
+        }
+        takeoffExcluded.textContent =
+          `Not counted: ${parts.join(", and ")}. ` +
+          `${left === 1 ? "It is" : "They are"} left out rather than counted as zero.`;
+      }
+    },
+
     setRegister(rows, filter) {
       registerList.replaceChildren();
       registerSection.hidden = rows.length === 0 && filter === undefined;
@@ -686,6 +806,19 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
       // already ships, and it is asking for exactly one string.
       const name = window.prompt("Project name", "New project");
       return name?.trim() ? name.trim() : undefined;
+    },
+
+    askWhichDrawing(names) {
+      // A numbered list in a prompt. Not elegant, and the honest alternative — a modal with its
+      // own focus trap and screen-reader semantics — is a lot of interface for a question asked
+      // once in a while. The numbering is 1-based because that is how the list reads.
+      const menu = names.map((name, index) => `${index + 1}. ${name}`).join("\n");
+      const answer = window.prompt(`Compare with which drawing?\n\n${menu}`, "1");
+      if (answer === null) return undefined;
+
+      const chosen = Number(answer.trim());
+      if (!Number.isInteger(chosen) || chosen < 1 || chosen > names.length) return undefined;
+      return chosen - 1;
     },
 
     askForPages(pageCount) {

@@ -500,3 +500,54 @@ body {
     stroke: #ff8a80;
   }
 }
+
+.sf-takeoff {
+  border-top: 1px solid var(--sf-line);
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+}
+.sf-takeoff-table {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  width: 100%;
+}
+.sf-takeoff-table th,
+.sf-takeoff-table td {
+  padding: 0.22rem 0.3rem;
+  text-align: left;
+  /* A long cost code wraps rather than being cut off. Two codes truncated at the panel edge look
+     identical, and the reader has no way of telling which line they are reading. */
+  overflow-wrap: anywhere;
+}
+.sf-takeoff-table thead th {
+  border-bottom: 1px solid var(--sf-line);
+  color: var(--sf-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.sf-takeoff-table tbody th {
+  font-weight: 600;
+}
+/* Right-aligned and tabular, so the digits line up down the column. A takeoff is read by
+   comparing magnitudes at a glance, and proportional figures make 1,000 and 9.99 the same width. */
+.sf-takeoff-number {
+  font-variant-numeric: tabular-nums;
+  text-align: right !important;
+  white-space: nowrap;
+}
+.sf-takeoff-table tbody tr + tr th,
+.sf-takeoff-table tbody tr + tr td {
+  border-top: 1px solid var(--sf-line);
+}
+/* Words, not a badge or a colour. The reader who most needs to know that three measurements are
+   missing from this total is the one about to quote it, and they may not see colour at all. */
+.sf-takeoff-excluded {
+  border: 1px dashed var(--sf-line);
+  border-radius: 3px;
+  color: var(--sf-muted);
+  font-size: 0.72rem;
+  margin: 0.5rem 0 0;
+  padding: 0.3rem 0.35rem;
+}
