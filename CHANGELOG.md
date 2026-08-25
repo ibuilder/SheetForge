@@ -6,6 +6,21 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Windows installer no longer asks for administrator rights.** It was configured to offer
+  both a per-machine and a per-user install, and NSIS asks for elevation when it might need it —
+  so the installer *and the uninstaller* raised a UAC prompt even though the install actually
+  landed entirely in the user's own profile, registered under `HKCU`. Refuse or dismiss that
+  prompt and the uninstall fails silently, leaving the application listed in Add or remove
+  programs with no way to shift it. Found by installing the build and then trying to remove it.
+
+  The NSIS installer is now **per-user only**, which needs no administrator at all. That is the
+  right default for who actually runs this: a contractor or an estimator on a managed laptop
+  frequently *cannot* elevate, and an installer that demands it is one they cannot use. Fleet
+  deployment has the MSI, which is the path IT departments use anyway and is per-machine by
+  design.
+
 ### Security
 
 - **pdf.js raised to 6.2.108**, closing [CVE-2026-16633](https://github.com/advisories/GHSA-hq66-cqwq-w95j)

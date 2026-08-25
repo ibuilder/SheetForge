@@ -15,6 +15,11 @@
       trains everybody to ignore a red build. Run it deliberately here. Read the output before
       believing it: `000` is usually this machine's network, a `404` from a host whose other links
       answered is the real thing.
+- [ ] **If the installer configuration changed, install and uninstall it once by hand.** A bundle
+      that builds is not a bundle that installs, and an installer that installs is not one that can
+      be removed. The elevation defect fixed on 2026-08-25 was invisible from the build log, from
+      CI, and from installing — it only appeared on trying to uninstall.
+
 - [ ] **Never upload installers from a local `target/release/bundle/`.** Releases come from the
       workflow, which builds on a fresh runner. A local bundle directory is not fresh: when a build
       runs without `TAURI_SIGNING_PRIVATE_KEY` the bundler writes new installers and leaves the

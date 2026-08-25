@@ -52,7 +52,7 @@
     "licenseFile": "../../../LICENSE",
     "windows": {
       "nsis": {
-        "installMode": "both",
+        "installMode": "currentUser",
         "languages": ["English"]
       }
     },
