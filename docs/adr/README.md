@@ -18,3 +18,5 @@ worth keeping.
 | [0007](0007-telemetry-privacy-and-diagnostics.md) | No telemetry at all | Accepted |
 | [0008](0008-open-source-license-and-sbom-policy.md) | Apache-2.0; no copyleft in the dependency tree | Accepted |
 | [0009](0009-trademark-and-brand-clearance-status.md) | "SheetForge" is uncleared | **Open risk** |
+| [0010](0010-page-assembly-produces-a-derived-revision.md) | Assembling pages produces a new revision, never an edit | Accepted |
+| [0011](0011-counting-symbols-from-vector-content.md) | Count symbols from vector content, not pixels | **Proposed** — blocked on CAD-export evidence |

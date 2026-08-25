@@ -238,43 +238,28 @@ than evidence of a house style:
   arithmetic: a panel and a schedule that disagree give a reader no way to tell which is wrong.
 
 - **Counting a symbol across the set, from the vector content rather than from pixels.**
-  *Spiked twice; the mechanism works; the remaining problem is a different one than expected.*
+  *Designed and spiked; see [ADR-0011](adr/0011-counting-symbols-from-vector-content.md), which is
+  Proposed rather than Accepted and says exactly what would settle it.*
+
   Selecting a symbol once and counting every instance is the largest single time saving in a
-  takeoff, and the feature every competitor advertises. They all reach for computer vision, because
-  they treat the sheet as pixels.
+  takeoff. Every competitor does it with computer vision, because they treat the sheet as pixels.
+  A construction PDF is usually vector, and a producer places each instance by **transform** rather
+  than re-emitting geometry — so the paths are identical in local coordinates and the placement
+  lives in the matrix. Counting becomes matching, not recognition.
 
-  A construction PDF is usually vector. A repeated symbol is a repeated run of path operators, and
-  a vector producer places each instance by **transform** rather than by re-emitting the geometry —
-  so the path data of every instance is identical in its own local coordinates, and the position,
-  rotation and mirroring all live in the current transformation matrix.
+  The spike is committed in `scripts/symbol-spike/` so it can be re-run rather than believed: a
+  synthetic plan printed through Chromium — an independent producer, not this repository emitting
+  its own operators — resolves 31 placed groups to 6 distinct symbols, finding all six doors as
+  **one** symbol of three paths at 0, 90, 180 and 270 degrees plus two mirrored, all fourteen
+  receptacles, all eight grid bubbles, and the control linework as singletons.
 
-  The second spike printed a symbol-rich plan through Chromium — an independent PDF producer, not
-  this repository emitting its own operators — and matched paths on their local geometry while
-  tracking `save`/`restore`/`transform`. Every instance was found and placed: fourteen receptacles
-  at a regular 90-point spacing, eight grid bubbles at 162, and **all six doors, including the ones
-  rotated 90, 180 and 270 degrees and the two mirrored**. Nothing was unreadable, and the
-  non-repeating clutter correctly came back as singletons. Recovered spacings were exactly 0.75 of
-  the source's, which is the 96-to-72 unit conversion — so positions are right rather than merely
-  self-consistent.
+  It also disproved the concern first recorded here. Rotation and mirroring were expected to break
+  matching; they do not, because the geometry never rotates — the matrix does. That the matrix is
+  readable is a bonus: orientation can be reported rather than collapsed, so "six doors" and "the
+  four turned 90 degrees" are both answerable.
 
-  **This disproves the concern recorded here previously.** Rotation and mirroring were expected to
-  break matching. They do not: the geometry never rotates, the matrix does. Better still, the
-  matrix makes the orientation *reportable*, so "six doors" and "the four turned 90 degrees" are
-  both answerable — the reader's choice rather than ours.
-
-  Why prefer this to a model, still: the count is exact and re-derivable rather than a confidence
-  score, which is the difference between a number that can go in an audit chain and one that
-  cannot. It ships no model weights, sidestepping the packaging problem that blocks the better
-  recogniser above, and raises no question about the provenance or licence of trained weights.
-
-  **What is actually left.** A symbol is a *set* of paths sharing a transform, not one path — the
-  door came back as three separate groups of six rather than six doors, because its leaf, swing and
-  jamb are three paths. Grouping them is the real design work, and clustering by shared matrix is
-  the obvious first attempt. Orientation must also be reported relative to the page's base matrix:
-  PDF space is y-up and the source was y-down, so a naive reading calls every instance mirrored.
-  And this is still Chromium's serialisation rather than a CAD exporter's — the mechanism is shown
-  to survive a real producer, which is not the same as surviving AutoCAD or Revit. Confirming that
-  needs a CAD-exported set, and that remains the one thing that must never live in this repository.
+  What blocks it is unchanged and is stated in the ADR: Chromium is a real producer but not a CAD
+  exporter, and confirming AutoCAD and Revit needs a drawing set this repository must never hold.
 
 - **Waste applied to the ordered quantity, never to the measured one.** A clean distinction we do
   not model at all, because there is no materials layer here yet. If one ever arrives, this is the

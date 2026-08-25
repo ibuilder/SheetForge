@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  @page { size: 36in 24in; margin: 0; }
+  html, body { margin: 0; padding: 0; }
+  svg { display: block; }
+</style>
+<body>
+<!--
+  A synthetic floor plan whose symbols repeat the way a real one's do. Deliberately exercises the
+  cases the first spike could not: instances placed by transform, rotated, mirrored, and drawn from
+  a <use> reference rather than by repeating the markup.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="2592" height="1728" viewBox="0 0 2592 1728">
+  <defs>
+    <!-- A door: leaf plus swing arc. The classic rotated-in-every-opening symbol. -->
+    <g id="door">
+      <path d="M0,0 L0,-72" stroke="#000" stroke-width="3" fill="none"/>
+      <path d="M0,-72 A72,72 0 0,1 72,0" stroke="#000" stroke-width="2" fill="none"/>
+      <path d="M0,0 L72,0" stroke="#000" stroke-width="1.5" fill="none"/>
+    </g>
+    <!-- A duplex receptacle. Repeated many times, never rotated. -->
+    <g id="recept">
+      <circle cx="0" cy="0" r="9" stroke="#000" stroke-width="2" fill="none"/>
+      <path d="M-9,0 L9,0 M0,-9 L0,0" stroke="#000" stroke-width="2" fill="none"/>
+    </g>
+    <!-- A column bubble, as on a grid line. -->
+    <g id="bubble">
+      <circle cx="0" cy="0" r="24" stroke="#000" stroke-width="3" fill="none"/>
+    </g>
+  </defs>
+
+  <rect x="36" y="36" width="2520" height="1656" stroke="#000" stroke-width="4" fill="none"/>
+
+  <!-- Column grid: eight bubbles, plain translation. -->
+  <g id="grid">
+    <use href="#bubble" x="240" y="120"/><use href="#bubble" x="456" y="120"/>
+    <use href="#bubble" x="672" y="120"/><use href="#bubble" x="888" y="120"/>
+    <use href="#bubble" x="1104" y="120"/><use href="#bubble" x="1320" y="120"/>
+    <use href="#bubble" x="1536" y="120"/><use href="#bubble" x="1752" y="120"/>
+  </g>
+
+  <!-- Receptacles: fourteen, plain translation, no rotation. -->
+  <g id="power">
+    <use href="#recept" x="300" y="400"/><use href="#recept" x="420" y="400"/>
+    <use href="#recept" x="540" y="400"/><use href="#recept" x="660" y="400"/>
+    <use href="#recept" x="780" y="400"/><use href="#recept" x="900" y="400"/>
+    <use href="#recept" x="1020" y="400"/><use href="#recept" x="1140" y="400"/>
+    <use href="#recept" x="300" y="700"/><use href="#recept" x="420" y="700"/>
+    <use href="#recept" x="540" y="700"/><use href="#recept" x="660" y="700"/>
+    <use href="#recept" x="780" y="700"/><use href="#recept" x="900" y="700"/>
+  </g>
+
+  <!-- Doors: six, each rotated differently, two mirrored. The hard case. -->
+  <g id="doors">
+    <use href="#door" transform="translate(400,1000)"/>
+    <use href="#door" transform="translate(700,1000) rotate(90)"/>
+    <use href="#door" transform="translate(1000,1000) rotate(180)"/>
+    <use href="#door" transform="translate(1300,1000) rotate(270)"/>
+    <use href="#door" transform="translate(1600,1000) scale(-1,1)"/>
+    <use href="#door" transform="translate(1900,1000) scale(1,-1)"/>
+  </g>
+
+  <!-- Some non-repeating clutter, so the drawing is not purely symbols. -->
+  <path d="M100,1400 L900,1400 L900,1500 L500,1560 Z" stroke="#000" stroke-width="2" fill="none"/>
+  <path d="M1200,1380 L2100,1380 L2100,1600" stroke="#000" stroke-width="2" fill="none"/>
+</svg>
+</body>
