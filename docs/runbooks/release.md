@@ -15,6 +15,15 @@
       trains everybody to ignore a red build. Run it deliberately here. Read the output before
       believing it: `000` is usually this machine's network, a `404` from a host whose other links
       answered is the real thing.
+- [ ] **Never upload installers from a local `target/release/bundle/`.** Releases come from the
+      workflow, which builds on a fresh runner. A local bundle directory is not fresh: when a build
+      runs without `TAURI_SIGNING_PRIVATE_KEY` the bundler writes new installers and leaves the
+      **previous run's `.sig` files sitting beside them**, with no warning beyond the signing error
+      at the end. Observed on 2026-08-25 — installers dated the 25th next to signatures dated the
+      21st. Uploading that pair by hand ships a signature over bytes nobody has any more, and every
+      installed copy would refuse the update it describes. The workflow is not exposed to this
+      because a runner starts empty; a laptop does not.
+
 - [ ] **Run the bundle dry run and let it finish.**
       `gh workflow run bundle.yml` builds installers on all three platforms without needing the
       signing key. It exists because the packaging had once been run on Windows only, and finding
