@@ -135,6 +135,8 @@ pub fn run() {
             commands::sheet_record,
             commands::view_list,
             commands::view_replace,
+            commands::attachment_store,
+            commands::attachment_bytes,
             commands::markup_create,
             commands::markup_create_many,
             commands::markup_update,

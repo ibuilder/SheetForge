@@ -7,7 +7,12 @@
  * lets both be tested without a window.
  */
 
-import { createViewer, type AnnotFilter, type Viewer } from "@massingcloud/pdf-viewer";
+import {
+  attachmentsPlugin,
+  createViewer,
+  type AnnotFilter,
+  type Viewer,
+} from "@massingcloud/pdf-viewer";
 import "@massingcloud/pdf-viewer/style.css";
 // Bundled, never fetched from a CDN. The application has to work with the network off, and a
 // worker that 404s at the moment somebody opens a drawing on a site with no signal is the exact
@@ -571,6 +576,47 @@ async function extractPagesToNewDrawing(chrome: Chrome): Promise<void> {
   );
 }
 
+/**
+ * How an attachment is named inside a markup record.
+ *
+ * Deliberately not a real URL. The bytes are in the project package and are fetched by hash on
+ * demand: a `blob:` URL is dead as soon as the window reloads, and a `data:` URL would put a
+ * three-megabyte photograph inside the markup record, where it would then travel through every
+ * export and interchange format that carries markups.
+ */
+const ATTACHMENT_SCHEME = "sf-attachment:";
+
+/**
+ * Open an attachment.
+ *
+ * The bytes come back from the host, become a blob URL for as long as the tab needs one, and the
+ * URL is revoked afterwards — an unreleased blob URL holds the whole photograph in memory for the
+ * life of the window, and a field review attaches a lot of photographs.
+ */
+async function openAttachment(chrome: Chrome, attachment: { url?: string; name: string }): Promise<void> {
+  const url = attachment.url ?? "";
+  if (!url.startsWith(ATTACHMENT_SCHEME)) {
+    chrome.setStatus("That attachment is not stored in this project.");
+    return;
+  }
+
+  chrome.setStatus(`Opening ${attachment.name}…`);
+  const bytes = new Uint8Array(await host.attachmentBytes(url.slice(ATTACHMENT_SCHEME.length)));
+  const blob = new Blob([asBlobPart(bytes)]);
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    // Shown in a new tab within the webview's own origin. Not handed to the system browser: these
+    // bytes came out of somebody's project, and the rule is that nothing leaves it unless the user
+    // asks for that specifically — which is what the export path is for.
+    window.open(objectUrl, "_blank", "noopener");
+    chrome.setStatus(`Opened ${attachment.name}.`);
+  } finally {
+    // A minute is long enough for the tab to have read it, and short enough that a review with
+    // fifty photographs does not hold fifty of them.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  }
+}
+
 async function createProject(chrome: Chrome): Promise<void> {
   const name = chrome.askForProjectName();
   if (!name) return;
@@ -754,7 +800,30 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
       summaryPlugin(async (bytes, filename) => {
         await deliverExport(chrome, new Blob([asBlobPart(bytes)]), filename);
       }),
-      // Registers a Redact tool and an "Export redacted copy" action in the engine's own
+        // Site photos and voice notes, stored in the project rather than inlined into the markup.
+      // Without this hook the engine keeps only files under 256 KB, as data URLs — which rules out
+      // every photograph a phone has taken this decade.
+      attachmentsPlugin({
+        upload: async (file) => {
+          chrome.setStatus(`Filing ${file.name}…`);
+          const stored = await host.attachmentStore(
+            file.name,
+            new Uint8Array(await file.arrayBuffer()),
+          );
+          chrome.setStatus(
+            `Filed ${file.name} — ${Math.round(stored.byteLen / 1024)} KB, kept in the project.`,
+          );
+          // A marker, not a URL. The bytes live in the package and are fetched by hash when they
+          // are actually needed; a `blob:` URL minted now would be dead the moment the window
+          // reloads, and a `data:` URL would put a three-megabyte photograph inside the markup
+          // record.
+          return { url: `${ATTACHMENT_SCHEME}${stored.id}`, id: stored.id };
+        },
+        open: (attachment) => {
+          void guard(() => openAttachment(chrome, attachment));
+        },
+      }),
+    // Registers a Redact tool and an "Export redacted copy" action in the engine's own
       // registries, so both appear where the engine's equivalents do.
       redactionPlugin(
         async (bytes, filename) => {

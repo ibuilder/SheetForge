@@ -86,6 +86,14 @@ export interface RecentProject {
   available: boolean;
 }
 
+/** Where an attachment ended up. */
+export interface StoredAttachment {
+  /** The content hash. The only handle the interface has on it. */
+  id: string;
+  shortId: string;
+  byteLen: number;
+}
+
 /** A saved view as the host holds it. */
 export interface HostView {
   name: string;
@@ -388,6 +396,17 @@ export const host = {
    * Replaced whole rather than appended, because the engine holds the list and sends it whole. A
    * merge would make deleting one impossible from here: it would return on the next save.
    */
+  /**
+   * File an attachment and get back the hash it is stored under.
+   *
+   * The interface refers to an attachment by that hash and by nothing else. It is not a path, it
+   * cannot be turned into one, and the host resolves it against a package it opened itself.
+   */
+  attachmentStore: (name: string, bytes: Uint8Array) =>
+    callWithBytes<StoredAttachment>("attachment_store", bytes, { "x-sf-name": name }),
+  /** An attachment's bytes, as an `ArrayBuffer` — raw, not JSON. */
+  attachmentBytes: (id: string) => call<ArrayBuffer>("attachment_bytes", { id }),
+
   viewList: (revision: string) => call<HostView[]>("view_list", { revision }),
   viewReplace: (revision: string, views: HostView[]) =>
     call<number>("view_replace", { revision, views }),

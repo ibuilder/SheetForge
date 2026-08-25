@@ -180,7 +180,14 @@ things are missing and some of them should not be".
   not the point: half the reason to save one is that everything else was hidden. Views are the one
   thing the engine holds that its storage adapter has no channel for, so these travel over the bus
   instead, and the list is written whole because that is the only way a deletion reaches the host.
-- **Attachment handling**: photos from a phone camera, sized and content-addressed.
+- ~~**Attachment handling**: photos from a phone camera, sized and content-addressed.~~ *Mostly.*
+  Filed into the project package under their content hash, so the same photo on three markups is
+  stored once; refused past the attachment limit before anything is written; re-hashed on the way
+  out, because a photograph of a defect is exactly the file somebody later claims was altered. The
+  reference stored in the markup is a hash, not a URL — a `blob:` URL dies on reload and a `data:`
+  URL would carry a three-megabyte photograph through every export that includes markups. What is
+  left is display: opening one works, showing a thumbnail without fetching every attachment in the
+  document does not, and that wants lazy resolution.
 
 ## 0.4 — Mobile in earnest
 

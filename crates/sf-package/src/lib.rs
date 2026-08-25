@@ -286,6 +286,73 @@ impl Package {
     /// [`SecurityError::PathEscape`] — unreachable for a real hash, since hex cannot contain a
     /// path separator, but the check is here rather than assumed because this function also takes
     /// hashes that came out of a manifest somebody else wrote.
+    /// File an attachment — a site photo, a voice note, a specification extract.
+    ///
+    /// Content-addressed like a source, and for the same reasons: the same photo attached to three
+    /// markups is stored once, and a byte that changes changes the name, so there is no such thing
+    /// as a stale copy under a familiar filename.
+    ///
+    /// Unlike a source, the format is **not** sniffed. A source has to be a PDF because the
+    /// renderer will be asked to open it; an attachment is whatever somebody photographed or
+    /// recorded, and refusing an unfamiliar type would be refusing evidence. It is never executed
+    /// and never rendered as anything but the media type the interface asks for.
+    ///
+    /// # Errors
+    /// [`PackageError`] if it exceeds the attachment limit or cannot be written.
+    pub fn import_attachment(&mut self, bytes: &[u8]) -> Result<ContentHash> {
+        self.limits.check_attachment(bytes.len() as u64)?;
+
+        let hash = hash_bytes(bytes);
+        let destination = self.attachment_path(hash)?;
+        if destination.exists() {
+            return Ok(hash);
+        }
+        write_atomically(&destination, bytes)?;
+        Ok(hash)
+    }
+
+    /// Read an attachment back.
+    ///
+    /// # Errors
+    /// [`PackageError::MissingSource`] if there is no such attachment, or
+    /// [`PackageError::IntegrityFailure`] if the stored bytes no longer hash to their name.
+    pub fn attachment_bytes(&self, hash: ContentHash) -> Result<Vec<u8>> {
+        let path = self.attachment_path(hash)?;
+        let bytes = fs::read(&path).map_err(|_| PackageError::MissingSource {
+            short_hash: hash.short(),
+        })?;
+
+        // Verified on the way out, not merely on the way in. A photo that is evidence of a defect
+        // is exactly the file somebody might later claim was altered, and the hash is the whole
+        // answer to that — checking it costs one pass over bytes already in memory.
+        if hash_bytes(&bytes) != hash {
+            return Err(PackageError::IntegrityFailure {
+                short_hash: hash.short(),
+            });
+        }
+        Ok(bytes)
+    }
+
+    /// Where an attachment lives. Extension-free: the bytes are whatever they are, and a filename
+    /// claiming a type the content does not have is a small lie waiting to be believed.
+    ///
+    /// # Errors
+    /// If the hash would escape the package, which it cannot — it is hexadecimal — but the check
+    /// is the same one every other path goes through and having one exception is how the exception
+    /// becomes the rule.
+    pub fn attachment_path(&self, hash: ContentHash) -> Result<PathBuf> {
+        Ok(sf_security::contained_path(
+            &self.root,
+            &format!("{ATTACHMENTS}/{}", hash.to_hex()),
+        )?)
+    }
+
+    /// Where a source drawing lives, named for its content hash.
+    ///
+    /// # Errors
+    /// If the resulting path would fall outside the package, which a hexadecimal hash cannot — but
+    /// every path in this module goes through the same check, and an exception is how the check
+    /// stops being one.
     pub fn source_path(&self, hash: ContentHash) -> Result<PathBuf> {
         Ok(sf_security::contained_path(
             &self.root,
@@ -561,6 +628,78 @@ mod tests {
             Package::open(dir.path()),
             Err(PackageError::NotAPackage)
         ));
+    }
+
+    /// The same photo attached to three markups is stored once. Content addressing does that for
+    /// free, and this is the test that says it is relied upon rather than incidental.
+    #[test]
+    fn the_same_attachment_twice_is_stored_once() {
+        let (_dir, mut package) = new_package();
+
+        // A JPEG magic number followed by nothing in particular: an attachment is whatever
+        // somebody photographed, and the package deliberately does not sniff it.
+        let photo = [&[0xff_u8, 0xd8, 0xff, 0xe0][..], b"and then some bytes"].concat();
+        let first = package.import_attachment(&photo).unwrap();
+        let second = package.import_attachment(&photo).unwrap();
+
+        assert_eq!(first, second, "identical bytes produced two names");
+        assert_eq!(package.attachment_bytes(first).unwrap(), photo);
+    }
+
+    /// A photo is evidence of a defect, and evidence is exactly what somebody later claims was
+    /// altered. The hash is the answer, and checking it on the way *out* is what makes it one.
+    #[test]
+    fn an_attachment_altered_on_disk_is_refused_rather_than_returned() {
+        let (_dir, mut package) = new_package();
+
+        let photo = b"the wall, before it was rendered".to_vec();
+        let hash = package.import_attachment(&photo).unwrap();
+        let path = package.attachment_path(hash).unwrap();
+
+        std::fs::write(&path, b"the wall, after somebody had a word").unwrap();
+
+        assert!(
+            package.attachment_bytes(hash).is_err(),
+            "altered bytes were handed back as though they were the ones filed",
+        );
+    }
+
+    /// An attachment nobody filed is missing, not corrupt. The two want different responses from
+    /// the person reading the message.
+    #[test]
+    fn an_attachment_that_was_never_filed_reports_missing() {
+        let (_dir, package) = new_package();
+        let never = ContentHash::from_bytes([0x99; 32]);
+
+        assert!(matches!(
+            package.attachment_bytes(never),
+            Err(PackageError::MissingSource { .. })
+        ));
+    }
+
+    /// A site photo from a modern phone is 3 to 12 MB; the limit is 64. What this refuses is a
+    /// video somebody dropped in by accident, before it is copied into the package.
+    #[test]
+    fn an_attachment_past_the_limit_is_refused_before_it_is_written() {
+        let (dir, mut package) = new_package();
+
+        let limits = sf_security::ResourceLimits {
+            max_attachment_mb: 1,
+            ..Default::default()
+        };
+        package.set_limits(limits);
+
+        let too_big = vec![0u8; 2 * 1024 * 1024];
+        assert!(package.import_attachment(&too_big).is_err());
+
+        // And nothing was written on the way to refusing.
+        let attachments = fs::read_dir(
+            dir.path()
+                .join("Riverside Tower.sfproj")
+                .join("attachments"),
+        )
+        .map_or(0, Iterator::count);
+        assert_eq!(attachments, 0, "a refused attachment left bytes behind");
     }
 
     #[test]

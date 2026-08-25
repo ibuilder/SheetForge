@@ -58,6 +58,9 @@ The README calls this early. This page says exactly how early, because "producti
 | Counting pages stays linear in file size | 8 MB of non-matching bytes against a ceiling that catches a scan inside a scan | `apps/desktop/src-tauri/src/commands.rs` |
 | What the engine reads off a title block is sent to the host as a guess, never as confirmed | Browser test inspects every row that crossed the boundary | `apps/ui/e2e/open-drawing.spec.ts` |
 | A register row survives the round trip in both directions | 4 unit tests over the mapping, including absent-versus-empty | `apps/ui/test/mapping.test.ts` |
+| An attachment is content-addressed, so the same photo on three markups is stored once | Package test | `crates/sf-package/src/lib.rs` |
+| An attachment altered on disk is refused rather than handed back | Package test rewrites the file and expects a failure | `crates/sf-package/src/lib.rs` |
+| An attachment past the size limit is refused before anything is written | Package test checks the directory is still empty afterwards | `crates/sf-package/src/lib.rs` |
 | A saved view survives a restart, and deleting one actually deletes it | Store round-trip test replacing the set, plus a browser test that the restore runs on open | `crates/sf-store/tests/store.rs`, `apps/ui/e2e/open-drawing.spec.ts` |
 | A view whose zoom or centre could not be restored is refused rather than stored | Domain tests over non-finite, zero, negative and absurd values | `crates/sf-domain/src/view.rs` |
 | A sheet number a machine guessed never overwrites one a person confirmed | Store test: an OCR re-read of `A-201` as `A-2O1` is rejected, and a person correcting it afterwards still lands | `crates/sf-store/tests/store.rs` |
@@ -80,7 +83,7 @@ The README calls this early. This page says exactly how early, because "producti
 | The markups reach the exported image, not just the screen | Browser test seeds a markup through the host, checks it is on screen, then decodes the exported PNG and finds its colour | `apps/ui/e2e/open-drawing.spec.ts` |
 | The Windows installers actually build | `tauri build` run once on Windows: an MSI, an NSIS installer and an updater signature for each | local, not CI — see below |
 
-**Totals: 261 Rust tests, 54 TypeScript unit tests, 46 browser tests.** The Rust figure includes
+**Totals: 265 Rust tests, 54 TypeScript unit tests, 46 browser tests.** The Rust figure includes
 property tests that generate thousands of inputs each — path containment, format sniffing, audit
 tampering, and measurement arithmetic — so the number of *cases* exercised is far higher. Clippy clean at `-D warnings` with pedantic lints
 on; `cargo fmt` clean; TypeScript strict with `noUncheckedIndexedAccess` and
@@ -109,6 +112,7 @@ Listed because omitting them would make the table above dishonest.
 | **No third-party security review** | No audit, no penetration test | 1.0 |
 | **A redacted copy loses the source's bookmarks** | `copyPages` moves pages, not the document around them, so a redacted copy of a set with a discipline outline arrives with no outline. The output is at least named rather than blank. Nothing in the interface warns of this yet | 0.3 |
 | **The drawing engine's own interface has serious accessibility defects** | Until this build, the accessibility suite had only ever tested the opening screen — no drawing open means none of the engine's toolbar or panels are mounted, so the previous claim that they were "included, not excluded" was wrong. Opening a drawing and scanning found two: three empty engine panels keep a `listbox` role, so a screen reader announces options that are not there (**critical**); and the drawing scroller cannot be focused, so scrolling it needs a pointer (**serious**). They are in a dependency and are not ours to fix. They are listed in the test rather than excluded from it, so a *new* defect still fails the build, and they should be reported upstream | 0.3 |
+| **Attachments are stored but barely shown** | Photos and voice notes are filed in the project, content-addressed, size-limited and audited, and open in a tab on demand. What is missing is display: a markup carrying a photo does not show a thumbnail, because the stored reference is a hash rather than a URL the renderer can load, and turning it into one on load means fetching every attachment in the document. Lazy resolution is the next piece | 0.3 |
 | **No screen-reader testing** | Automated rule checking now runs on every build — axe over WCAG 2.1 A and AA, keyboard operation driven with real key presses, forced-colours and reduced-motion emulated — and it found a real ARIA defect on its first run. But automated tools catch perhaps a third of real barriers, and nobody who uses a screen reader has tried this | 1.0 |
 | **Spatial accuracy on a drawing is a visual task** | No amount of markup makes placing a measurement on a sheet non-visual. Stated rather than solved | — |
 | **OCR accuracy is not measured against real sheets** | The browser test proves the engine loads and reads clean lettering. How it copes with a dyeline scan of a 1974 drawing is unmeasured here, and the engine's own benchmark says the answer is "poorly on small text" | 0.3 |

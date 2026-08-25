@@ -26,6 +26,9 @@ First release. The core is built and tested; the shell is young. See
   default.
 
 **Marking up**
+- Attachments: site photos and voice notes filed into the project rather than inlined into the
+  markup, content-addressed and size-limited. Re-hashed when read back, because a photograph of a
+  defect is exactly the file somebody later claims was altered.
 - Rectangle, ellipse, polygon, polyline, line, arrow, freehand ink, revision clouds with real
   scalloped arcs, text, callouts, glyph-accurate highlight, strikeout and underline, dynamic
   stamps, symbols, issue pins and attachments.
