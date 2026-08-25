@@ -30,6 +30,7 @@
     "rs:test": "cargo test --workspace",
     "site:build": "node scripts/build-site.mjs",
     "site:check": "node scripts/check-site-links.mjs",
+    "site:check:external": "node scripts/check-external-links.mjs",
     "site": "npm run site:build && npm run site:check"
   },
   "devDependencies": {

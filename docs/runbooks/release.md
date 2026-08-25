@@ -10,6 +10,11 @@
 - [ ] Version bumped in `Cargo.toml` (workspace), `package.json`, and
       `apps/desktop/src-tauri/tauri.conf.json`. All three, or the updater and the about box
       disagree.
+- [ ] `npm run site && npm run site:check:external`. The internal checker runs in CI; the external
+      one does not, because a build that fails when somebody else's site is down for a minute
+      trains everybody to ignore a red build. Run it deliberately here. Read the output before
+      believing it: `000` is usually this machine's network, a `404` from a host whose other links
+      answered is the real thing.
 - [ ] **Run the bundle dry run and let it finish.**
       `gh workflow run bundle.yml` builds installers on all three platforms without needing the
       signing key. It exists because the packaging had once been run on Windows only, and finding
@@ -77,6 +82,9 @@ Intel) and Linux, signs the update payloads, and opens a **draft** release.
       version 2 and the migration is tested in `crates/sf-store/tests/migration.rs`, but a test
       that builds its own version-1 database is not the same as a project somebody actually used.
 - [ ] Release notes name the known limitations.
+- [ ] Confirm the changelog's version link resolves. `/releases/tag/vX.Y.Z` serves a tag page even
+      before a release exists, so it is not broken while a release is pending — but the API reports
+      no release for that tag, which is a different question and an easy one to confuse.
 
 Then publish.
 
