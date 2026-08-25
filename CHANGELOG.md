@@ -6,6 +6,25 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Security
+
+- **pdf.js raised to 6.2.108**, closing [CVE-2026-16633](https://github.com/advisories/GHSA-hq66-cqwq-w95j)
+  — arbitrary JavaScript execution on opening a malicious PDF, rated high. This is the library that
+  parses the input this whole application treats as hostile, so it is the last dependency that
+  should be behind.
+
+  The shipped configuration was already covered: the advisory's own stated mitigations are
+  disabling PDF scripting or setting a CSP, and the application ships `script-src 'self'` with no
+  `'unsafe-eval'`, with `dangerousDisableAssetCspModification` off. That is mitigation rather than
+  a fix, and it does not apply to the development server, so the version was raised regardless.
+
+- **CI now checks the JavaScript dependencies for advisories**, which it never did. The Rust half
+  of the tree has been gated on `cargo-deny` since the first commit; the JavaScript half was not
+  gated at all, which is how the above sat in the lockfile until GitHub mentioned it on a push.
+  Set at `--audit-level=high` deliberately: a gate that fires on every transitive advisory in a
+  build tool is a gate people learn to skip, and a check nobody reads looks like coverage without
+  being any.
+
 ### Added
 
 - **A running takeoff on screen**, in the sidebar under the sheet register. Totals what has been

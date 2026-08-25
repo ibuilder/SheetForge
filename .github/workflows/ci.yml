@@ -105,6 +105,26 @@ jobs:
           # licenses: the no-copyleft rule from ADR-0008. sources: only crates.io.
           command: check advisories bans licenses sources
 
+  audit:
+    name: JavaScript advisories
+    runs-on: ubuntu-latest
+    # The Rust half of the tree has been checked for known vulnerabilities since the first commit
+    # and the JavaScript half never was, which is how a high-severity arbitrary-execution advisory
+    # against pdf.js sat in the lockfile until GitHub mentioned it on a push. pdf.js is the single
+    # most security-critical dependency here: it is the thing that parses the hostile input this
+    # whole application is built around. Finding out from a push warning is finding out too late.
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # `high` rather than `low`. A gate that fires on every transitive advisory in a build tool
+      # is a gate people learn to skip, and a check nobody reads is worse than no check — it
+      # looks like coverage. Raise the bar here rather than adding a growing ignore list.
+      - run: npm audit --audit-level=high
+
   sbom:
     name: Bill of materials
     runs-on: ubuntu-latest
