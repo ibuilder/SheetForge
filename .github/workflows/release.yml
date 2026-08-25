@@ -8,6 +8,14 @@ on:
       tag:
         description: Tag to build
         required: true
+      unsigned:
+        description: >-
+          Build without updater artifacts, for when the signing key is not available. Produces
+          installers that CANNOT self-update — every copy installed from them is stranded on this
+          version until somebody reinstalls by hand. For a preview or an internal trial, not for a
+          release people are meant to keep.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -57,6 +65,7 @@ jobs:
       # bundler with a message about a public key having been found. Catching it here costs one
       # step and turns twenty minutes of confused log-reading into one sentence.
       - name: The updater signing key is present
+        if: inputs.unsigned != true
         shell: bash
         env:
           KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -70,7 +79,14 @@ jobs:
             exit 1
           fi
 
-      - uses: tauri-apps/tauri-action@v1
+      # Two builds, one workflow. The signed one is the real thing; the unsigned one exists so a
+      # release is possible on a day the key is not to hand, and is labelled so nobody mistakes one
+      # for the other. Split rather than made conditional inside a single step, because the
+      # difference is what the build *produces* and burying that in an expression is how somebody
+      # ships an unsigned build believing it was signed.
+      - name: Build and draft the release
+        if: inputs.unsigned != true
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The updater signing key. Held only in this secret store and in an offline backup —
@@ -92,3 +108,35 @@ jobs:
           prerelease: false
           uploadUpdaterJson: true
           args: ${{ matrix.args }}
+
+      - name: Build and draft the release, unsigned
+        if: inputs.unsigned == true
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: SheetForge __VERSION__ (unsigned preview)
+          releaseBody: |
+            **This build cannot update itself.** It was produced without the updater signing key,
+            so it carries no signed update payload and no `latest.json`. Anything installed from it
+            stays on this version until it is uninstalled and replaced by hand. It is a preview, not
+            a release to keep.
+
+            These binaries are also not code-signed with an organisation certificate, so Windows
+            SmartScreen and macOS Gatekeeper will warn on first run. Verify the checksums before
+            installing.
+
+            See [CHANGELOG.md](https://github.com/ibuilder/SheetForge/blob/main/CHANGELOG.md), and
+            [docs/status.md](https://github.com/ibuilder/SheetForge/blob/main/docs/status.md) for
+            what is verified and what is not.
+          releaseDraft: true
+          # Marked as a prerelease as well as said in the notes. Somebody scanning a releases page
+          # reads the badge, not the body.
+          prerelease: true
+          uploadUpdaterJson: false
+          # The same override the bundle dry run uses: updater artifacts off, because producing
+          # them needs the key this build does not have.
+          # Relative to `projectPath`, which is where the action runs the CLI from.
+          args: ${{ matrix.args }} --config src-tauri/tauri.dryrun.conf.json
