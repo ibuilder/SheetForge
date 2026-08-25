@@ -29,6 +29,7 @@ import { ocrOptions } from "./ocr";
 import { asBlobPart } from "./bytes";
 import { extractPages, parsePageSelection } from "./assemble";
 import { asPdfBlob, isRedaction, redactionPlugin } from "./redact";
+import { describe as describeCheck, scaleCheckPlugin } from "./scale-check";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
 import "./styles.css";
@@ -800,7 +801,18 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
       summaryPlugin(async (bytes, filename) => {
         await deliverExport(chrome, new Blob([asBlobPart(bytes)]), filename);
       }),
-        // Site photos and voice notes, stored in the project rather than inlined into the markup.
+        // Checking a scale against a dimension printed on the sheet. The tutorial has taught this
+      // since it shipped; until now there was no tool for doing it, so the lesson ended at "and
+      // now check it by hand".
+      scaleCheckPlugin(
+        (measured) =>
+          window.prompt(
+            `This measures ${measured}. What does the dimension on the sheet say?`,
+            "",
+          ),
+        (outcome, unit) => chrome.setStatus(describeCheck(outcome, unit)),
+      ),
+      // Site photos and voice notes, stored in the project rather than inlined into the markup.
       // Without this hook the engine keeps only files under 256 KB, as data URLs — which rules out
       // every photograph a phone has taken this decade.
       attachmentsPlugin({

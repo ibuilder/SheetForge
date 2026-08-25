@@ -31,6 +31,7 @@ pub mod ids;
 pub mod markup;
 pub mod measurement;
 pub mod project;
+pub mod scale_check;
 pub mod sheet;
 pub mod status;
 pub mod view;
@@ -41,6 +42,7 @@ pub use ids::{ActorId, CalibrationId, DocumentRevisionId, MarkupId, ProjectId, S
 pub use markup::{Geometry, Markup, MarkupKind, MarkupMetadata, MarkupPatch};
 pub use measurement::{Calibration, MeasureKind, Quantity, ScaleSource, FORMULA_VERSION};
 pub use project::Project;
+pub use scale_check::{check as check_scale, ScaleCheck, Verdict};
 pub use sheet::{Sheet, SheetSource};
 pub use status::MarkupStatus;
 pub use view::SavedView;

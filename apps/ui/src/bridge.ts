@@ -86,6 +86,8 @@ export interface RecentProject {
   available: boolean;
 }
 
+import type { CheckOutcome } from "./scale-check";
+
 /** Where an attachment ended up. */
 export interface StoredAttachment {
   /** The content hash. The only handle the interface has on it. */
@@ -406,6 +408,15 @@ export const host = {
     callWithBytes<StoredAttachment>("attachment_store", bytes, { "x-sf-name": name }),
   /** An attachment's bytes, as an `ArrayBuffer` — raw, not JSON. */
   attachmentBytes: (id: string) => call<ArrayBuffer>("attachment_bytes", { id }),
+
+  /**
+   * Grade a measured dimension against the one printed on the sheet.
+   *
+   * On the host because where the bands sit is a domain judgement with tests behind it, not a
+   * number to be re-decided in a click handler.
+   */
+  scaleCheck: (expected: number, measured: number) =>
+    call<CheckOutcome>("scale_check", { expected, measured }),
 
   viewList: (revision: string) => call<HostView[]>("view_list", { revision }),
   viewReplace: (revision: string, views: HostView[]) =>

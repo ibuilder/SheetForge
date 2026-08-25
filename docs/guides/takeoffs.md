@@ -16,6 +16,16 @@ number — because a zero would be indistinguishable from a real measurement of 
 
 There are three ways to set it, and they are not equally trustworthy.
 
+**Then check it.** Pick **Check a dimension**, drag along a *different* printed dimension, and type
+what that one says. The answer is graded: within 1% the scale is right, within 5% draw it again,
+beyond that something is wrong — and where the error matches a mistake people actually make, it
+says which. A half-size plot, feet entered where inches were meant, metres where feet were meant.
+
+This takes two seconds and it is the only thing standing between a mis-calibrated page and a bid
+built on numbers that are all wrong together. A wrong scale does not look wrong: every length is
+consistently out and every area is out by the square, and the drawing carries on looking exactly
+like a drawing.
+
 > **Practise this first.** The tutorial sheet that ships with SheetForge exists mostly for this
 > step: page two prints a `144'-0"` dimension whose geometry really is 144 feet, so you can
 > calibrate against it and then check your answer against a second dimension the sheet also prints.

@@ -39,6 +39,12 @@ First release. The core is built and tested; the shell is young. See
 - Undo and redo for every locally reversible action.
 
 **Measuring**
+- **Check a dimension.** Drag along something whose length is printed on the sheet, type what it
+  says, and get a graded answer rather than a percentage: within 1% the scale is right, within 5%
+  is worth drawing again, beyond that something is wrong. Where a familiar mistake explains the
+  number it is named — a half-size plot, feet read as inches, metres read as feet. A wrong scale
+  makes every length on the page wrong and every area wrong by its square, with nothing on screen
+  looking unusual, and this is the two-second defence.
 - Distance, polyline length, area, perimeter, count, angle, radius and volume.
 - Per-page calibration from a drawn dimension, a named scale preset, or a title block reading that
   stays provisional until a human confirms it.

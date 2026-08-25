@@ -163,6 +163,99 @@ things are missing and some of them should not be".
   spreadsheet, ruinous for a 30 MB image. Exports now travel as a raw body, so plot resolution is
   a real option rather than a refused one.
 
+## What OpenTakeoff has that we do not
+
+[OpenTakeoff](https://github.com/Kentucky-ai/opentakeoff) is an Apache-2.0 takeoff engine for
+construction and flooring: browser-based, TypeScript, with an MCP server so an agent can drive the
+same geometry a person does.
+
+> **A licence note, and it is a different one this time.** OpenTakeoff is **Apache-2.0** — the same
+> licence as this project. Unlike [Open PDF Studio](#what-open-pdf-studio-has-that-we-do-not),
+> which is LGPL and therefore refused outright, code from OpenTakeoff *could* legitimately be
+> reused here with attribution recorded in `THIRD_PARTY_NOTICES.md`. Nothing has been, so far: what
+> follows was taken from its ideas rather than its source, and its ideas turned out to be the
+> valuable part.
+
+The two products are aimed at different jobs. OpenTakeoff is an **estimating engine** — conditions,
+waste, roll goods, seam layout, buy lists — that reads drawings on the way to a number. SheetForge
+is a **review desk** that measures. The overlap is measurement and provenance, and that is exactly
+where the useful reading is.
+
+### Where it independently reached the same conclusions
+
+Worth writing down, because agreement arrived at separately is evidence the reasoning holds rather
+than evidence of a house style:
+
+- **"Scale is a gate, not a default."** It refuses to measure an unscaled sheet rather than assume
+  1:1. This project reports an uncalibrated measurement as *underived* rather than as zero, for the
+  same reason: a plausible wrong number is worse than an obvious absent one.
+- **"Every record carries how it was made."** Method, confidence, and — a genuine addition — *the
+  machine's original boundary when a human corrected it*. Our quantities keep their raw page
+  magnitude and calibration, and the sheet register records whether a value was recognised,
+  extracted, imported or confirmed. Keeping the superseded machine answer alongside the human one
+  is the part we do not do.
+- **"Agent work is pencil until a person inks it."** Automated output lands as dashed proposals a
+  person accepts. That is precisely the condition this roadmap already places on automated quantity
+  extraction, arrived at independently.
+
+### Taken
+
+- **Checking a dimension, graded.** *Shipped* — see below.
+
+- **A review tally on the exported set.** Their marked-up PDF carries "a tally of how much of the
+  set a person has actually reviewed". That is arguably more on-mission for a review desk than for
+  an estimating tool, and the sheet register already holds what is needed to compute it. Scheduled.
+
+### Worth having, and scheduled
+
+- **Colour and hatch by condition, with a legend cover page.** Their export "burns the work into
+  the drawings as drawn — condition colors, hatches, quantity chips, count markers — behind a
+  legend cover with totals". Our exports carry markups in discipline colours with no key, so a
+  recipient sees colours nobody has explained to them.
+
+- **Quantity-level revision deltas.** Their revision compare exports *"which numbers moved, not
+  which wall did"*. Ours is geometric — it clouds what changed on the sheet. Both are useful and
+  they answer different questions; a quantity delta is what goes in front of somebody deciding
+  whether a variation is real.
+
+- **Waste applied to the ordered quantity, never to the measured one.** A clean distinction we do
+  not model at all, because there is no materials layer here yet. If one ever arrives, this is the
+  invariant it should be built on: what was measured is a fact about the drawing, what is ordered
+  is a decision about the job, and conflating them makes the measurement unverifiable.
+
+- **Inverting sheet pixels at render time for dark viewing**, rather than a CSS filter over the
+  page. The difference shows up when printing a negative.
+
+### Deliberately not taking
+
+- **The training-data capture server.** OpenTakeoff banks shape geometry and provenance to build a
+  training corpus — openly, as the point of the project. It is directly opposed to
+  [ADR-0007](adr/0007-telemetry-privacy-and-diagnostics.md): nothing about a drawing leaves the
+  machine, and "anonymised geometry" is not an exception, because a floor plate is identifying.
+  This is a difference in what the two products are *for*, not a criticism of theirs.
+
+- **One-click room detection**, except on the terms already set out under *Deliberately not
+  coming* below: as a proposal a person accepts one at a time, never as a quantity that appears
+  already made. Their design — dashed until inked, with the machine's original boundary retained —
+  actually satisfies that condition, which is worth noting before anybody assumes the answer is no.
+
+### Done, prompted by this comparison
+
+- **Check a dimension.** Drag along something whose length is printed on the sheet, type what it
+  says, and get a graded answer: within 1% the scale is right, within 5% is worth drawing again,
+  beyond that something is wrong. Where a familiar mistake explains the number it is named — a
+  half-size plot, feet read as inches, metres read as feet — because "1,100% out" tells nobody
+  anything and "feet may have been entered where inches were meant" tells them where to look.
+
+  The tutorial sheet has taught this since it shipped: calibrate against the printed `144'-0"`,
+  then measure the far side and see whether it agrees. What was missing was a tool, so the lesson
+  ended at *and now check it by hand*.
+
+  The bands are in `sf-domain` with tests, not in a click handler — a tolerance that lives in the
+  interface is one the importer will not obey, and one somebody widens on the afternoon it becomes
+  inconvenient. Nothing is drawn on the sheet: a check is a question about the page, not a markup
+  on it, and leaving a line behind would put a measurement in the register nobody asked to record.
+
 ## 0.3 — The review, end to end
 
 - **Batch import** of a whole set, with sheet numbers read from title blocks rather than filenames.
