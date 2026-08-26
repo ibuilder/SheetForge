@@ -323,7 +323,12 @@ than evidence of a house style:
   reference stored in the markup is a hash, not a URL — a `blob:` URL dies on reload and a `data:`
   URL would carry a three-megabyte photograph through every export that includes markups. What is
   left is display: opening one works, showing a thumbnail without fetching every attachment in the
-  document does not, and that wants lazy resolution.
+  document does not. *Lazy resolution turns out to be the wrong shape for it.* The engine renders a
+  thumbnail only after passing the URL through an allowlist of relative, `http`, `https`, `blob` and
+  `data`, and decides at render time — so our `sf-attachment:` scheme is refused outright, and a URL
+  resolved afterwards arrives too late to matter. `blob:` is the one workable target, and it has to be
+  ready for the *selected* markup before its panel draws. A resolver hook in the engine is the clean
+  fix and is worth asking upstream for before working around it from outside.
 
 ## 0.4 — Mobile in earnest
 
