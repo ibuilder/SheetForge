@@ -96,6 +96,19 @@ a copy-paste still recovers is worse than no redaction, because it is believed �
 that greps the exported bytes for the string that was supposed to be removed. Pages you did not
 redact are copied untouched and keep their text.
 
+**A running total while you measure, not after.** The takeoff for the open drawing sits beside it
+and moves as each measurement is filed, totalled by cost code *and* unit — a length and an area
+under one code stay two lines, because adding them makes a number with a plausible magnitude sitting
+under a real cost code, wrong in no way a reader can see. What is *not* counted is said in words
+underneath: a measurement on a page with no scale, or taken at a scale nobody has confirmed, is left
+out rather than counted as zero, because a total that quietly dropped three measurements is one
+somebody prices as complete.
+
+**Compare the quantities on two drawings.** What moved, by how much, and in which direction, as a
+CSV you can open beside a bill of quantities. The lines that did *not* move are in the file too — a
+schedule of only the differences cannot be checked, since a line that held and a line that was never
+compared look identical without them.
+
 **Take pages out without touching the original.** Extract a selection into a new drawing that
 records which issue it was cut from. The original is never edited: a revision's identity is the
 hash of its bytes, and editing in place would make verification report your own work as tampering.
