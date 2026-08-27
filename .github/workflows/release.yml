@@ -101,8 +101,9 @@ jobs:
             See [CHANGELOG.md](https://github.com/ibuilder/SheetForge/blob/main/CHANGELOG.md).
 
             **These binaries are not yet code-signed with an organisation certificate**, so Windows
-            SmartScreen and macOS Gatekeeper will warn on first run. Verify the checksums below
-            before installing. Tracked in `docs/runbooks/release.md`.
+            SmartScreen and macOS Gatekeeper will warn on first run. Verify what you downloaded
+            against `SHA256SUMS.txt`, attached to this release. Tracked in
+            `docs/runbooks/release.md`.
           # Draft, always. Publishing is a human act after the clean-VM checklist in the runbook.
           releaseDraft: true
           prerelease: false
@@ -125,8 +126,9 @@ jobs:
             a release to keep.
 
             These binaries are also not code-signed with an organisation certificate, so Windows
-            SmartScreen and macOS Gatekeeper will warn on first run. Verify the checksums before
-            installing.
+            SmartScreen and macOS Gatekeeper will warn on first run. Nothing vouches for these
+            bytes but the hash: verify what you downloaded against `SHA256SUMS.txt`, attached to
+            this release.
 
             See [CHANGELOG.md](https://github.com/ibuilder/SheetForge/blob/main/CHANGELOG.md), and
             [docs/status.md](https://github.com/ibuilder/SheetForge/blob/main/docs/status.md) for
@@ -140,3 +142,48 @@ jobs:
           # them needs the key this build does not have.
           # Relative to `projectPath`, which is where the action runs the CLI from.
           args: ${{ matrix.args }} --config src-tauri/tauri.dryrun.conf.json
+
+  # The release notes tell people to verify the checksums. Until this job existed they were
+  # telling them to verify checksums that were never published — and for an unsigned build the
+  # checksum is the *only* integrity check a downloader has, so that was the one safety net we
+  # pointed at and did not provide.
+  #
+  # Runs after every platform has uploaded, because a SHA256SUMS covering half the assets is worse
+  # than none: it looks complete.
+  checksums:
+    name: Publish checksums
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Collect every asset and hash it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets && cd assets
+
+          # `--pattern '*'` still skips the checksum file itself on a re-run, because it is
+          # deleted first — a SHA256SUMS that lists its own previous self is nonsense.
+          gh release delete-asset "$TAG" SHA256SUMS.txt --yes 2>/dev/null || true
+          gh release download "$TAG" --pattern '*' --clobber
+
+          # Sorted, so the file is stable between runs and a diff means the bytes changed rather
+          # than the ordering did.
+          sha256sum $(ls | sort) > ../SHA256SUMS.txt
+          cd ..
+          cat SHA256SUMS.txt
+
+          # Refuse to publish a partial list. Nine assets today; the check is that the count
+          # matches what was downloaded, not a hardcoded number that rots.
+          downloaded=$(ls assets | wc -l)
+          listed=$(wc -l < SHA256SUMS.txt)
+          if [ "$downloaded" -ne "$listed" ]; then
+            echo "::error::hashed $listed of $downloaded assets"; exit 1
+          fi
+          if [ "$downloaded" -eq 0 ]; then
+            echo "::error::no assets found on $TAG"; exit 1
+          fi
+
+          gh release upload "$TAG" SHA256SUMS.txt --clobber

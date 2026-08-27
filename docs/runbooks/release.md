@@ -20,6 +20,12 @@
       be removed. The elevation defect fixed on 2026-08-25 was invisible from the build log, from
       CI, and from installing — it only appeared on trying to uninstall.
 
+- [ ] **Check that `SHA256SUMS.txt` is on the release before publishing.** The notes tell people
+      to verify against it, and for an unsigned build the hash is the only integrity check a
+      downloader has. The `checksums` job attaches it after every platform has uploaded and fails
+      rather than publishing a partial list — but a job that was skipped leaves the notes pointing
+      at a file that is not there, which is worse than saying nothing.
+
 - [ ] **Never upload installers from a local `target/release/bundle/`.** Releases come from the
       workflow, which builds on a fresh runner. A local bundle directory is not fresh: when a build
       runs without `TAURI_SIGNING_PRIVATE_KEY` the bundler writes new installers and leaves the
