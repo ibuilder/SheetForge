@@ -5,7 +5,8 @@
 # SheetForge
 
 **Open-source construction drawing review, markup and calibrated takeoff.**
-Windows, macOS, Linux, iOS and Android. Works with the network off.
+Windows, macOS and Linux today; iOS and Android are targeted and not yet shipped. Works with
+the network off.
 
 [Documentation](https://ibuilder.github.io/SheetForge/) ·
 [Editing PDFs](docs/guides/editing-pdfs.md) ·
@@ -45,7 +46,7 @@ extremely well rather than doing everything a PDF can do adequately.
 | | SheetForge | Bluebeam Revu | UPDF / general editors |
 |---|---|---|---|
 | Licence | Apache-2.0, free | Per-seat subscription | Per-seat subscription |
-| Platforms | Win · macOS · Linux · iOS · Android | Windows (iPad viewer) | Varies |
+| Platforms | Win · macOS · Linux — mobile targeted, not yet shipped | Windows (iPad viewer) | Varies |
 | Markups as structured records | Yes — status, discipline, assignee, due date, cost code | Yes | No — comments only |
 | Calibrated takeoff with provenance | Yes, per page, re-derivable | Yes, per page | Rarely, or unitless |
 | Revision compare and slip-sheet migration | Yes, with a per-markup verdict | Yes | No |
