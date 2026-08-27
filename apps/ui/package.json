@@ -34,10 +34,10 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.1.2",
-    "eslint": "^10.8.0",
+    "eslint": "^10.9.0",
     "happy-dom": "^20.11.1",
-    "lucide-static": "^1.33.0",
-    "typescript": "^6.0.3",
+    "lucide-static": "^1.34.0",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.66.0",
     "vite": "^8.2.1",
     "vitest": "^4.1.10"
