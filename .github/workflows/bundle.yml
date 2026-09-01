@@ -83,7 +83,7 @@ jobs:
       # than the cause, which is the wrong thing to read first when diagnosing a packaging failure.
       - name: Collect what was produced
         if: success()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.label }}
           retention-days: 7
