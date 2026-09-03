@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.0",
-    "marked": "^18.0.10"
+    "marked": "^18.0.11"
   },
   "allowScripts": {
     "github:MassingCloud/massing-pdf#36794b3c54fcfd62e3a0d2d5984cfc45cac83340": true
