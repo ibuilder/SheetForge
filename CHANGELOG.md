@@ -6,6 +6,20 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-09-10
+
+**The first build anybody outside this repository can download.** 0.1.0 was built and drafted but
+never published, and this supersedes it rather than following it: the 0.1.0 installers carry the
+pdf.js arbitrary-execution advisory below, and a Windows installer whose uninstaller demands
+administrator rights it does not need. Neither should reach anybody.
+
+It is still an **unsigned preview**. Nothing is code-signed or notarised, so SmartScreen and
+Gatekeeper will warn; and it was built without the updater signing key, so **it cannot update
+itself** — anything installed from it stays on 0.1.1 until it is uninstalled and replaced by hand.
+Verify downloads against the attached `SHA256SUMS.txt`. Only the Windows build has been run by a
+person; the macOS and Linux builds compile in CI and nobody has launched them. See
+[docs/status.md](docs/status.md).
+
 ### Fixed
 
 - **The Windows installer no longer asks for administrator rights.** It was configured to offer
@@ -69,7 +83,8 @@ break that touches stored data will say so here with a migration note.
 
 ## [0.1.0] — 2026-08-24
 
-First release. The core is built and tested; the shell is young. See
+Built and drafted, never published — superseded by 0.1.1 before it reached anybody. The core is
+built and tested; the shell is young. See
 [docs/status.md](docs/status.md) for what is verified and what is not.
 
 ### Added
@@ -216,5 +231,6 @@ nobody has checked yet. [docs/status.md](docs/status.md) is the long version.
 - No fuzzing corpus for hostile PDF input yet. This is the largest security gap.
 - No third-party security audit and no penetration test.
 
-[Unreleased]: https://github.com/ibuilder/SheetForge/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ibuilder/SheetForge/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ibuilder/SheetForge/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ibuilder/SheetForge/releases/tag/v0.1.0

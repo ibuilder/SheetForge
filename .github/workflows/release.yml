@@ -158,7 +158,15 @@ jobs:
       - name: Collect every asset and hash it
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job never checks the repository out -- it only needs the release -- so `gh` has no
+          # git remote to infer the repository from and must be told. Without it every call below
+          # fails with "not a git repository", which is how this job would have broken the first
+          # time it ran.
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          # Byte order, not the runner's locale, so the file sorts identically wherever it is
+          # regenerated.
+          LC_ALL: C
         shell: bash
         run: |
           set -euo pipefail
@@ -171,7 +179,7 @@ jobs:
 
           # Sorted, so the file is stable between runs and a diff means the bytes changed rather
           # than the ordering did.
-          sha256sum $(ls | sort) > ../SHA256SUMS.txt
+          sha256sum -- * > ../SHA256SUMS.txt
           cd ..
           cat SHA256SUMS.txt
 
