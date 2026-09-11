@@ -6,6 +6,22 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **Every release file carries signed build provenance, and a bill of materials.** From the next
+  release, anybody can confirm a download was built by this repository's release workflow from a
+  named commit, and has not been changed since:
+
+  ```bash
+  gh attestation verify SheetForge_0.1.2_x64-setup.exe --repo ibuilder/SheetForge
+  ```
+
+  For installers that are not code-signed this is the strongest check available, and it needs no
+  secret — it is signed with the workflow's own identity and recorded in the public Sigstore log. It
+  does not silence SmartScreen or Gatekeeper; only a paid certificate does that. The release also
+  gains `SBOM.cdx.json`, listed in `SHA256SUMS.txt` and attested against the installers it
+  describes. 0.1.1 predates all of this.
+
 ### Changed
 
 - **A redacted copy says what it leaves out.** Its bookmarks, title and other document properties

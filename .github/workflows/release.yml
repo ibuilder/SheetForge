@@ -104,6 +104,11 @@ jobs:
             SmartScreen and macOS Gatekeeper will warn on first run. Verify what you downloaded
             against `SHA256SUMS.txt`, attached to this release. Tracked in
             `docs/runbooks/release.md`.
+
+            Every file here also carries signed build provenance. To confirm one was built by
+            this repository's release workflow and has not been altered since:
+            `gh attestation verify <file> --repo ibuilder/SheetForge`. `SBOM.cdx.json` lists
+            what the installers contain.
           # Draft, always. Publishing is a human act after the clean-VM checklist in the runbook.
           releaseDraft: true
           prerelease: false
@@ -130,6 +135,11 @@ jobs:
             bytes but the hash: verify what you downloaded against `SHA256SUMS.txt`, attached to
             this release.
 
+            Every file here also carries signed build provenance. To confirm one was built by
+            this repository's release workflow and has not been altered since:
+            `gh attestation verify <file> --repo ibuilder/SheetForge`. `SBOM.cdx.json` lists
+            what the installers contain.
+
             See [CHANGELOG.md](https://github.com/ibuilder/SheetForge/blob/main/CHANGELOG.md), and
             [docs/status.md](https://github.com/ibuilder/SheetForge/blob/main/docs/status.md) for
             what is verified and what is not.
@@ -143,55 +153,105 @@ jobs:
           # Relative to `projectPath`, which is where the action runs the CLI from.
           args: ${{ matrix.args }} --config src-tauri/tauri.dryrun.conf.json
 
-  # The release notes tell people to verify the checksums. Until this job existed they were
-  # telling them to verify checksums that were never published — and for an unsigned build the
-  # checksum is the *only* integrity check a downloader has, so that was the one safety net we
-  # pointed at and did not provide.
+  # Checksums, a bill of materials, and signed provenance — in one job, in a fixed order.
   #
-  # Runs after every platform has uploaded, because a SHA256SUMS covering half the assets is worse
-  # than none: it looks complete.
-  checksums:
-    name: Publish checksums
+  # The release notes tell people to verify their download. For an unsigned build the hash is the
+  # only integrity check a downloader has, and until this job existed the notes pointed at checksums
+  # that were never published. Provenance goes further: a signed statement, recorded in the public
+  # Sigstore log, that these exact bytes were built by this workflow from this commit. It cannot
+  # replace code signing — the operating system does not consult it — but anybody can check it with
+  # `gh attestation verify`, and it needs no secret: it is signed with the workflow's own identity.
+  #
+  # The order is deliberate. The SBOM is made first so it is always among the files hashed; were it
+  # uploaded afterwards, a re-run would hash the previous run's copy and a first run would not, and
+  # the same release would get two different checksum files.
+  provenance:
+    name: Publish checksums, SBOM and provenance
     needs: build
     runs-on: ubuntu-latest
+    # Job-level permissions replace the workflow's, so `contents: write` is restated. The other
+    # three are what `actions/attest` needs to mint a signing identity and record the attestation.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      # Byte order, not the runner's locale, so the file sorts identically wherever it is made.
+      LC_ALL: C
     steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      # The resolved tree — what actually ships — rather than the ranges the manifests ask for.
+      - run: npm ci --foreground-scripts
+
+      - name: Bill of materials
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: SBOM.cdx.json
+          # Both off. Its default is to upload to a release by itself on release events, and a file
+          # should reach a release only because this workflow names it.
+          upload-artifact: false
+          upload-release-assets: false
+
       - name: Collect every asset and hash it
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # This job never checks the repository out -- it only needs the release -- so `gh` has no
-          # git remote to infer the repository from and must be told. Without it every call below
-          # fails with "not a git repository", which is how this job would have broken the first
-          # time it ran.
-          GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.event.inputs.tag || github.ref_name }}
-          # Byte order, not the runner's locale, so the file sorts identically wherever it is
-          # regenerated.
-          LC_ALL: C
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p assets && cd assets
+          # Emptied, not merely created. A hosted runner starts clean, but a reused workspace would
+          # still hold the last run's files and every count below would be off by them.
+          rm -rf assets && mkdir assets
 
-          # `--pattern '*'` still skips the checksum file itself on a re-run, because it is
-          # deleted first — a SHA256SUMS that lists its own previous self is nonsense.
-          gh release delete-asset "$TAG" SHA256SUMS.txt --yes 2>/dev/null || true
-          gh release download "$TAG" --pattern '*' --clobber
+          # Removed first, so a re-run never hashes the previous run's copies — a SHA256SUMS that
+          # lists its own former self is nonsense.
+          for stale in SHA256SUMS.txt SBOM.cdx.json; do
+            gh release delete-asset "$TAG" "$stale" --yes 2>/dev/null || true
+          done
+          (cd assets && gh release download "$TAG" --pattern '*' --clobber)
 
-          # Sorted, so the file is stable between runs and a diff means the bytes changed rather
-          # than the ordering did.
-          sha256sum -- * > ../SHA256SUMS.txt
-          cd ..
-          cat SHA256SUMS.txt
-
-          # Refuse to publish a partial list. Nine assets today; the check is that the count
-          # matches what was downloaded, not a hardcoded number that rots.
-          downloaded=$(ls assets | wc -l)
-          listed=$(wc -l < SHA256SUMS.txt)
-          if [ "$downloaded" -ne "$listed" ]; then
-            echo "::error::hashed $listed of $downloaded assets"; exit 1
-          fi
-          if [ "$downloaded" -eq 0 ]; then
+          installers=$(ls assets | wc -l)
+          if [ "$installers" -eq 0 ]; then
             echo "::error::no assets found on $TAG"; exit 1
           fi
+          cp SBOM.cdx.json assets/
 
-          gh release upload "$TAG" SHA256SUMS.txt --clobber
+          # Sorted, so a diff between runs means the bytes changed rather than the ordering.
+          (cd assets && sha256sum -- *) > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+          # Refuse a partial list: one line per file hashed, and every installer plus the SBOM.
+          listed=$(wc -l < SHA256SUMS.txt)
+          if [ "$listed" -ne $((installers + 1)) ]; then
+            echo "::error::hashed $listed files, expected $((installers + 1))"; exit 1
+          fi
+
+          # The SBOM describes the installers, not itself. The format marks each name with a space
+          # (text mode, Linux) or an asterisk (binary mode, Windows); matching only the space passed
+          # on the runner and silently kept the SBOM in the list when tried under Git Bash.
+          grep -vE '[ *]SBOM\.cdx\.json$' SHA256SUMS.txt > installers.sha256
+          if grep -q 'SBOM\.cdx\.json' installers.sha256; then
+            echo "::error::the SBOM is still listed among the installers it describes"; exit 1
+          fi
+
+          gh release upload "$TAG" SHA256SUMS.txt SBOM.cdx.json --clobber
+
+      - name: Attest where every file came from
+        uses: actions/attest@v4
+        with:
+          subject-checksums: SHA256SUMS.txt
+
+      - name: Attest what the installers contain
+        uses: actions/attest@v4
+        with:
+          subject-checksums: installers.sha256
+          sbom-path: SBOM.cdx.json

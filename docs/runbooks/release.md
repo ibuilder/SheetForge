@@ -20,11 +20,17 @@
       be removed. The elevation defect fixed on 2026-08-25 was invisible from the build log, from
       CI, and from installing — it only appeared on trying to uninstall.
 
-- [ ] **Check that `SHA256SUMS.txt` is on the release before publishing.** The notes tell people
-      to verify against it, and for an unsigned build the hash is the only integrity check a
-      downloader has. The `checksums` job attaches it after every platform has uploaded and fails
-      rather than publishing a partial list — but a job that was skipped leaves the notes pointing
-      at a file that is not there, which is worse than saying nothing.
+- [ ] **Check that `SHA256SUMS.txt` and `SBOM.cdx.json` are on the release, and that provenance
+      verifies, before publishing.** The notes tell people to verify against the checksums and the
+      attestation, and for an unsigned build those are the only integrity checks a downloader has.
+      The `provenance` job attaches both files after every platform has uploaded and fails rather
+      than publishing a partial list — but a job that was skipped leaves the notes pointing at
+      things that are not there, which is worse than saying nothing. Check one file end to end:
+
+      ```bash
+      gh release download vX.Y.Z -R ibuilder/SheetForge -p "*x64-setup.exe"
+      gh attestation verify SheetForge_X.Y.Z_x64-setup.exe --repo ibuilder/SheetForge
+      ```
 
 - [ ] **Never upload installers from a local `target/release/bundle/`.** Releases come from the
       workflow, which builds on a fresh runner. A local bundle directory is not fresh: when a build

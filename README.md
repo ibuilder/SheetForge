@@ -145,26 +145,36 @@ property and does not belong in a repository.*
 
 ## Install
 
-> **No release has been cut yet.** The [releases page](https://github.com/ibuilder/SheetForge/releases)
-> is empty, and will stay empty until the first build is signed and checked on a clean machine.
-> Until then, [build from source](#build-from-source) — it is three commands.
+> **[0.1.1](https://github.com/ibuilder/SheetForge/releases/tag/v0.1.1) is an unsigned preview.**
+> Download it from the releases page, or [build from source](#build-from-source) — it is three
+> commands. Before installing, know three things:
 >
-> CI does package the application on Windows, macOS and Linux on every change to the bundling
-> configuration, so the installers below are produced and kept for a week as build artifacts. They
-> are not a release and have not been installed by anybody.
+> - **Nothing is code-signed or notarised.** Windows SmartScreen and macOS Gatekeeper will warn
+>   on first launch.
+> - **It cannot update itself.** It predates the update check, so moving to a later version means
+>   uninstalling it and installing the new one by hand — once.
+> - **Only the Windows build has been run by a person.** The macOS and Linux builds compile in CI and
+>   nobody has launched them. If you install one, you are the first.
+>
+> [docs/status.md](docs/status.md) lists what is verified and what is not.
 
-When there is one, installers will be published there. They will **not** be signed with an
-organisation code-signing certificate, so Windows SmartScreen and macOS Gatekeeper will warn on
-first launch — see [docs/status.md](docs/status.md). Update *payloads* are separately signed and
-verified against a key compiled into the application, which is a different guarantee from the
-installer being trusted by the operating system.
+**Check what you downloaded.** Every release carries `SHA256SUMS.txt`; compare your file against it.
+From the next release, every file also carries signed build provenance, which confirms it was built
+by this repository's release workflow from a named commit and has not been altered since:
+
+```bash
+gh attestation verify SheetForge_0.1.2_x64-setup.exe --repo ibuilder/SheetForge
+```
+
+That is not the operating system trusting the publisher — only a paid code-signing certificate
+does that — but it is the strongest check available for an unsigned build, and it costs nothing.
 
 | Platform | Package |
 |---|---|
-| Windows 10/11 | `.msi` or `.exe` (NSIS, per-user or per-machine) |
+| Windows 10/11 | `.exe` (NSIS, installs for the current user, no administrator needed) or `.msi` |
 | macOS 10.15+ | `.dmg` (Apple silicon and Intel) |
 | Linux | `.AppImage`, `.deb`, `.rpm` |
-| iOS / Android | See [docs/mobile.md](docs/mobile.md) |
+| iOS / Android | Not yet published — see [docs/mobile.md](docs/mobile.md) |
 
 **Updates are checked for, and installed only when you say so.** A few seconds after start,
 SheetForge asks whether a newer version exists — the one network request it makes, and the Project
