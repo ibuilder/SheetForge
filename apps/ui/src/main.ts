@@ -36,6 +36,7 @@ import { summaryPlugin } from "./summary";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { automaticChecksEnabled, runUpdateCheck, setAutomaticChecks } from "./updates";
+import { beginDocumentTiming, mark } from "./timing";
 import "./styles.css";
 
 interface Session {
@@ -888,6 +889,9 @@ async function restoreViews(viewer: Viewer, revision: string): Promise<void> {
 }
 
 async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<void> {
+  // From the moment it was asked for, so the time to the first sheet includes fetching the bytes —
+  // which is part of what the reviewer waits on.
+  beginDocumentTiming();
   chrome.setStatus(`Opening ${revision.name}…`);
 
   // The previous viewer owns a pdf.js document, its worker tasks and a tile cache. Dropping the
@@ -999,6 +1003,10 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
       void showTakeoff(chrome, session.revision.id).catch(() => {});
     }
   });
+
+  // Page number and zoom only: nothing about what is on the sheet. See timing.ts.
+  viewer.bus.on("doc:loaded", () => mark("doc-loaded"));
+  viewer.bus.on("page:rendered", ({ page, scale }) => mark(`rendered:${page}@${scale.toFixed(3)}`));
 
   await viewer.load(new Uint8Array(bytes));
   chrome.setSaveState("saved");

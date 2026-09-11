@@ -12,6 +12,7 @@ survives if the issue is closed or the tracker moves. Each names the commit it w
 | [empty-listbox-roles.md](empty-listbox-roles.md) | Accessibility defect | axe **critical** |
 | [scroller-not-focusable.md](scroller-not-focusable.md) | Accessibility defect | axe **serious** |
 | [attachment-url-resolver.md](attachment-url-resolver.md) | Feature request | Blocks a feature |
+| [sheet-panel-quadratic-rebuild.md](sheet-panel-quadratic-rebuild.md) | Performance defect | Serious — mitigated here by CSS |
 
 The two accessibility defects are listed in `apps/ui/e2e/accessibility.spec.ts` under
 `KNOWN_UPSTREAM` rather than excluded from the scan, so a *new* defect still fails our build — and

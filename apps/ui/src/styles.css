@@ -551,3 +551,22 @@ body {
   margin: 0.5rem 0 0;
   padding: 0.3rem 0.35rem;
 }
+
+/* The drawing engine's sheet thumbnails.
+ *
+ * Its list is declared `overflow-y: auto` — meant to scroll within itself — but nothing bounds its
+ * height, so it grows to the full height of every thumbnail and the whole sidebar scrolls instead.
+ * On a 200-sheet set that is a sidebar 21,930 px tall, with the tool chest and specifications
+ * pushed twenty thousand pixels below the fold.
+ *
+ * It is also a performance defect, and a large one. The engine draws thumbnails lazily with an
+ * IntersectionObserver whose root is *this list*. While the list never scrolls, every thumbnail is
+ * always "inside" it, so "lazy" draws all of them — and the list is rebuilt once per sheet as the
+ * engine reads title blocks after opening. Measured on a 200-sheet set: about 40,000 thumbnail
+ * draws over two minutes, with every jump and zoom queued roughly three seconds behind them.
+ * Bounding the height makes the list the scrolling element the observer assumes, and only the
+ * thumbnails in view are drawn. The rebuild-per-sheet is the engine's to fix and is reported in
+ * docs/upstream/; this restores the behaviour its own stylesheet intended. */
+.mpdf-sheet-list {
+  max-height: min(60vh, 720px);
+}

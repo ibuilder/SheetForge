@@ -6,7 +6,25 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Jumping and zooming on a large set no longer stall for seconds after opening it.** On a
+  200-sheet set a jump took about 3 seconds and a zoom about 4 — for the first couple of minutes
+  after opening, whatever the distance — while opening itself took under half a second. The drawing
+  engine's sheet panel was redrawing every thumbnail once per sheet as it read the title blocks:
+  about 40,000 thumbnail draws, and everything else queued behind them. Its thumbnails are meant to
+  load lazily, but the list they watch never scrolled, so every one was always "in view". Bounding
+  the list's height makes them lazy again: 2,014 draws, done in eight seconds, a jump in 60 ms and a
+  zoom in 87 ms. It also stops the thumbnail list pushing every other sidebar panel twenty thousand
+  pixels down. The underlying causes are the engine's and are reported upstream.
+
 ### Added
+
+- **Rendering is measured.** A browser test opens a synthetic 200-sheet set and times the first
+  sheet, a jump deep into the set, a zoom, and the memory left after paging across it — against
+  loose ceilings meant to catch an order-of-magnitude regression, with the figures printed on every
+  run. The timings come from marks the application records locally; nothing is sent anywhere. The
+  set is generated and lighter than a real CAD export, so the figures are a floor.
 
 - **Every release file carries signed build provenance, and a bill of materials.** From the next
   release, anybody can confirm a download was built by this repository's release workflow from a
