@@ -6,6 +6,16 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **A redacted copy says what it leaves out.** Its bookmarks, title and other document properties
+  are not carried over from the source — deliberately. They are text nobody reviewed when choosing
+  what to black out, and a bookmark can be titled with exactly the name that was just removed from
+  the sheet it points to. That was already true; what changed is that exporting now says so, since
+  the person sending the file on would never find out by opening it. A test now fails if either the
+  outline or the title can be recovered from a redacted copy, reading the output as a PDF reader
+  would rather than searching its bytes — a byte search was shown to miss a planted leak.
+
 ### Added
 
 - **Checking for updates, with an off switch.** A few seconds after start SheetForge asks whether a

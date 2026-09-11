@@ -29,7 +29,7 @@ import { ocrOptions } from "./ocr";
 import { asBlobPart } from "./bytes";
 import { extractPages, parsePageSelection } from "./assemble";
 import { deltaCsv, summarise as summariseDelta } from "./delta-csv";
-import { asPdfBlob, isRedaction, redactionPlugin } from "./redact";
+import { asPdfBlob, isRedaction, REDACTED_COPY_OMITS, redactionPlugin } from "./redact";
 import { describe as describeCheck, scaleCheckPlugin } from "./scale-check";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
@@ -184,7 +184,16 @@ async function guard(action: () => Promise<void>): Promise<void> {
  * Shared by the engine's own exporters and by the summary plugin, so both get the same native save
  * dialog, the same audit entry and the same handling of a dismissed dialog.
  */
-async function deliverExport(chrome: Chrome, blob: Blob, filename: string): Promise<void> {
+async function deliverExport(
+  chrome: Chrome,
+  blob: Blob,
+  filename: string,
+  /**
+   * Said alongside "Exported …" and only then. For what the file deliberately does *not* contain,
+   * which the person sending it on needs to know and would never find out by opening it.
+   */
+  note?: string,
+): Promise<void> {
   const dot = filename.lastIndexOf(".");
   const stem = dot > 0 ? filename.slice(0, dot) : filename;
   const extension = dot > 0 ? filename.slice(dot + 1) : "bin";
@@ -198,7 +207,7 @@ async function deliverExport(chrome: Chrome, blob: Blob, filename: string): Prom
   try {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     await host.exportSave(stem, extension, bytes);
-    chrome.setStatus(`Exported ${filename}.`);
+    chrome.setStatus(note ? `Exported ${filename}. ${note}` : `Exported ${filename}.`);
   } catch (error) {
     // A dismissed save dialog is not a failure worth shouting about.
     if (isCommandError(error) && error.code === "cancelled") {
@@ -947,7 +956,7 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
           // producing "redacted.pdf.pdf".
           const fallback = filename.replace(/\.pdf$/i, "");
           const name = session ? `${session.revision.name} (redacted)` : fallback;
-          await deliverExport(chrome, asPdfBlob(bytes), `${name}.pdf`);
+          await deliverExport(chrome, asPdfBlob(bytes), `${name}.pdf`, REDACTED_COPY_OMITS);
         },
         (message) => chrome.setStatus(message),
       ),

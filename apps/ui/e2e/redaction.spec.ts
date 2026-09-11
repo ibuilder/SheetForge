@@ -16,9 +16,26 @@
  * be a poor trade made silently.
  */
 import { expect, test, type Page } from "@playwright/test";
+import {
+  decodePDFRawStream,
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFRawStream,
+  PDFString,
+} from "pdf-lib";
 
 /** A string that cannot plausibly occur by accident, so finding it means finding *it*. */
 const SECRET = "CONFIDENTIALRATE7Q4XZW";
+
+/**
+ * Strings that live *around* the pages rather than on them — in a bookmark title and in the
+ * document's title. Separate from SECRET, and from each other, so a failure names which one leaked.
+ */
+const OUTLINE_SECRET = "OUTLINETITLE8K2MVQ";
+const TITLE_SECRET = "DOCTITLE3R9PLXW";
 
 /**
  * A two-page PDF with the secret on page one and ordinary text on page two.
@@ -27,7 +44,7 @@ const SECRET = "CONFIDENTIALRATE7Q4XZW";
  * bytes" could mean "compressed" rather than "removed", and the test would pass for the wrong
  * reason on the exact question it exists to answer.
  */
-function secretPdf(): Uint8Array {
+function secretPdf({ withMetadata = false }: { withMetadata?: boolean } = {}): Uint8Array {
   const page = (body: string) =>
     `BT /F1 24 Tf 72 700 Td (${body}) Tj ET\n50 50 512 692 re S\n`;
 
@@ -35,7 +52,9 @@ function secretPdf(): Uint8Array {
   const second = page("Nothing sensitive on this page");
 
   const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
+    withMetadata
+      ? "<< /Type /Catalog /Pages 2 0 R /Outlines 8 0 R /PageMode /UseOutlines >>"
+      : "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
       "/Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>",
@@ -45,6 +64,16 @@ function secretPdf(): Uint8Array {
     `<< /Length ${second.length} >>\nstream\n${second}endstream`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];
+  if (withMetadata) {
+    // A one-entry outline pointing at the page the secret is on, and an Info dictionary. The
+    // bookmark is titled with its own secret, as a real one might be titled with the very name
+    // somebody is redacting off the sheet it points to.
+    objects.push(
+      "<< /Type /Outlines /First 9 0 R /Last 9 0 R /Count 1 >>",
+      `<< /Title (${OUTLINE_SECRET}) /Parent 8 0 R /Dest [3 0 R /Fit] >>`,
+      `<< /Title (${TITLE_SECRET}) /Producer (fixture) >>`,
+    );
+  }
 
   let pdf = "%PDF-1.7\n";
   const offsets: number[] = [];
@@ -56,7 +85,8 @@ function secretPdf(): Uint8Array {
   const xref = pdf.length;
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
   for (const offset of offsets) pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  const info = withMetadata ? " /Info 10 0 R" : "";
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R${info} >>\nstartxref\n${xref}\n%%EOF\n`;
 
   return new TextEncoder().encode(pdf);
 }
@@ -261,5 +291,105 @@ test.describe("redaction", () => {
       exported.includes("Nothing sensitive on this page"),
       "an unredacted page lost its text, so the whole document was rasterised to hide one string",
     ).toBe(true);
+  });
+});
+
+/**
+ * Every piece of text a PDF reader could get back out of these bytes.
+ *
+ * A byte search is not enough, and was shown not to be: planting the source title in the output made
+ * the old check pass anyway. PDF strings can be written as UTF-16 hex (`<FEFF0044…>`), and pdf-lib
+ * packs dictionaries into compressed object streams by default — so a leaked title can sit in the
+ * file where no byte search will ever see it. This parses the document, decodes every string in
+ * every object, and inflates every stream it can, which is what any reader would do.
+ */
+async function everythingAReaderCouldRecover(bytes: Uint8Array): Promise<string> {
+  const document = await PDFDocument.load(bytes, { updateMetadata: false });
+  const found: string[] = [];
+
+  const visit = (value: unknown): void => {
+    if (value instanceof PDFString || value instanceof PDFHexString) {
+      found.push(value.decodeText());
+    } else if (value instanceof PDFDict) {
+      for (const [, entry] of value.entries()) visit(entry);
+    } else if (value instanceof PDFArray) {
+      value.asArray().forEach(visit);
+    } else if (value instanceof PDFRawStream) {
+      visit(value.dict);
+      try {
+        found.push(new TextDecoder("latin1").decode(decodePDFRawStream(value).decode()));
+      } catch {
+        // A filter pdf-lib cannot undo — the JPEG in an image, say. Pixels, not text.
+      }
+    }
+  };
+
+  for (const [, object] of document.context.enumerateIndirectObjects()) visit(object);
+  // The outline is also checked structurally: gone, not merely renamed.
+  if (document.catalog.get(PDFName.of("Outlines"))) found.push("<<catalog still has /Outlines>>");
+  return found.join("\n");
+}
+
+/**
+ * What lives around the pages.
+ *
+ * A redacted copy is a new document built from pages, so the source's bookmarks and properties are
+ * left behind — and that is the safe outcome, not an accident to repair. A bookmark is text nobody
+ * reviewed when choosing what to black out, and it can be titled with the very thing that was
+ * removed from the sheet it points to.
+ *
+ * This test exists so that "restore the bookmarks" cannot be done naively. Copying the outline
+ * across would make it fail, with the reason in the message.
+ */
+test.describe("redaction, and the text around the pages", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubHost(page, Array.from(secretPdf({ withMetadata: true })));
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("leaves the bookmarks and the document title behind, and says so", async ({ page }) => {
+    // The outline is real, not just bytes: the application read it and is showing it. Without this
+    // the test could pass on a fixture whose outline no reader would ever have seen.
+    await expect(page.getByText(OUTLINE_SECRET)).toBeVisible();
+
+    // And the scanner used below demonstrably finds both secrets where they *are*. Without this, its
+    // "not found" in the export could mean it cannot see them at all.
+    const inSource = await everythingAReaderCouldRecover(secretPdf({ withMetadata: true }));
+    expect(inSource, "the scanner cannot see the bookmark title in the source").toContain(OUTLINE_SECRET);
+    expect(inSource, "the scanner cannot see the document title in the source").toContain(TITLE_SECRET);
+
+    await redactTheSecret(page);
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Export/ }).click();
+    await page.getByRole("menuitem", { name: /redacted copy/i }).click();
+
+    await expect
+      .poll(
+        () => page.evaluate(() => (window as unknown as { __sfExported: unknown[] }).__sfExported.length),
+        { timeout: 60_000 },
+      )
+      .toBeGreaterThan(0);
+
+    const bytes = new Uint8Array(await lastExport(page));
+    const exported = await everythingAReaderCouldRecover(bytes);
+    expect(exported).not.toContain("<<catalog still has /Outlines>>");
+
+    expect(
+      exported.includes(OUTLINE_SECRET),
+      "a bookmark title from the source is in the redacted copy. Bookmarks are text the redaction " +
+        "never reviewed, and one can name exactly what was blacked out of the page it points to",
+    ).toBe(false);
+    expect(
+      exported.includes(TITLE_SECRET),
+      "the source's document title is in the redacted copy — document properties are unreviewed text",
+    ).toBe(false);
+    // And the page content was still removed, so this is a redacted copy rather than an empty one.
+    expect(exported.includes(SECRET)).toBe(false);
+
+    // The person sending it on is told, since they would never find out by opening it.
+    await expect(page.locator("[data-status]")).toContainText(
+      "Bookmarks and document properties were left out",
+    );
   });
 });

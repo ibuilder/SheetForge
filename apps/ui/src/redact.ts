@@ -123,6 +123,16 @@ export function redactionPlugin(
 }
 
 /**
+ * What a redacted copy leaves out on purpose, said when it is exported.
+ *
+ * Not discoverable any other way: the recipient sees a document with no bookmarks and assumes the
+ * source had none, and the sender never opens what they sent. Stating it at export is the one
+ * moment both the loss and the reason can reach somebody who can act on it.
+ */
+export const REDACTED_COPY_OMITS =
+  "Bookmarks and document properties were left out: they are text the redaction did not review.";
+
+/**
  * Build the redacted document.
  *
  * @throws if no document is open.
@@ -149,10 +159,15 @@ export async function redactedCopy(
     );
   }
 
+  // A new document, not an edited copy of the old one — and the difference is deliberate. What
+  // lives around the pages rather than on them is left behind: the bookmarks, the title, the
+  // author, the subject and keywords, the XMP metadata. Every one of those is text, and none of it
+  // is text the reviewer looked at when deciding what to redact. A bookmark titled with the tenant
+  // whose name was just blacked out of the sheet would put the name straight back, in the one
+  // document meant to be safe to hand out. `copyPages` moves pages and nothing else, which is
+  // exactly the boundary wanted here. A test puts a secret in the source's outline and title and
+  // fails if either reaches the output — so "restore the bookmarks" has to get past that first.
   const out = await PDFDocument.create();
-  // The source's own title and bookmarks are not carried across: `copyPages` moves pages, not the
-  // document around them. Naming the output rather than leaving it blank is the part worth doing;
-  // the outline is a known loss, recorded in docs/status.md.
   out.setTitle("Redacted copy");
   out.setProducer("SheetForge");
 
