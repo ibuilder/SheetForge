@@ -65,12 +65,21 @@ reserved for scanned sheets.**
   questions, and which one is wanted is the reader's to decide, not ours to bake in.
 - A page with no vector content is a scanned page, and falls through to the OCR path that already
   exists. Nothing here replaces that.
+- **A count is a proposal, never a measurement that appears already made.** The roadmap's
+  "Deliberately not coming" section already rules that automated quantities ship only as proposals a
+  person accepts, with the automation recorded on the record — and this design is held to it. Each
+  matched instance is offered as a pending count marker on the sheet; the reviewer accepts them,
+  individually or in bulk, and an accepted marker records that it was proposed by vector matching
+  and by which symbol. Exact matching makes the proposal *trustworthy about geometry*; it does not
+  make it right about meaning — the same block drawn as a light fitting on one plan and a sensor on
+  another is two things a person can tell apart and a hash cannot.
 
 ### Why this over a model
 
 - **The count is exact and re-derivable.** A confidence score is not something that can go in an
   audit chain. This is the same argument as `raw_page_magnitude`: a quantity has to be defensible
-  later, not merely plausible now.
+  later, not merely plausible now. Exactness is what makes the *proposal* worth accepting in bulk;
+  it is not a licence to skip the acceptance.
 - **It ships no model weights.** The better recogniser in the roadmap is blocked on precisely that
   packaging problem — `onnxruntime-web`'s assets dwarf everything else the application ships.
 - **No provenance question.** A trained model has a licence and a training set, and ADR-0008 refuses

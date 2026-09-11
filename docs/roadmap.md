@@ -261,11 +261,6 @@ than evidence of a house style:
   What blocks it is unchanged and is stated in the ADR: Chromium is a real producer but not a CAD
   exporter, and confirming AutoCAD and Revit needs a drawing set this repository must never hold.
 
-- **Waste applied to the ordered quantity, never to the measured one.** A clean distinction we do
-  not model at all, because there is no materials layer here yet. If one ever arrives, this is the
-  invariant it should be built on: what was measured is a fact about the drawing, what is ordered
-  is a decision about the job, and conflating them makes the measurement unverifiable.
-
 - **Inverting sheet pixels at render time for dark viewing**, rather than a CSS filter over the
   page. The difference shows up when printing a negative.
 
@@ -377,11 +372,23 @@ not be presented as such.
 requested feature in this category and the most dangerous. An unchecked automated quantity is a
 number nobody can defend in a dispute. If it ever ships it will be as a *proposal* a human accepts
 one at a time, with the automation recorded on the record — never as a measurement that appears
-already made.
+already made. [ADR-0011](adr/0011-counting-symbols-from-vector-content.md), which
+designs symbol counting, is bound by this: a vector match is exact about geometry, which is not the
+same thing as right about what the geometry means.
 
 **AI-derived project facts presented as verified.** Same reasoning. An OCR-read scale is already
 marked provisional until a human confirms it, and that is the pattern anything of this kind will
 have to follow.
+
+**Assemblies and waste factors applied to measurements.** Competing takeoff tools turn a measured
+area into material, labour and waste through assembly templates, so that 1,000 ft² of slab becomes
+a concrete volume plus ten per cent. This one will not, in the measurement layer. What was measured
+is a fact about the drawing, and re-deriving it from the page is what makes it defensible; what gets
+*ordered* is a decision about the job — the waste allowance, the product, the crew. Folding the
+second into the first produces a number nobody can check against the sheet, because it no longer
+came only from the sheet. Quantities leave as CSV and XLSX, carrying the calibration and formula
+they came from, into the estimating tool where those decisions belong. If a materials layer ever
+arrives, it sits beside the measurements and never writes over one.
 
 **DWG import.** Not without a tested, licensed and supportable importer. A half-working CAD
 importer is worse than none: it will be wrong on exactly the geometry somebody measures.
