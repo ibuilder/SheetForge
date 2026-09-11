@@ -547,6 +547,70 @@ pub async fn pdf_open(app: AppHandle) -> CommandResult<OpenedDrawing> {
     .map_err(|_| CommandError::internal())?
 }
 
+/// What an interchange import asks the picker for: a title, a filter name, and extensions.
+///
+/// Its own function so the one decision the interface can influence — which kind — is checked
+/// without a dialog in the way.
+fn interchange_picker(
+    kind: &str,
+) -> CommandResult<(&'static str, &'static str, &'static [&'static str])> {
+    match kind {
+        "xfdf" => Ok((
+            "Import markups",
+            "XFDF markup interchange",
+            &["xfdf", "xml"],
+        )),
+        "markups" => Ok(("Load a markup set", "SheetForge markup set", &["json"])),
+        _ => Err(CommandError::invalid_request(
+            "That is not a kind of file SheetForge imports.",
+        )),
+    }
+}
+
+/// Open an XFDF file or a markup set, through the native picker, within the interchange ceiling.
+///
+/// These two imports used to pick the file inside the webview and read it whole with
+/// `File.text()` — no ceiling anywhere on the way, although the threat model names "a hostile
+/// XFDF … arriving by email from a subcontractor" as the primary adversary and `check_interchange`
+/// existed to meet it. A file of a few gigabytes would have been read into the window's memory and
+/// taken it down, with whatever was not yet saved.
+///
+/// Now the picker runs here, as it does for drawings, and the file is refused *before* it is read
+/// if it is not an ordinary file or is past `max_interchange_mb`. No path crosses the boundary:
+/// the interface receives the bytes, or a refusal.
+///
+/// # Errors
+/// [`CommandError::cancelled`] if the dialog is dismissed; a refusal naming the ceiling; or
+/// `invalid-request` for a kind that is not one of the two.
+#[tauri::command]
+pub async fn interchange_open(app: AppHandle, kind: String) -> CommandResult<tauri::ipc::Response> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        state.require(Capability::Import)?;
+        let (title, filter, extensions) = interchange_picker(&kind)?;
+
+        let chosen = app
+            .dialog()
+            .file()
+            .set_title(title)
+            .add_filter(filter, extensions)
+            .blocking_pick_file()
+            .ok_or_else(CommandError::cancelled)?;
+        let path = chosen
+            .into_path()
+            .map_err(|_| CommandError::invalid_request("That file cannot be read."))?;
+
+        let bytes = state.limits().read_interchange(&path).map_err(|error| {
+            // The rule broken, never the path or the contents.
+            log::warn!("interchange import refused: {error}");
+            CommandError::from(error)
+        })?;
+        Ok(tauri::ipc::Response::new(bytes))
+    })
+    .await
+    .map_err(|_| CommandError::internal())?
+}
+
 /// File a document assembled from one already in this project.
 ///
 /// The bytes arrive as a raw body; the name, the originating revision and what was done ride as
@@ -593,8 +657,10 @@ pub async fn document_derive(
             // interface could record any id it liked as the source of a document.
             let from = package.store().revision(origin_id)?;
 
+            // Counted and refused before `import_source`, which writes the file into the package:
+            // refusing afterwards would leave an orphaned source behind.
+            let page_count = admit_pages(package.limits(), &bytes)?;
             let hash = package.import_source(&bytes)?;
-            let page_count = count_pages(&bytes);
             let project_id = from.project_id;
 
             let document = SourceDocument::new(project_id, &name, None)?;
@@ -1868,12 +1934,13 @@ fn file_drawing(
         .unwrap_or("Untitled")
         .to_owned();
 
-    let bytes = std::fs::read(path).map_err(|error| {
-        log::error!(
-            "import read failed: {}",
-            sf_audit::redact(&error.to_string())
-        );
-        CommandError::invalid_request("That file could not be read.")
+    // Refused before it is read, not after. `std::fs::read` loaded the whole file and only then
+    // met the size ceiling, so a 20 GB file was read in full to be told it was over 512 MB, and a
+    // device or pipe dropped on the window was read until memory ran out. The ceiling now applies
+    // on the way in. See `ResourceLimits::read_bounded`.
+    let bytes = package.limits().read_pdf(path).map_err(|error| {
+        log::warn!("import refused: {error}");
+        CommandError::from(error)
     })?;
 
     file_bytes(package, actor, &name, &bytes)
@@ -1894,6 +1961,8 @@ fn file_bytes(
     let name = name.to_owned();
     let bytes = bytes.to_vec();
 
+    // Before anything is filed. See `admit_pages`.
+    let page_count = admit_pages(package.limits(), &bytes)?;
     let hash = package.import_source(&bytes)?;
 
     if let Some(existing) = package.store().revision_by_hash(hash)? {
@@ -1918,7 +1987,6 @@ fn file_bytes(
         ));
     }
 
-    let page_count = count_pages(&bytes);
     let project_id = package
         .store()
         .project()?
@@ -2205,6 +2273,21 @@ pub async fn diagnostics_save(app: AppHandle) -> CommandResult<()> {
 /// A structural count rather than a parse: the renderer is the authority on the document and it
 /// runs in the webview. What this needs to produce is a bounded, honest number for the import
 /// record, and a refusal when the file does not look like a document at all.
+/// Count a document's pages and refuse it past the ceiling.
+///
+/// The threat model has always listed a page-count limit among the defences against a crafted PDF,
+/// and the diagnostics report printed it as in force — but nothing compared the count with it. A
+/// page tree claiming millions of pages was admitted and handed to the renderer. Both paths a
+/// document enters by now call this before anything is written.
+///
+/// # Errors
+/// `too-many-pages`, naming the count and the ceiling.
+fn admit_pages(limits: &sf_security::ResourceLimits, bytes: &[u8]) -> CommandResult<u32> {
+    let pages = count_pages(bytes);
+    limits.check_pages(pages)?;
+    Ok(pages)
+}
+
 fn count_pages(bytes: &[u8]) -> u32 {
     // `/Type /Page` occurrences, not `/Count`, because `/Count` is a claim the file makes about
     // itself and a crafted file can claim anything. Whitespace between the tokens is legal, so the
@@ -2487,6 +2570,42 @@ mod tests {
             elapsed < std::time::Duration::from_secs(5),
             "8 MB took {elapsed:?} — this should be one pass, so look for a scan inside a scan",
         );
+    }
+
+    /// Admission counts the pages itself and refuses past the ceiling. A file claiming a vast
+    /// `/Count` is judged by what is actually in it, in both directions.
+    #[test]
+    fn a_document_past_the_page_ceiling_is_refused_on_its_counted_pages() {
+        let limits = sf_security::ResourceLimits {
+            max_pages: 2,
+            ..sf_security::ResourceLimits::default()
+        };
+        let two = b"%PDF-1.7 /Type /Pages /Count 9999999 /Type /Page /Type /Page";
+        let three = b"%PDF-1.7 /Type /Pages /Count 1 /Type /Page /Type /Page /Type /Page";
+        assert_eq!(
+            admit_pages(&limits, two).unwrap(),
+            2,
+            "a lying /Count must not refuse it"
+        );
+        let refused = admit_pages(&limits, three).unwrap_err();
+        assert_eq!(
+            refused.code, "too-many-pages",
+            "a lying /Count must not admit it"
+        );
+    }
+
+    /// Only the two kinds of file the interface knows how to import reach the picker. Anything else
+    /// is refused before a dialog opens, so the interface cannot steer the picker at arbitrary types.
+    #[test]
+    fn only_known_interchange_kinds_open_a_picker() {
+        assert!(interchange_picker("xfdf").is_ok());
+        assert!(interchange_picker("markups").is_ok());
+        for kind in ["", "pdf", "exe", "../xfdf", "XFDF"] {
+            assert!(
+                interchange_picker(kind).is_err(),
+                "{kind:?} should be refused"
+            );
+        }
     }
 
     /// Every command either checks a capability or is named here as not needing to.

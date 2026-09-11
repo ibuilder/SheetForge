@@ -27,6 +27,7 @@
 //! things their role forbids, and that every attempt is recorded either way.
 
 use serde::{Deserialize, Serialize};
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 
@@ -68,6 +69,27 @@ pub enum SecurityError {
     /// The current role does not hold the capability.
     #[error("your role does not allow {0}")]
     NotPermitted(Capability),
+
+    /// A document with more pages than the ceiling allows — counted, not taken from its claim.
+    #[error("this document has {pages} pages, over the {limit} page limit")]
+    TooManyPages {
+        /// Pages counted in the document.
+        pages: u32,
+        /// The ceiling.
+        limit: u32,
+    },
+
+    /// Something that is not an ordinary file: a directory, a device, a pipe.
+    ///
+    /// Refused before reading, because reading one never ends — `/dev/zero`, or a named pipe
+    /// dropped on the window, would otherwise grow memory until the process died.
+    #[error("that is not an ordinary file")]
+    NotAFile,
+
+    /// The file exists but could not be read. No detail, because the underlying error names the
+    /// path, and these messages reach logs and the interface.
+    #[error("that file could not be read")]
+    Unreadable,
 }
 
 /// This crate's result alias.
@@ -178,6 +200,109 @@ impl ResourceLimits {
     /// As [`ResourceLimits::check_size`].
     pub fn check_interchange(&self, bytes: u64) -> Result<()> {
         Self::check_size(bytes, self.max_interchange_mb, "an import file")
+    }
+
+    /// Check a document's page count against [`ResourceLimits::max_pages`].
+    ///
+    /// The count must be one the caller made itself. A PDF's `/Count` is a claim the file makes
+    /// about itself, and a crafted file can claim anything — which is also why this limit exists:
+    /// a page tree of millions of entries is a way to make a viewer allocate without end.
+    ///
+    /// # Errors
+    /// [`SecurityError::TooManyPages`].
+    pub const fn check_pages(&self, pages: u32) -> Result<()> {
+        if pages > self.max_pages {
+            return Err(SecurityError::TooManyPages {
+                pages,
+                limit: self.max_pages,
+            });
+        }
+        Ok(())
+    }
+
+    /// Read a file whole — refusing it *before* reading if it is too large or not an ordinary file.
+    ///
+    /// The size checks above are applied to bytes already in memory, which is too late for a file
+    /// on disk: `std::fs::read` loads the whole thing first, so a 20 GB drawing is read in full
+    /// before being refused as over 512 MB, and a device or a pipe is read forever. This is the
+    /// order that actually bounds the damage:
+    ///
+    /// 1. **Not an ordinary file** — refused from its metadata, without opening it.
+    /// 2. **Too large by its own account** — refused from its metadata, without reading it.
+    /// 3. **Opened, then re-checked through the handle**, so a file swapped for something else
+    ///    between being measured and being opened is caught as what it now is.
+    /// 4. **Read at most one byte past the limit.** A file can report a size it does not have —
+    ///    procfs files report zero and then produce data — or grow while being read. Reading one
+    ///    byte beyond the ceiling is enough to know it crossed it, and no more is ever held.
+    ///
+    /// Residual: a file replaced with a named pipe in the instant between steps 1 and 3 would block
+    /// the open. That needs a hostile local user racing the reviewer, which the threat model treats
+    /// as out of scope — the adversary here is a hostile *document*.
+    ///
+    /// # Errors
+    /// [`SecurityError::NotAFile`], [`SecurityError::TooLarge`], or [`SecurityError::Unreadable`].
+    pub fn read_bounded(path: &Path, limit_mb: u64, subject: &'static str) -> Result<Vec<u8>> {
+        let measured = std::fs::metadata(path).map_err(|_| SecurityError::Unreadable)?;
+        if !measured.is_file() {
+            return Err(SecurityError::NotAFile);
+        }
+        Self::check_size(measured.len(), limit_mb, subject)?;
+
+        let file = std::fs::File::open(path).map_err(|_| SecurityError::Unreadable)?;
+        let opened = file.metadata().map_err(|_| SecurityError::Unreadable)?;
+        if !opened.is_file() {
+            return Err(SecurityError::NotAFile);
+        }
+        Self::read_limited(file, opened.len(), limit_mb, subject)
+    }
+
+    /// The bounded read itself, over any reader, so a source that lies about its size can be tested
+    /// without the filesystem's cooperation.
+    ///
+    /// # Errors
+    /// [`SecurityError::TooLarge`] if more than the limit arrives, or [`SecurityError::Unreadable`].
+    pub fn read_limited(
+        reader: impl Read,
+        size_hint: u64,
+        limit_mb: u64,
+        subject: &'static str,
+    ) -> Result<Vec<u8>> {
+        let limit_bytes = limit_mb.saturating_mul(1024 * 1024);
+        // The hint is the file's own claim, so it only sizes the buffer; it is never trusted as a
+        // bound, and never allowed to reserve more than the ceiling.
+        let capacity = usize::try_from(size_hint.min(limit_bytes)).unwrap_or(0);
+        let mut bytes = Vec::with_capacity(capacity);
+        reader
+            .take(limit_bytes.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(|_| SecurityError::Unreadable)?;
+        Self::check_size(bytes.len() as u64, limit_mb, subject)?;
+        Ok(bytes)
+    }
+
+    /// Read a drawing from disk within [`ResourceLimits::max_pdf_mb`].
+    ///
+    /// # Errors
+    /// As [`ResourceLimits::read_bounded`].
+    pub fn read_pdf(&self, path: &Path) -> Result<Vec<u8>> {
+        Self::read_bounded(path, self.max_pdf_mb, "a drawing")
+    }
+
+    /// Read an attachment from disk within [`ResourceLimits::max_attachment_mb`].
+    ///
+    /// # Errors
+    /// As [`ResourceLimits::read_bounded`].
+    pub fn read_attachment(&self, path: &Path) -> Result<Vec<u8>> {
+        Self::read_bounded(path, self.max_attachment_mb, "an attachment")
+    }
+
+    /// Read an interchange file — XFDF, a markup set — within
+    /// [`ResourceLimits::max_interchange_mb`].
+    ///
+    /// # Errors
+    /// As [`ResourceLimits::read_bounded`].
+    pub fn read_interchange(&self, path: &Path) -> Result<Vec<u8>> {
+        Self::read_bounded(path, self.max_interchange_mb, "an import file")
     }
 }
 
@@ -870,4 +995,124 @@ mod tests {
         Capability::Import,
         Capability::AuditRead,
     ];
+
+    #[test]
+    fn a_document_at_the_page_ceiling_is_accepted_and_one_more_is_refused() {
+        let limits = ResourceLimits {
+            max_pages: 10,
+            ..ResourceLimits::default()
+        };
+        assert!(limits.check_pages(10).is_ok());
+        assert_eq!(
+            limits.check_pages(11),
+            Err(SecurityError::TooManyPages {
+                pages: 11,
+                limit: 10
+            })
+        );
+    }
+
+    // ---- reading from disk -----------------------------------------------
+
+    const MB: usize = 1024 * 1024;
+
+    fn file_of(dir: &tempfile::TempDir, name: &str, len: usize) -> PathBuf {
+        let path = dir.path().join(name);
+        std::fs::write(&path, vec![0x25_u8; len]).unwrap();
+        path
+    }
+
+    #[test]
+    fn an_ordinary_file_within_the_limit_is_read_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = file_of(&dir, "small.pdf", 1000);
+        let bytes = ResourceLimits::read_bounded(&path, 1, "a drawing").unwrap();
+        assert_eq!(bytes.len(), 1000);
+    }
+
+    #[test]
+    fn exactly_the_limit_is_read_and_one_byte_more_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let at = file_of(&dir, "at.pdf", MB);
+        let over = file_of(&dir, "over.pdf", MB + 1);
+        assert_eq!(
+            ResourceLimits::read_bounded(&at, 1, "a drawing")
+                .unwrap()
+                .len(),
+            MB
+        );
+        assert!(matches!(
+            ResourceLimits::read_bounded(&over, 1, "a drawing"),
+            Err(SecurityError::TooLarge {
+                actual_mb: 2,
+                limit_mb: 1,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_directory_is_refused_as_not_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            ResourceLimits::read_bounded(dir.path(), 1, "a drawing"),
+            Err(SecurityError::NotAFile)
+        );
+    }
+
+    /// The case that motivated this. `std::fs::read("/dev/zero")` never returns: it reads zeros
+    /// until memory runs out. Refused from its metadata, it returns at once — so this test would
+    /// hang, not fail, if the check were ever removed, which is still a failure CI will notice.
+    #[cfg(unix)]
+    #[test]
+    fn a_device_is_refused_without_being_read() {
+        assert_eq!(
+            ResourceLimits::read_bounded(Path::new("/dev/zero"), 1, "a drawing"),
+            Err(SecurityError::NotAFile)
+        );
+    }
+
+    #[test]
+    fn a_missing_file_is_unreadable_and_the_message_names_no_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("private-client-name.pdf");
+        let error = ResourceLimits::read_bounded(&missing, 1, "a drawing").unwrap_err();
+        assert_eq!(error, SecurityError::Unreadable);
+        assert!(!error.to_string().contains("private-client-name"));
+    }
+
+    /// A source that claims to be empty and never ends — what a procfs file or a file growing
+    /// under the reader looks like. Stopped one byte past the ceiling, never read to exhaustion.
+    #[test]
+    fn a_source_that_lies_about_its_size_is_stopped_at_the_limit() {
+        let endless = std::io::repeat(0);
+        assert!(matches!(
+            ResourceLimits::read_limited(endless, 0, 1, "an import file"),
+            Err(SecurityError::TooLarge { limit_mb: 1, .. })
+        ));
+    }
+
+    /// A size hint is the file's own claim. An absurd one must not reserve memory on its say-so.
+    #[test]
+    fn an_absurd_size_hint_does_not_reserve_memory() {
+        let bytes =
+            ResourceLimits::read_limited(&b"small"[..], u64::MAX, 1, "an import file").unwrap();
+        assert_eq!(bytes, b"small");
+        assert!(bytes.capacity() <= MB);
+    }
+
+    #[test]
+    fn each_kind_of_file_reads_against_its_own_ceiling() {
+        let dir = tempfile::tempdir().unwrap();
+        let limits = ResourceLimits {
+            max_pdf_mb: 3,
+            max_attachment_mb: 2,
+            max_interchange_mb: 1,
+            ..ResourceLimits::default()
+        };
+        let two_and_a_bit = file_of(&dir, "f", 2 * MB + 1);
+        assert!(limits.read_pdf(&two_and_a_bit).is_ok());
+        assert!(limits.read_attachment(&two_and_a_bit).is_err());
+        assert!(limits.read_interchange(&two_and_a_bit).is_err());
+    }
 }

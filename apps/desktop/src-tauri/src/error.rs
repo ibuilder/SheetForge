@@ -85,6 +85,11 @@ impl From<sf_security::SecurityError> for CommandError {
             S::NotTheExpectedFormat { .. } => "wrong-format",
             S::PathEscape | S::UnusableName { .. } => "bad-location",
             S::NotPermitted(_) => "not-permitted",
+            // Distinct codes, so the interface can tell "that is a folder, pick the file inside it"
+            // from "that file vanished or is locked" — and neither message ever names the path.
+            S::TooManyPages { .. } => "too-many-pages",
+            S::NotAFile => "not-a-file",
+            S::Unreadable => "unreadable",
         };
         Self::new(code, error.to_string(), false)
     }

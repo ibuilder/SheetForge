@@ -33,6 +33,7 @@ import { asPdfBlob, isRedaction, REDACTED_COPY_OMITS, redactionPlugin } from "./
 import { describe as describeCheck, scaleCheckPlugin } from "./scale-check";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
+import { interchangePlugin } from "./interchange";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { automaticChecksEnabled, runUpdateCheck, setAutomaticChecks } from "./updates";
@@ -954,6 +955,21 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
       }),
     // Registers a Redact tool and an "Export redacted copy" action in the engine's own
       // registries, so both appear where the engine's equivalents do.
+      // Replaces the engine's XFDF and markup-set imports under the same ids, so neither the menu
+      // nor the engine's toolbar can reach the originals, which read the file whole in the window
+      // with no ceiling. See interchange.ts.
+      interchangePlugin({
+        open: async (kind) => {
+          try {
+            return new Uint8Array(await host.interchangeOpen(kind));
+          } catch (error) {
+            if (isCommandError(error) && error.code === "cancelled") return null;
+            throw new Error(errorMessage(error), { cause: error });
+          }
+        },
+        status: (message) => chrome.setStatus(message),
+        confirm: (message) => window.confirm(message),
+      }),
       redactionPlugin(
         async (bytes, filename) => {
           // `filename` already carries an extension, so the fallback strips it rather than

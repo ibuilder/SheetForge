@@ -235,6 +235,12 @@ impl Package {
         &mut self.store
     }
 
+    /// The ceilings this package enforces, for callers reading files that will be filed into it.
+    #[must_use]
+    pub const fn limits(&self) -> &ResourceLimits {
+        &self.limits
+    }
+
     /// Replace the resource bounds. Enterprise policy can tighten these.
     pub const fn set_limits(&mut self, limits: ResourceLimits) {
         self.limits = limits;
@@ -318,9 +324,17 @@ impl Package {
     /// [`PackageError::IntegrityFailure`] if the stored bytes no longer hash to their name.
     pub fn attachment_bytes(&self, hash: ContentHash) -> Result<Vec<u8>> {
         let path = self.attachment_path(hash)?;
-        let bytes = fs::read(&path).map_err(|_| PackageError::MissingSource {
-            short_hash: hash.short(),
-        })?;
+        // Bounded, because a package can come from somebody else: an entry swollen past the
+        // attachment ceiling is refused rather than loaded, and a missing one is still "missing".
+        let bytes = self
+            .limits
+            .read_attachment(&path)
+            .map_err(|error| match error {
+                SecurityError::TooLarge { .. } => PackageError::Security(error),
+                _ => PackageError::MissingSource {
+                    short_hash: hash.short(),
+                },
+            })?;
 
         // Verified on the way out, not merely on the way in. A photo that is evidence of a defect
         // is exactly the file somebody might later claim was altered, and the hash is the whole
@@ -371,7 +385,10 @@ impl Package {
                 short_hash: hash.short(),
             });
         }
-        Ok(fs::read(path)?)
+        // The source a drawing was filed from, read against the drawing ceiling — the same one it
+        // was admitted under, so an entry that grew since, or arrived in somebody else's package,
+        // cannot be loaded whole by being asked for.
+        Ok(self.limits.read_pdf(&path)?)
     }
 
     /// Check every drawing against the hash it is filed under.
@@ -390,7 +407,7 @@ impl Package {
                     short_hash: entry.sha256.short(),
                 });
             }
-            let bytes = fs::read(&path)?;
+            let bytes = self.limits.read_pdf(&path)?;
             // Cheap check first: a truncated download is the common case and does not need a hash.
             if bytes.len() as u64 != entry.byte_len || hash_bytes(&bytes) != entry.sha256 {
                 return Err(PackageError::IntegrityFailure {

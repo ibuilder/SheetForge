@@ -140,6 +140,7 @@ pub fn run() {
             commands::scale_check,
             commands::revision_delta,
             commands::takeoff_totals,
+            commands::interchange_open,
             commands::markup_create,
             commands::markup_create_many,
             commands::markup_update,

@@ -138,6 +138,8 @@ async function stubHost(
       (window as unknown as { __sfCompared: unknown[] }).__sfCompared = [];
       // Every call to the updater, in order — so a test can assert that none were made at all.
       (window as unknown as { __sfUpdater: string[] }).__sfUpdater = [];
+      // Interchange imports the host was asked for, and what a test wants it to answer.
+      (window as unknown as { __sfInterchangeCalls: string[] }).__sfInterchangeCalls = [];
       (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened = [];
       (window as unknown as { __sfDerived: unknown[] }).__sfDerived = [];
       (window as unknown as { __sfSheets: unknown[] }).__sfSheets = [];
@@ -279,6 +281,27 @@ async function stubHost(
               // One drawing unless a test asks for two, which is the ordinary state right after
               // the first import. The open one is first, because `openRecent` opens whichever is.
               return Promise.resolve(alsoEarlier ? [revision, earlier] : [revision]);
+            case "interchange_open": {
+              // Answers with whatever a test planted: the file's text, a refusal, or a cancel.
+              // Rejections are plain objects on purpose — Tauri rejects with the serialised command
+              // error, not an Error, and a stub that threw Errors would test a shape the bridge
+              // never actually receives.
+              /* eslint-disable @typescript-eslint/prefer-promise-reject-errors */
+              (window as unknown as { __sfInterchangeCalls: string[] }).__sfInterchangeCalls.push(
+                String(args["kind"]),
+              );
+              const planted = (window as unknown as {
+                __sfInterchange?: { text?: string; refuse?: string };
+              }).__sfInterchange;
+              if (planted?.refuse) {
+                return Promise.reject({ code: "too-large", message: planted.refuse, retryable: false });
+              }
+              if (planted?.text !== undefined) {
+                return Promise.resolve(new TextEncoder().encode(planted.text).buffer);
+              }
+              return Promise.reject({ code: "cancelled", message: "Cancelled.", retryable: false });
+              /* eslint-enable @typescript-eslint/prefer-promise-reject-errors */
+            }
             case "takeoff_totals":
               return Promise.resolve({
                 lines: [
@@ -1665,5 +1688,99 @@ test.describe("updates", () => {
 
     await projectMenu(page).click();
     await expect(page.getByRole("menuitem", { name: "Check for updates on start" })).toBeVisible();
+  });
+});
+
+/**
+ * Importing markups from a file.
+ *
+ * The engine's own XFDF and markup-set imports picked the file inside the window and read it whole,
+ * with no size ceiling on the way — against a threat model that names a hostile XFDF from a
+ * subcontractor as the primary adversary. They are replaced under the same action ids, so the file
+ * now comes through the host's native picker and is measured before it is read.
+ *
+ * The first test is the one that matters: from the Export menu *and* from the engine's toolbar, no
+ * picker ever opens inside the window. Either path reaching the original would open one.
+ */
+const plantInterchange = (page: Page, planted: { text?: string; refuse?: string }) =>
+  page.evaluate((value) => {
+    (window as unknown as { __sfInterchange: unknown }).__sfInterchange = value;
+  }, planted);
+
+const interchangeCalls = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __sfInterchangeCalls: string[] }).__sfInterchangeCalls);
+
+const ONE_SQUARE_XFDF =
+  '<?xml version="1.0" encoding="UTF-8"?>' +
+  '<xfdf xmlns="http://ns.adobe.com/xfdf/"><annots>' +
+  '<square page="0" rect="100,100,200,200" title="A. Reviewer" name="sq-1"/>' +
+  "</annots></xfdf>";
+
+async function openDrawing(page: Page, markups: unknown[] = []): Promise<void> {
+  await stubHost(page, Array.from(testPdf()), { markups });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open PDF…" }).first().click();
+  await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+}
+
+const exportMenu = (page: Page) =>
+  page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Export/ });
+
+test.describe("importing markups from a file", () => {
+  test("never opens a picker inside the window — from the menu or the engine's toolbar", async ({ page }) => {
+    const choosers: string[] = [];
+    page.on("filechooser", () => choosers.push("opened"));
+    await openDrawing(page);
+    await plantInterchange(page, {}); // the host's picker is "dismissed"
+
+    await exportMenu(page).click();
+    await page.getByRole("menuitem", { name: /Import XFDF/ }).click();
+    await expect.poll(() => interchangeCalls(page)).toEqual(["xfdf"]);
+
+    // The engine's toolbar renders every action as a button that runs it directly. If the override
+    // had not taken, this is the path that would still reach the unguarded original.
+    await page.getByRole("button", { name: "Import XFDF", exact: true }).click();
+    await expect.poll(() => interchangeCalls(page)).toEqual(["xfdf", "xfdf"]);
+
+    await exportMenu(page).click();
+    await page.getByRole("menuitem", { name: /Load markup set/ }).click();
+    await expect.poll(() => interchangeCalls(page)).toEqual(["xfdf", "xfdf", "markups"]);
+
+    expect(choosers, "a file picker opened inside the window, bypassing the host's ceiling").toEqual([]);
+  });
+
+  test("a file past the ceiling is refused, and the ceiling is named", async ({ page }) => {
+    await openDrawing(page);
+    await plantInterchange(page, { refuse: "this file is 3100 MB, over the 64 MB limit for an import file" });
+    await exportMenu(page).click();
+    await page.getByRole("menuitem", { name: /Import XFDF/ }).click();
+    await expect(page.locator("[data-status]")).toContainText("over the 64 MB limit");
+  });
+
+  test("an XFDF file is imported through the host", async ({ page }) => {
+    await openDrawing(page);
+    await plantInterchange(page, { text: ONE_SQUARE_XFDF });
+    await exportMenu(page).click();
+    await page.getByRole("menuitem", { name: /Import XFDF/ }).click();
+    await expect(page.locator("[data-status]")).toContainText("Imported 1 markups");
+  });
+
+  test("loading a markup set asks before replacing the drawing's markups", async ({ page }) => {
+    const asked: string[] = [];
+    page.on("dialog", (dialog) => {
+      asked.push(dialog.message());
+      void dialog.dismiss();
+    });
+    // One real markup on the drawing, in the shape the host actually returns.
+    await openDrawing(page, [seededCloud()]);
+    await plantInterchange(page, {
+      text: JSON.stringify({ format: "massing-pdf-markups", version: 1, annotations: [] }),
+    });
+    await exportMenu(page).click();
+    await page.getByRole("menuitem", { name: /Load markup set/ }).click();
+
+    await expect.poll(() => asked.length).toBe(1);
+    expect(asked[0]).toContain("replaces the 1 markup on this drawing with the 0 in the file");
+    await expect(page.locator("[data-status]")).toContainText("Nothing was loaded");
   });
 });

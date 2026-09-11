@@ -195,8 +195,28 @@ impl Bundle {
         let _ = writeln!(out, "Role                  {:?}", self.role);
         let _ = writeln!(out, "Largest drawing       {} MB", limits.max_pdf_mb);
         let _ = writeln!(out, "Largest attachment    {} MB", limits.max_attachment_mb);
-        let _ = writeln!(out, "Largest package       {} MB", limits.max_package_mb);
+        let _ = writeln!(
+            out,
+            "Largest import file   {} MB",
+            limits.max_interchange_mb
+        );
         let _ = writeln!(out, "Pages per document    {}", limits.max_pages);
+
+        // Split out rather than listed with the rest. Every one of these used to appear under
+        // "Limits in force" while nothing enforced it, which is the one place a support bundle
+        // must not overstate: whoever reads it is deciding what the application protects against.
+        let _ = writeln!(
+            out,
+            "
+== Declared, not yet enforced =="
+        );
+        let _ = writeln!(out, "Largest package       {} MB", limits.max_package_mb);
+        let _ = writeln!(
+            out,
+            "Decompressed stream   {} MB",
+            limits.max_decompressed_mb
+        );
+        let _ = writeln!(out, "Archive entries       {}", limits.max_archive_entries);
         let _ = writeln!(out, "Concurrent jobs       {}", limits.max_concurrent_jobs);
         let _ = writeln!(out, "Job timeout           {} s", limits.job_timeout_secs);
     }
@@ -467,5 +487,41 @@ mod tests {
         assert!(!text.starts_with('{'));
         assert!(text.contains("== Build and machine =="));
         assert!(text.contains("== Limits in force =="));
+    }
+
+    /// Nothing unenforced may appear under "Limits in force". Whoever reads a support bundle is
+    /// deciding what the application protects against, and it is the one place overstating that
+    /// does real harm.
+    #[test]
+    fn only_enforced_limits_are_listed_as_in_force() {
+        let text = a_bundle().to_readable();
+        let in_force = text
+            .split("== Limits in force ==")
+            .nth(1)
+            .and_then(|rest| rest.split("== Declared, not yet enforced ==").next())
+            .expect("an in-force section followed by a declared section");
+        for unenforced in [
+            "Largest package",
+            "Decompressed stream",
+            "Archive entries",
+            "Concurrent jobs",
+            "Job timeout",
+        ] {
+            assert!(
+                !in_force.contains(unenforced),
+                "{unenforced} is listed as in force but nothing enforces it"
+            );
+        }
+        for enforced in [
+            "Largest drawing",
+            "Largest attachment",
+            "Largest import file",
+            "Pages per document",
+        ] {
+            assert!(
+                in_force.contains(enforced),
+                "{enforced} is enforced and should be listed as such"
+            );
+        }
     }
 }

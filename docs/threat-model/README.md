@@ -32,12 +32,25 @@ form the team actually reasons with.
 *Vector:* a page tree claiming millions of pages, a decompression bomb, a pathological content
 stream.
 
-*Mitigation:* size, page-count, decompressed-size and per-job time limits, all in one auditable
-struct. Page counts are counted, not read from the file's own claim. Parsing runs off the UI thread
-in cancellable work.
+*Mitigation:* ceilings on **size** and **page count**, both enforced by the host before a document
+is filed. The size is checked *before the file is read* — it is refused from its metadata, then
+read no further than one byte past the ceiling, and anything that is not an ordinary file (a
+device, a pipe) is refused outright. The page count is counted from the file's contents, never
+taken from its own `/Count`. XFDF and markup-set imports come through the host's picker and the
+same bounded read. pdf.js parses in a worker, off the interface thread.
 
-*Residual:* pdf.js is a large parser and the limits bound the damage rather than removing the
-surface. **No fuzzing corpus yet** — the largest open gap.
+*Corrected 2026-09-11.* This entry previously listed decompressed-size and per-job time limits
+alongside these, and the page-count limit as in force. None of the three was enforced: the
+page count was counted and never compared with its ceiling, and the other two exist only as
+values in `ResourceLimits`. The size ceiling was also applied only after the whole file had been
+read, so a file far over it was loaded before being refused, and a device was read until memory
+ran out. The page count and the order of the size check are now fixed; the other two are not, and
+the diagnostics report lists them under "Declared, not yet enforced" rather than "in force".
+
+*Residual:* **stream decompression and render time are not bounded by us.** They happen inside
+pdf.js's worker, which exposes no hook for either, so a decompression bomb inside an admitted PDF,
+or a pathological content stream, is limited only by pdf.js's own defences and the size of the
+file that got through. **No fuzzing corpus yet** — the largest open gap.
 
 ### 2. A crafted project package that writes outside itself
 

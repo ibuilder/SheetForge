@@ -419,6 +419,15 @@ export const host = {
   attachmentBytes: (id: string) => call<ArrayBuffer>("attachment_bytes", { id }),
 
   /**
+   * Fetch an XFDF file or a markup set through the host's picker.
+   *
+   * The picker runs natively and the file is refused before it is read if it is past the
+   * interchange ceiling — the engine's own imports read it whole inside the window instead. Rejects
+   * with `cancelled` when the dialog is dismissed.
+   */
+  interchangeOpen: (kind: "xfdf" | "markups") => call<ArrayBuffer>("interchange_open", { kind }),
+
+  /**
    * Grade a measured dimension against the one printed on the sheet.
    *
    * On the host because where the bands sit is a domain judgement with tests behind it, not a

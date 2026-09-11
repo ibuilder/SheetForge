@@ -6,6 +6,29 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Security
+
+- **Size ceilings now apply before a file is read, not after.** Importing a drawing read the whole
+  file into memory and only then checked it against the 512 MB ceiling — so a far larger file was
+  loaded before being refused, and a device or a named pipe dropped on the window was read until
+  memory ran out. Files are now refused from their metadata, re-checked through the opened handle,
+  and read no more than one byte past the ceiling, which also stops a file that reports a size it
+  does not have. The same bounded read covers attachments, sources read back out of a project
+  package — which may come from somebody else — and imports.
+- **XFDF and markup-set imports are measured.** The drawing engine read these files whole inside
+  the window, with no ceiling on the way, although the threat model names a hostile XFDF from a
+  subcontractor as the primary adversary. They now come through the host's native picker and the
+  same bounded read, and no route — the menu or the engine's own toolbar — can reach the old ones.
+  Loading a markup set, which replaces every markup on the drawing, now asks first.
+- **The page-count ceiling is enforced.** It was listed as a defence in the threat model and shown
+  as in force in the diagnostics report, and nothing ever compared a document's page count with it.
+  Documents past it are now refused before anything is written, on a count taken from the file's
+  contents rather than its own claim.
+- **The diagnostics report no longer overstates.** Ceilings that exist only as values — the job
+  timeout, concurrency, decompressed-stream, package and archive limits — were listed under
+  "Limits in force". They are now listed as declared and not yet enforced, and the threat model is
+  corrected to match.
+
 ### Fixed
 
 - **Jumping and zooming on a large set no longer stall for seconds after opening it.** On a
