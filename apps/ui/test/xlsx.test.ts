@@ -118,6 +118,8 @@ describe("cells", () => {
     ]);
     const sheet = unzip(workbook).get("xl/worksheets/sheet1.xml")!;
     expect(sheet).toContain("beforeafter");
+    // Control characters in the pattern are the point: these are exactly the ones XML forbids.
+    // eslint-disable-next-line no-control-regex
     expect(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(sheet)).toBe(false);
   });
 

@@ -7,6 +7,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { DownloadEvent } from "@tauri-apps/plugin-updater";
+
 import {
   automaticChecksEnabled,
   runUpdateCheck,
@@ -20,18 +22,21 @@ function fakeUpdate(calls: string[], over: Partial<AvailableUpdate> = {}): Avail
   return {
     version: "0.1.2",
     currentVersion: "0.1.1",
-    download: vi.fn(async (onEvent) => {
+    download: vi.fn((onEvent?: (event: DownloadEvent) => void) => {
       calls.push("download");
       onEvent?.({ event: "Started", data: { contentLength: 200 } });
       onEvent?.({ event: "Progress", data: { chunkLength: 100 } });
       onEvent?.({ event: "Progress", data: { chunkLength: 100 } });
       onEvent?.({ event: "Finished" });
+      return Promise.resolve();
     }),
-    install: vi.fn(async () => {
+    install: vi.fn(() => {
       calls.push("install");
+      return Promise.resolve();
     }),
-    close: vi.fn(async () => {
+    close: vi.fn(() => {
       calls.push("close");
+      return Promise.resolve();
     }),
     ...over,
   };
@@ -41,15 +46,17 @@ function deps(calls: string[], over: Partial<UpdateDeps> = {}): UpdateDeps & { s
   const said: string[] = [];
   return {
     said,
-    check: vi.fn(async () => null),
+    check: vi.fn(() => Promise.resolve(null)),
     confirm: vi.fn(() => true),
     status: (message: string) => said.push(message),
     available: vi.fn(),
-    saveAll: vi.fn(async () => {
+    saveAll: vi.fn(() => {
       calls.push("save");
+      return Promise.resolve();
     }),
-    relaunch: vi.fn(async () => {
+    relaunch: vi.fn(() => {
       calls.push("relaunch");
+      return Promise.resolve();
     }),
     ...over,
   };
@@ -115,7 +122,7 @@ describe("when there is nothing to do", () => {
   });
 
   it("says nothing on an automatic check with no network — offline is normal here", async () => {
-    const d = deps([], { check: vi.fn(async () => Promise.reject(new Error("offline"))) });
+    const d = deps([], { check: vi.fn(() => Promise.reject(new Error("offline"))) });
     expect(await runUpdateCheck(d, { manual: false })).toBe("unreachable");
     expect(d.said).toEqual([]);
   });
@@ -125,7 +132,7 @@ describe("when there is nothing to do", () => {
     await runUpdateCheck(current, { manual: true });
     expect(current.said.join(" ")).toContain("latest");
 
-    const offline = deps([], { check: vi.fn(async () => Promise.reject(new Error("offline"))) });
+    const offline = deps([], { check: vi.fn(() => Promise.reject(new Error("offline"))) });
     await runUpdateCheck(offline, { manual: true });
     expect(offline.said.join(" ")).toContain("Could not check for updates");
     // No invented cause: the same failure is what an online machine sees before any release
@@ -135,7 +142,7 @@ describe("when there is nothing to do", () => {
 
   it("does not echo the updater's error, which can carry a URL", async () => {
     const d = deps([], {
-      check: vi.fn(async () =>
+      check: vi.fn(() =>
         Promise.reject(new Error("GET https://example.invalid/secret-path failed")),
       ),
     });
@@ -148,7 +155,7 @@ describe("a check nobody asked for", () => {
   it("announces an update and never asks — a dialog under somebody's typing is not consent", async () => {
     const calls: string[] = [];
     const update = fakeUpdate(calls);
-    const d = deps(calls, { check: vi.fn(async () => update) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(update)) });
 
     expect(await runUpdateCheck(d, { manual: false })).toBe("available");
     expect(d.confirm).not.toHaveBeenCalled();
@@ -159,7 +166,7 @@ describe("a check nobody asked for", () => {
 
   it("records the version, so the menu can keep offering it after the status line moves on", async () => {
     const calls: string[] = [];
-    const d = deps(calls, { check: vi.fn(async () => fakeUpdate(calls)) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(fakeUpdate(calls))) });
     await runUpdateCheck(d, { manual: false });
     expect(d.available).toHaveBeenCalledWith("0.1.2");
   });
@@ -169,7 +176,7 @@ describe("installing", () => {
   it("installs nothing without a yes", async () => {
     const calls: string[] = [];
     const update = fakeUpdate(calls);
-    const d = deps(calls, { check: vi.fn(async () => update), confirm: vi.fn(() => false) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(update)), confirm: vi.fn(() => false) });
 
     expect(await runUpdateCheck(d, { manual: true })).toBe("declined");
     expect(update.download).not.toHaveBeenCalled();
@@ -178,7 +185,7 @@ describe("installing", () => {
 
   it("names both versions when asking", async () => {
     const calls: string[] = [];
-    const d = deps(calls, { check: vi.fn(async () => fakeUpdate(calls)), confirm: vi.fn(() => false) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(fakeUpdate(calls))), confirm: vi.fn(() => false) });
     await runUpdateCheck(d, { manual: true });
     const asked = (d.confirm as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;
     expect(asked).toContain("0.1.2");
@@ -189,7 +196,7 @@ describe("installing", () => {
     // On Windows the installer ends the process the moment install() runs, so the save has to
     // have already happened. Any other order loses work on exactly one platform.
     const calls: string[] = [];
-    const d = deps(calls, { check: vi.fn(async () => fakeUpdate(calls)) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(fakeUpdate(calls))) });
 
     expect(await runUpdateCheck(d, { manual: true })).toBe("installed");
     expect(calls).toEqual(["download", "save", "install", "relaunch", "close"]);
@@ -197,7 +204,7 @@ describe("installing", () => {
 
   it("reports download progress", async () => {
     const calls: string[] = [];
-    const d = deps(calls, { check: vi.fn(async () => fakeUpdate(calls)) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(fakeUpdate(calls))) });
     await runUpdateCheck(d, { manual: true });
     expect(d.said).toContain("Downloading SheetForge 0.1.2… 50%");
     expect(d.said).toContain("Downloading SheetForge 0.1.2… 100%");
@@ -209,8 +216,8 @@ describe("installing", () => {
     const calls: string[] = [];
     const update = fakeUpdate(calls);
     const d = deps(calls, {
-      check: vi.fn(async () => update),
-      saveAll: vi.fn(async () => Promise.reject(new Error("disk full"))),
+      check: vi.fn(() => Promise.resolve(update)),
+      saveAll: vi.fn(() => Promise.reject(new Error("disk full"))),
     });
 
     expect(await runUpdateCheck(d, { manual: true })).toBe("not-saved");
@@ -222,9 +229,9 @@ describe("installing", () => {
   it("changes nothing when the download fails or does not verify", async () => {
     const calls: string[] = [];
     const update = fakeUpdate(calls, {
-      download: vi.fn(async () => Promise.reject(new Error("signature mismatch"))),
+      download: vi.fn(() => Promise.reject(new Error("signature mismatch"))),
     });
-    const d = deps(calls, { check: vi.fn(async () => update) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(update)) });
 
     expect(await runUpdateCheck(d, { manual: true })).toBe("failed");
     expect(d.saveAll).not.toHaveBeenCalled();
@@ -235,9 +242,9 @@ describe("installing", () => {
   it("does not claim 'nothing changed' after an installer failed part-way", async () => {
     const calls: string[] = [];
     const update = fakeUpdate(calls, {
-      install: vi.fn(async () => Promise.reject(new Error("installer exited 1"))),
+      install: vi.fn(() => Promise.reject(new Error("installer exited 1"))),
     });
-    const d = deps(calls, { check: vi.fn(async () => update) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(update)) });
 
     expect(await runUpdateCheck(d, { manual: true })).toBe("failed");
     const said = d.said.join(" ");
@@ -249,8 +256,8 @@ describe("installing", () => {
   it("says the update is in place when only the restart failed", async () => {
     const calls: string[] = [];
     const d = deps(calls, {
-      check: vi.fn(async () => fakeUpdate(calls)),
-      relaunch: vi.fn(async () => Promise.reject(new Error("no"))),
+      check: vi.fn(() => Promise.resolve(fakeUpdate(calls))),
+      relaunch: vi.fn(() => Promise.reject(new Error("no"))),
     });
     expect(await runUpdateCheck(d, { manual: true })).toBe("installed");
     expect(d.said.join(" ")).toContain("is installed. Restart SheetForge");
@@ -259,7 +266,7 @@ describe("installing", () => {
   it("releases the host's handle on the update whatever happened", async () => {
     const calls: string[] = [];
     const update = fakeUpdate(calls);
-    const d = deps(calls, { check: vi.fn(async () => update), confirm: vi.fn(() => false) });
+    const d = deps(calls, { check: vi.fn(() => Promise.resolve(update)), confirm: vi.fn(() => false) });
     await runUpdateCheck(d, { manual: true });
     expect(update.close).toHaveBeenCalled();
   });

@@ -9,7 +9,7 @@
     "build": "npm run stage:ocr && tsc -p tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint src test e2e",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

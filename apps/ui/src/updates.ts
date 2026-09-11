@@ -82,33 +82,35 @@ export function setAutomaticChecks(on: boolean): boolean {
  * The parts of the updater's `Update` this module uses.
  *
  * Narrower than the plugin's class so the logic can be tested without one; the plugin's class
- * satisfies it structurally.
+ * satisfies it structurally. Declared as function-typed properties rather than methods — here and
+ * in `UpdateDeps` — because nothing relies on `this`, and a method pulled off its object to be
+ * asserted on is exactly what a test does with a dependency.
  */
 export interface AvailableUpdate {
   version: string;
   currentVersion: string;
-  download(onEvent?: (event: DownloadEvent) => void): Promise<void>;
-  install(): Promise<void>;
-  close(): Promise<void>;
+  download: (onEvent?: (event: DownloadEvent) => void) => Promise<void>;
+  install: () => Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** Everything the check needs from outside, passed in so each branch can be exercised. */
 export interface UpdateDeps {
   /** Ask the server. Rejects when it cannot be reached; resolves null when nothing is newer. */
-  check(): Promise<AvailableUpdate | null>;
+  check: () => Promise<AvailableUpdate | null>;
   /** Ask the reviewer. */
-  confirm(message: string): boolean;
+  confirm: (message: string) => boolean;
   /** Tell the reviewer. */
-  status(message: string): void;
+  status: (message: string) => void;
   /**
    * Record that a newer version exists, so the menu can offer it after the status line has moved
    * on. A notice that vanishes with the next status message is one most people never see.
    */
-  available(version: string): void;
+  available: (version: string) => void;
   /** Save every pending markup, and throw if that did not happen. */
-  saveAll(): Promise<void>;
+  saveAll: () => Promise<void>;
   /** Start the new version. Not reached on Windows, where the installer ends the process. */
-  relaunch(): Promise<void>;
+  relaunch: () => Promise<void>;
 }
 
 /** How a check ended. Returned for the tests; the reviewer is told through `status`. */
