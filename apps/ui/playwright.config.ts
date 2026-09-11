@@ -8,6 +8,17 @@ import { defineConfig, devices } from "@playwright/test";
  * Everything runs against the *built* bundle, so what is tested is what ships — including worker
  * URL resolution, which differs between a dev server and a build.
  */
+/**
+ * The port the built bundle is served on.
+ *
+ * Overridable because 4173 is Vite's default preview port and the one most likely to be taken by
+ * something else a developer is running — an editor's preview, another project's `vite preview`.
+ * `--strictPort` makes a collision fail loudly rather than drift, and this lets it be moved instead
+ * of stopping somebody else's process. CI leaves it alone.
+ */
+const PORT = Number(process.env["SF_E2E_PORT"] ?? 4173);
+const ORIGIN = `http://127.0.0.1:${PORT}`;
+
 export default defineConfig({
   testDir: "e2e",
   fullyParallel: true,
@@ -16,11 +27,11 @@ export default defineConfig({
   reporter: process.env["CI"] ? "github" : "list",
   use: { trace: "on-first-retry" },
 
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], baseURL: "http://127.0.0.1:4173" } }],
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], baseURL: ORIGIN } }],
 
   webServer: {
-    command: "npm run build && npm run preview -- --port 4173 --strictPort",
-    url: "http://127.0.0.1:4173",
+    command: `npm run build && npm run preview -- --port ${PORT} --strictPort`,
+    url: ORIGIN,
     // Never reuse. The command builds first, and reusing a server skips the build — so the suite
     // would quietly test whatever bundle happened to be there last time. A slow, honest suite
     // beats a fast one that lies.

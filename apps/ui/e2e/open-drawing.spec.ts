@@ -136,6 +136,8 @@ async function stubHost(
       (window as unknown as { __sfSaved: unknown[] }).__sfSaved = saved;
       (window as unknown as { __sfExported: unknown[] }).__sfExported = [];
       (window as unknown as { __sfCompared: unknown[] }).__sfCompared = [];
+      // Every call to the updater, in order — so a test can assert that none were made at all.
+      (window as unknown as { __sfUpdater: string[] }).__sfUpdater = [];
       (window as unknown as { __sfRecentOpened: unknown[] }).__sfRecentOpened = [];
       (window as unknown as { __sfDerived: unknown[] }).__sfDerived = [];
       (window as unknown as { __sfSheets: unknown[] }).__sfSheets = [];
@@ -204,6 +206,17 @@ async function stubHost(
             return Promise.resolve(null);
           }
 
+          // The updater. `check` answers with whatever a test planted in `__sfUpdate`, or null for
+          // "nothing newer"; everything else is recorded and does nothing, so no test can install.
+          if (command.startsWith("plugin:updater|")) {
+            (window as unknown as { __sfUpdater: string[] }).__sfUpdater.push(command);
+            if (command === "plugin:updater|check") {
+              return Promise.resolve(
+                (window as unknown as { __sfUpdate?: unknown }).__sfUpdate ?? null,
+              );
+            }
+            return Promise.resolve(null);
+          }
           if (command === "plugin:event|listen") {
             const name = args["event"] as string;
             const handler = args["handler"] as number;
@@ -1529,5 +1542,128 @@ test.describe("the running takeoff", () => {
     await expect(excluded).toContainText("2 on pages with no scale");
     await expect(excluded).toContainText("1 taken at a scale nobody has confirmed");
     await expect(excluded).toContainText("left out rather than counted as zero");
+  });
+});
+
+/**
+ * Updates: the one network request, asked for politely and switchable off.
+ *
+ * ADR-0007 allows the update check on one condition — that it can be turned off — so the test that
+ * matters most is the one proving "off" means *no request*, rather than a request whose answer is
+ * ignored. The clock is fast-forwarded past the start-up delay so the automatic check actually
+ * runs within the test rather than being assumed.
+ */
+const AVAILABLE = {
+  rid: 1,
+  currentVersion: "0.1.1",
+  version: "0.1.2",
+  date: "2026-09-12T10:00:00Z",
+  body: "Notes.",
+  rawJson: {},
+};
+
+const projectMenu = (page: Page) =>
+  page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ });
+
+const updaterCalls = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __sfUpdater: string[] }).__sfUpdater);
+
+test.describe("updates", () => {
+  test("switched off, the check sends nothing at all", async ({ page }) => {
+    await page.clock.install();
+    await stubHost(page, Array.from(testPdf()));
+    await page.addInitScript(
+      ({ update }) => {
+        localStorage.setItem("sheetforge.update-check", "off");
+        (window as unknown as { __sfUpdate: unknown }).__sfUpdate = update;
+      },
+      { update: AVAILABLE },
+    );
+    await page.goto("/");
+    await page.clock.runFor(15_000);
+
+    // Not "checked, and ignored the answer". Never asked: nothing left the machine.
+    //
+    // An empty list would also be what a fast-forward that never fired the timer produces. It is
+    // not vacuous because the next test runs the identical fast-forward and *does* see the check
+    // go out — the two stand or fall together, so do not weaken one without the other.
+    expect(await updaterCalls(page)).toEqual([]);
+  });
+
+  test("on start, an update is announced and never asked about", async ({ page }) => {
+    // A dialog arriving while somebody types a markup turns a stray Enter into consent.
+    await page.clock.install();
+    await stubHost(page, Array.from(testPdf()));
+    await page.addInitScript(
+      ({ update }) => {
+        (window as unknown as { __sfUpdate: unknown }).__sfUpdate = update;
+      },
+      { update: AVAILABLE },
+    );
+    const dialogs: string[] = [];
+    page.on("dialog", (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
+
+    await page.goto("/");
+    await page.clock.runFor(15_000);
+
+    await expect(page.locator("[data-status]")).toContainText("0.1.2 is available");
+    expect(dialogs, "an automatic check must never raise a dialog").toEqual([]);
+    const calls = await updaterCalls(page);
+    expect(calls).toContain("plugin:updater|check");
+    expect(calls.some((c) => c.includes("download") || c.includes("install"))).toBe(false);
+
+    // And it stays offered by name after the status line has moved on.
+    await projectMenu(page).click();
+    await expect(page.getByRole("menuitem", { name: "Install SheetForge 0.1.2…" })).toBeVisible();
+  });
+
+  test("asked for, it names both versions and installs nothing without a yes", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.addInitScript(
+      ({ update }) => {
+        (window as unknown as { __sfUpdate: unknown }).__sfUpdate = update;
+      },
+      { update: AVAILABLE },
+    );
+    const dialogs: string[] = [];
+    page.on("dialog", (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
+
+    await page.goto("/");
+    await projectMenu(page).click();
+    await page.getByRole("menuitem", { name: "Check for updates…" }).click();
+
+    await expect(page.locator("[data-status]")).toContainText("Install it from the Project menu");
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]).toContain("0.1.2");
+    expect(dialogs[0]).toContain("0.1.1");
+    const calls = await updaterCalls(page);
+    expect(calls.some((c) => c.includes("download") || c.includes("install"))).toBe(false);
+  });
+
+  test("asked for with nothing newer, it says so", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+    await projectMenu(page).click();
+    await page.getByRole("menuitem", { name: "Check for updates…" }).click();
+    await expect(page.locator("[data-status]")).toContainText("You have the latest SheetForge");
+  });
+
+  test("the off switch is in the menu, and says what it did", async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+    await page.goto("/");
+
+    await projectMenu(page).click();
+    await page.getByRole("menuitem", { name: "Stop checking for updates on start" }).click();
+    await expect(page.locator("[data-status]")).toContainText("will not contact the update server");
+    expect(await page.evaluate(() => localStorage.getItem("sheetforge.update-check"))).toBe("off");
+
+    await projectMenu(page).click();
+    await expect(page.getByRole("menuitem", { name: "Check for updates on start" })).toBeVisible();
   });
 });

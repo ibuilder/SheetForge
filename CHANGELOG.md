@@ -6,6 +6,25 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **Checking for updates, with an off switch.** A few seconds after start SheetForge asks whether a
+  newer version exists. It is the one network request the application makes, and ADR-0007 allows it
+  on the condition that it can be turned off — *Project ▾ → Stop checking for updates on start* —
+  so switched off, it sends nothing at all rather than asking and ignoring the answer.
+
+  A check on start only ever announces. It never raises a dialog, because one arriving while
+  somebody types a markup turns a stray Enter into consent to download and restart. The Project
+  menu then offers *Install SheetForge 0.1.2…* by name, and that asks before doing anything.
+
+  Installing downloads and verifies first, then saves every markup, then installs. The order is
+  forced by Windows, where the installer ends the application the moment it starts. And the save is
+  confirmed from the drawing engine's own state rather than by waiting for it, because the engine's
+  save resolves even when it fails — waiting and carrying on would install over unsaved work.
+
+  Nothing can be updated *to* until a release is built with the updater key. 0.1.1 predates this
+  and needs one manual reinstall.
+
 ## [0.1.1] — 2026-09-10
 
 **The first build anybody outside this repository can download.** 0.1.0 was built and drafted but

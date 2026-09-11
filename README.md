@@ -166,11 +166,17 @@ installer being trusted by the operating system.
 | Linux | `.AppImage`, `.deb`, `.rpm` |
 | iOS / Android | See [docs/mobile.md](docs/mobile.md) |
 
-**The application does not update itself yet.** The updater is built in and configured — update
-payloads are designed to be signed and checked against a public key compiled into the application,
-with an unsigned or mis-signed one discarded rather than applied — but nothing in the application
-ever asks for an update, so today every upgrade is an uninstall and a fresh download. The
-verification, once something calls it, is covered by the updater plugin's own tests, not by ours.
+**Updates are checked for, and installed only when you say so.** A few seconds after start,
+SheetForge asks whether a newer version exists — the one network request it makes, and the Project
+menu switches it off. It never installs on its own: it says a version is available and the Project
+menu offers to install it. When you choose that, your markups are saved first, the download is
+verified against a public key compiled into the application, and an unsigned or mis-signed payload
+is discarded rather than applied.
+
+**Nothing can be updated *to* yet.** An update needs a release built with the updater signing key,
+and none has been published — so the check currently finds nothing, and 0.1.1, which predates the
+check, needs one manual reinstall to reach a version that has it. The signature verification itself
+is covered by the updater plugin's own tests, not by ours.
 
 ## Build from source
 

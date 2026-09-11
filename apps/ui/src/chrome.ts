@@ -189,6 +189,14 @@ export interface ChromeHandlers {
   recentProjects: () => readonly RecentProject[];
   onVerify: () => void;
   onDiagnostics: () => void;
+  /** Ask for an update now, or install the one already found. */
+  onCheckForUpdates: () => void;
+  /** Turn checking on start on or off. ADR-0007 grants the check on condition it can be. */
+  onToggleUpdateChecks: () => void;
+  /** Whether checking on start is on, for the menu's label. */
+  automaticUpdateChecks: () => boolean;
+  /** A newer version an earlier check found, so the menu can offer it by name. */
+  availableUpdate: () => string | undefined;
   /**
    * The export and import actions the engine currently offers, read when the menu opens so that
    * "enabled" reflects the document actually on screen rather than the one that was there when the
@@ -396,6 +404,24 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         })),
         { id: "verify", label: "Check integrity", enabled: true, separatorBefore: true },
         { id: "diagnostics", label: "Save diagnostic report…", enabled: true },
+        // Named for what it will do. Once a check has found a version, the item says so outright:
+        // the status line that announced it will have been overwritten long before somebody goes
+        // looking.
+        {
+          id: "updates",
+          label: handlers.availableUpdate()
+            ? `Install SheetForge ${handlers.availableUpdate()}…`
+            : "Check for updates…",
+          enabled: true,
+          separatorBefore: true,
+        },
+        {
+          id: "updates-auto",
+          label: handlers.automaticUpdateChecks()
+            ? "Stop checking for updates on start"
+            : "Check for updates on start",
+          enabled: true,
+        },
         // Findable again after the first run. Somebody who wants to try a tool without risking a
         // live drawing should not have to reinstall to get the practice sheet back.
         { id: "tutorial", label: "Open the tutorial sheet", enabled: true, separatorBefore: true },
@@ -410,6 +436,8 @@ export function mountChrome(root: HTMLElement, handlers: ChromeHandlers): Chrome
         else if (id === "new") handlers.onCreateProject();
         else if (id === "verify") handlers.onVerify();
         else if (id === "tutorial") handlers.onTutorial();
+        else if (id === "updates") handlers.onCheckForUpdates();
+        else if (id === "updates-auto") handlers.onToggleUpdateChecks();
         else handlers.onDiagnostics();
       },
     ),

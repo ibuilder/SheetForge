@@ -33,6 +33,9 @@ import { asPdfBlob, isRedaction, redactionPlugin } from "./redact";
 import { describe as describeCheck, scaleCheckPlugin } from "./scale-check";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
+import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { automaticChecksEnabled, runUpdateCheck, setAutomaticChecks } from "./updates";
 import "./styles.css";
 
 interface Session {
@@ -43,6 +46,18 @@ interface Session {
 }
 
 let session: Session | undefined;
+
+/**
+ * The drawing engine's last report of whether markups are saved.
+ *
+ * Kept because its save action does not reject on failure: it re-queues, retries later, emits
+ * `error` here, and resolves as if all were well. This is the only trustworthy answer to "did that
+ * save land", and installing an update over a save that did not land loses the work.
+ */
+let lastSync: { state: string; pending: number } | undefined;
+
+/** A newer version an earlier check found, offered by name in the Project menu. */
+let availableUpdate: string | undefined;
 
 /**
  * The projects opened lately, refreshed whenever one is opened.
@@ -82,6 +97,13 @@ async function start(): Promise<void> {
     recentProjects: () => recent,
     onVerify: () => void guard(() => verify(chrome)),
     onDiagnostics: () => void guard(() => saveDiagnostics(chrome)),
+    onCheckForUpdates: () =>
+      void guard(async () => {
+        await runUpdateCheck(updateDeps(chrome), { manual: true });
+      }),
+    onToggleUpdateChecks: () => toggleUpdateChecks(chrome),
+    automaticUpdateChecks: automaticChecksEnabled,
+    availableUpdate: () => availableUpdate,
     exportItems,
     onExport: (id) => void guard(() => runExport(chrome, id)),
   });
@@ -123,6 +145,13 @@ async function start(): Promise<void> {
       // the Project menu and on the empty state, where it can be asked for rather than inflicted.
       await guard(() => openTutorial(chrome));
     }
+
+    // Deliberately late and deliberately detached. Start-up is not held up by a network request,
+    // and ten seconds keeps the announcement from landing on top of whatever the reviewer opened
+    // first. Offline, or switched off, this sends nothing and says nothing.
+    setTimeout(() => {
+      void runUpdateCheck(updateDeps(chrome), { manual: false }).catch(() => {});
+    }, 10_000);
   } else {
     chrome.setStatus(
       "Running in a browser tab: nothing can be opened or saved from here. " +
@@ -944,7 +973,9 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
   // detach the buffer it is given — so this array is not reused after the call.
   // Say whether work is safe, continuously. The engine emits this as it debounces writes through
   // the adapter; without surfacing it, "it saves as you go" is a claim the interface never backs up.
+  lastSync = undefined;
   viewer.bus.on("sync:state", ({ state, pending, message }) => {
+    lastSync = { state, pending };
     if (state === "saving") chrome.setSaveState("saving");
     else if (state === "error") chrome.setSaveState("error", message ?? "check the project folder");
     else chrome.setSaveState("saved", pending > 0 ? `${pending} pending` : undefined);
@@ -982,6 +1013,47 @@ async function openRevision(chrome: Chrome, revision: RevisionSummary): Promise<
  * Worth saying in the status line what it does *not* contain, because somebody about to attach a
  * file to a ticket for their client's project wants to know that before they send it, not after.
  */
+/**
+ * Everything the update check needs, bound to this window.
+ *
+ * `saveAll` is the part that matters. It asks the engine to save and then believes the engine's
+ * `sync:state`, not the promise — the promise resolves whether or not the save landed.
+ */
+function updateDeps(chrome: Chrome) {
+  return {
+    check: () => checkForUpdate(),
+    confirm: (message: string) => window.confirm(message),
+    status: (message: string) => chrome.setStatus(message),
+    available: (version: string) => {
+      availableUpdate = version;
+    },
+    saveAll: async () => {
+      const current = session;
+      if (!current) return;
+      await current.viewer.runAction("persistence.save");
+      if (lastSync?.state === "error" || (lastSync?.pending ?? 0) > 0) {
+        throw new Error("markups are not saved");
+      }
+    },
+    relaunch: () => relaunch(),
+  };
+}
+
+function toggleUpdateChecks(chrome: Chrome): void {
+  const next = !automaticChecksEnabled();
+  if (!setAutomaticChecks(next)) {
+    // Said plainly. An off switch that failed and stayed silent would leave somebody believing
+    // SheetForge had stopped contacting the network when it had not.
+    chrome.setStatus("That setting could not be saved, so nothing has changed.");
+    return;
+  }
+  chrome.setStatus(
+    next
+      ? "SheetForge will check for updates when it starts."
+      : "SheetForge will not contact the update server on start. Project ▾ → Check for updates… still asks when you choose it.",
+  );
+}
+
 async function saveDiagnostics(chrome: Chrome): Promise<void> {
   chrome.setStatus("Collecting…");
   await host.diagnosticsSave();
