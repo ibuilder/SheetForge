@@ -166,9 +166,11 @@ installer being trusted by the operating system.
 | Linux | `.AppImage`, `.deb`, `.rpm` |
 | iOS / Android | See [docs/mobile.md](docs/mobile.md) |
 
-Updates are delivered as signed payloads and verified against a public key compiled into the
-application; an unsigned or mis-signed update is discarded rather than applied. The verification is
-covered by the updater plugin's own tests, not by ours.
+**The application does not update itself yet.** The updater is built in and configured — update
+payloads are designed to be signed and checked against a public key compiled into the application,
+with an unsigned or mis-signed one discarded rather than applied — but nothing in the application
+ever asks for an update, so today every upgrade is an uninstall and a fresh download. The
+verification, once something calls it, is covered by the updater plugin's own tests, not by ours.
 
 ## Build from source
 
