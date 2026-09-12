@@ -299,6 +299,62 @@ fn audit(package: &mut Package, actor: &ActorId, action: &str, outcome: Outcome,
     }
 }
 
+/// Record a refusal, and hand it back to be returned.
+///
+/// The rules require refusals to be audited, and until now almost none were. The two paths that did
+/// were both capability checks, and a local install runs as `Role::Owner` — so in a shipping build
+/// nothing a reviewer was turned away from was ever recorded. That is the half of the trail a
+/// review asks about: not only what somebody did, but what the application refused to let them do.
+/// A drawing over the ceiling, a document claiming a million pages, a name that tried to leave its
+/// directory — each is a question somebody may have to answer weeks later, and "the log says
+/// nothing" is not an answer.
+///
+/// The reason is the refusal's own sentence, which names the rule and the magnitude — "this file is
+/// 3100 MB, over the 512 MB limit for a drawing" — and never a path, a filename or any of the
+/// file's contents; the tests in [`crate::error`] hold that line. The code is recorded beside it so
+/// refusals can be counted by rule without reading prose.
+fn refused(
+    package: &mut Package,
+    actor: &ActorId,
+    action: &str,
+    error: impl Into<CommandError>,
+    record: Record,
+) -> CommandError {
+    let error = error.into();
+    audit(
+        package,
+        actor,
+        action,
+        Outcome::Denied,
+        record.because(&error.message).with("code", error.code),
+    );
+    error
+}
+
+/// Record a refusal that happened before the project was reached, if one is open to record it in.
+///
+/// Capability and name checks run before `with_open`, so there is no package in hand — and the
+/// refusal should not go unrecorded for that reason alone. This takes the package lock itself,
+/// which is why it must never be called from inside a `with_open` closure: that lock is already
+/// held there, and taking it twice is a deadlock rather than an error. Refusals with no project
+/// open are not recorded anywhere, because the trail lives in the project.
+fn refused_outside(state: &AppState, action: &str, error: impl Into<CommandError>) -> CommandError {
+    let error = error.into();
+    let _ = state.with_package(|package| {
+        audit(
+            package,
+            state.actor(),
+            action,
+            Outcome::Denied,
+            Record::new()
+                .because(&error.message)
+                .with("code", error.code),
+        );
+        Ok::<(), CommandError>(())
+    });
+    error
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -600,10 +656,11 @@ pub async fn interchange_open(app: AppHandle, kind: String) -> CommandResult<tau
             .into_path()
             .map_err(|_| CommandError::invalid_request("That file cannot be read."))?;
 
-        let bytes = state.limits().read_interchange(&path).map_err(|error| {
+        let read = state.limits().read_interchange(&path);
+        let bytes = read.map_err(|error| {
             // The rule broken, never the path or the contents.
             log::warn!("interchange import refused: {error}");
-            CommandError::from(error)
+            refused_outside(&state, "markup:import", error)
         })?;
         Ok(tauri::ipc::Response::new(bytes))
     })
@@ -650,7 +707,8 @@ pub async fn document_derive(
         state.require(Capability::DocumentImport)?;
 
         let origin_id = revision_id(&origin)?;
-        sf_security::check_name(&name)?;
+        sf_security::check_name(&name)
+            .map_err(|error| refused_outside(&state, "document:derive", error))?;
 
         with_open(&state, |package| {
             // The origin has to be a revision this project actually holds. Without this the
@@ -659,7 +717,16 @@ pub async fn document_derive(
 
             // Counted and refused before `import_source`, which writes the file into the package:
             // refusing afterwards would leave an orphaned source behind.
-            let page_count = admit_pages(package.limits(), &bytes)?;
+            let admitted = admit_pages(package.limits(), &bytes);
+            let page_count = admitted.map_err(|error| {
+                refused(
+                    package,
+                    state.actor(),
+                    "document:derive",
+                    error,
+                    Record::new().with("from", &origin_id.to_string()),
+                )
+            })?;
             let hash = package.import_source(&bytes)?;
             let project_id = from.project_id;
 
@@ -1000,7 +1067,8 @@ pub async fn attachment_store(
         // The name is the user's and is only ever shown, never used as a path — but it is checked
         // anyway, because the cost is nothing and the day somebody uses it to build a filename is
         // the day that decision matters.
-        sf_security::check_name(&name)?;
+        sf_security::check_name(&name)
+            .map_err(|error| refused_outside(&state, "attachment:store", error))?;
 
         with_open(&state, |package| {
             let byte_len = bytes.len() as u64;
@@ -1672,19 +1740,26 @@ pub fn markup_update(
         // Editing your own comment and editing the architect's are separate acts.
         let capability = sf_security::Role::edit_capability(existing.is_authored_by(&actor));
         if let Err(refusal) = state.require(capability) {
-            audit(
+            return Err(refused(
                 package,
                 &actor,
                 "markup:update",
-                Outcome::Denied,
-                Record::new()
-                    .subject("markup", &id)
-                    .because(&refusal.to_string()),
-            );
-            return Err(refusal.into());
+                refusal,
+                Record::new().subject("markup", &id),
+            ));
         }
+        // Changing a status is its own act — closing somebody's issue is not editing its text —
+        // and so is being refused one.
         if edit.status.is_some() {
-            state.require(Capability::MarkupStatus)?;
+            if let Err(refusal) = state.require(Capability::MarkupStatus) {
+                return Err(refused(
+                    package,
+                    &actor,
+                    "markup:update",
+                    refusal,
+                    Record::new().subject("markup", &id),
+                ));
+            }
         }
 
         let geometry = match edit.geometry {
@@ -1740,16 +1815,13 @@ pub fn markup_delete(app: AppHandle, id: String, base_version: u64) -> CommandRe
         let existing = package.store().markup(markup)?;
         let capability = sf_security::Role::delete_capability(existing.is_authored_by(&actor));
         if let Err(refusal) = state.require(capability) {
-            audit(
+            return Err(refused(
                 package,
                 &actor,
                 "markup:delete",
-                Outcome::Denied,
-                Record::new()
-                    .subject("markup", &id)
-                    .because(&refusal.to_string()),
-            );
-            return Err(refusal.into());
+                refusal,
+                Record::new().subject("markup", &id),
+            ));
         }
         package.store_mut().delete_markup(markup, base_version)?;
         audit(
@@ -1874,7 +1946,11 @@ pub async fn export_save(app: AppHandle, request: tauri::ipc::Request<'_>) -> Co
         // The name is a suggestion from the renderer and lands in a filesystem path, so it is
         // checked against the same rules as anything else that becomes a filename.
         let file_name = format!("{suggested_name}.{extension}");
-        sf_security::check_name(&file_name)?;
+        // Recorded as a refused export rather than only rejected: an export is a disclosure event,
+        // and an attempt at one that the rules turned away is worth as much to a review as one that
+        // went through.
+        sf_security::check_name(&file_name)
+            .map_err(|error| refused_outside(&state, &format!("export:{extension}"), error))?;
 
         let chosen = app
             .dialog()
@@ -1938,9 +2014,10 @@ fn file_drawing(
     // met the size ceiling, so a 20 GB file was read in full to be told it was over 512 MB, and a
     // device or pipe dropped on the window was read until memory ran out. The ceiling now applies
     // on the way in. See `ResourceLimits::read_bounded`.
-    let bytes = package.limits().read_pdf(path).map_err(|error| {
+    let read = package.limits().read_pdf(path);
+    let bytes = read.map_err(|error| {
         log::warn!("import refused: {error}");
-        CommandError::from(error)
+        refused(package, actor, "document:import", error, Record::new())
     })?;
 
     file_bytes(package, actor, &name, &bytes)
@@ -1962,7 +2039,9 @@ fn file_bytes(
     let bytes = bytes.to_vec();
 
     // Before anything is filed. See `admit_pages`.
-    let page_count = admit_pages(package.limits(), &bytes)?;
+    let admitted = admit_pages(package.limits(), &bytes);
+    let page_count = admitted
+        .map_err(|error| refused(package, actor, "document:import", error, Record::new()))?;
     let hash = package.import_source(&bytes)?;
 
     if let Some(existing) = package.store().revision_by_hash(hash)? {
@@ -2592,6 +2671,62 @@ mod tests {
             refused.code, "too-many-pages",
             "a lying /Count must not admit it"
         );
+    }
+
+    /// A refusal has to reach the trail, not only the caller.
+    ///
+    /// Nothing asserted this at the command layer, and in every shipping build the trail held no
+    /// refusals at all: the only two audited refusals were capability checks, and a local install
+    /// runs as `Role::Owner`, so neither branch could be reached. This drives a real package
+    /// through the one route every drawing enters by, into the page ceiling, and reads the trail
+    /// back out.
+    #[test]
+    fn a_refused_import_is_recorded_in_the_project() {
+        let root = tempfile::tempdir().unwrap();
+        let project = sf_domain::Project::new("Refusals", None, None, ActorId::local()).unwrap();
+        // `create` refuses to write into a directory that already exists, so name one inside.
+        let mut package =
+            Package::create(&root.path().join("refusals"), &project, "0.1.0-test").unwrap();
+        package.set_limits(sf_security::ResourceLimits {
+            max_pages: 1,
+            ..sf_security::ResourceLimits::default()
+        });
+        let actor = ActorId::local();
+
+        let refusal = file_bytes(
+            &mut package,
+            &actor,
+            "Two pages",
+            b"%PDF-1.7 /Type /Page /Type /Page",
+        )
+        .unwrap_err();
+        assert_eq!(refusal.code, "too-many-pages");
+
+        let events = package.store().audit_events().unwrap();
+        let denied = events
+            .iter()
+            .find(|event| event.outcome == Outcome::Denied)
+            .expect("the refusal is in the trail, not only in the error returned");
+        assert_eq!(denied.action, "document:import");
+        assert_eq!(
+            denied.detail.get("code").map(String::as_str),
+            Some("too-many-pages"),
+            "refusals must be countable by rule without parsing prose"
+        );
+        let reason = denied
+            .reason
+            .as_deref()
+            .expect("a refusal carries its reason");
+        assert!(reason.contains('2') && reason.contains("pages"), "{reason}");
+        // The name the caller gave is document content and must not have been recorded with it.
+        assert!(
+            !format!("{denied:?}").contains("Two pages"),
+            "the trail must not carry the file's name"
+        );
+        package
+            .store()
+            .verify_audit()
+            .expect("appending a refusal leaves the chain intact");
     }
 
     /// Only the two kinds of file the interface knows how to import reach the picker. Anything else

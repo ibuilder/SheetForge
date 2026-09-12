@@ -4,6 +4,25 @@ Notable changes, newest first. Follows [Keep a Changelog](https://keepachangelog
 [semantic versioning](https://semver.org/); before 1.0 the minor version may break things, and any
 break that touches stored data will say so here with a migration note.
 
+## [Unreleased]
+
+### Security
+
+- **Refusals are written to the audit trail.** The engineering rules have always required it, and
+  no released build ever did: the only two refusals that were recorded were capability checks, and
+  a local install runs as owner, so neither could be reached. The trail therefore held only what
+  succeeded — and "what did this person try that the application turned away?" is a question a
+  review actually asks. Every refusal that happens with a project open is now recorded against the
+  act it refused, carrying the rule it broke and a code beside it so refusals can be counted by
+  rule rather than by reading prose: a drawing or a markup import over its size ceiling, a document
+  past the page count, a name that could not be used, a refused export, a status change refused for
+  the capability.
+
+  The reason recorded is the refusal's own sentence — "this file is 3100 MB, over the 512 MB limit
+  for a drawing" — which names the rule and the magnitude and never a path, a filename or anything
+  from inside the file. A refusal with no project open is still recorded nowhere, because the trail
+  lives inside the project.
+
 ## [0.1.2] — 2026-09-12
 
 **The first release that can update itself, and the first with build provenance.** It is still an
