@@ -4,7 +4,12 @@ Notable changes, newest first. Follows [Keep a Changelog](https://keepachangelog
 [semantic versioning](https://semver.org/); before 1.0 the minor version may break things, and any
 break that touches stored data will say so here with a migration note.
 
-## [Unreleased]
+## [0.1.2] — 2026-09-12
+
+**The first release that can update itself, and the first with build provenance.** It is still an
+unsigned preview in the code-signing sense: nothing is code-signed or notarised, so SmartScreen and
+Gatekeeper still warn. Only the Windows build has been run by a person. See
+[docs/status.md](docs/status.md).
 
 ### Security
 
@@ -63,18 +68,6 @@ break that touches stored data will say so here with a migration note.
   gains `SBOM.cdx.json`, listed in `SHA256SUMS.txt` and attested against the installers it
   describes. 0.1.1 predates all of this.
 
-### Changed
-
-- **A redacted copy says what it leaves out.** Its bookmarks, title and other document properties
-  are not carried over from the source — deliberately. They are text nobody reviewed when choosing
-  what to black out, and a bookmark can be titled with exactly the name that was just removed from
-  the sheet it points to. That was already true; what changed is that exporting now says so, since
-  the person sending the file on would never find out by opening it. A test now fails if either the
-  outline or the title can be recovered from a redacted copy, reading the output as a PDF reader
-  would rather than searching its bytes — a byte search was shown to miss a planted leak.
-
-### Added
-
 - **Checking for updates, with an off switch.** A few seconds after start SheetForge asks whether a
   newer version exists. It is the one network request the application makes, and ADR-0007 allows it
   on the condition that it can be turned off — *Project ▾ → Stop checking for updates on start* —
@@ -91,6 +84,23 @@ break that touches stored data will say so here with a migration note.
 
   Nothing can be updated *to* until a release is built with the updater key. 0.1.1 predates this
   and needs one manual reinstall.
+
+### Changed
+
+- **A redacted copy says what it leaves out.** Its bookmarks, title and other document properties
+  are not carried over from the source — deliberately. They are text nobody reviewed when choosing
+  what to black out, and a bookmark can be titled with exactly the name that was just removed from
+  the sheet it points to. That was already true; what changed is that exporting now says so, since
+  the person sending the file on would never find out by opening it. A test now fails if either the
+  outline or the title can be recovered from a redacted copy, reading the output as a PDF reader
+  would rather than searching its bytes — a byte search was shown to miss a planted leak.
+
+- **The updater key is real.** The public key shipped since the first commit had no private half
+  anybody held, so every update would have been rejected — the updater was inert while appearing
+  configured. A key pair was generated on the maintainer's machine, its private half stored as a
+  repository secret and never written down anywhere else, and the public half is below. Releases
+  from 0.1.2 on are signed with it; 0.1.1 and earlier cannot be updated from and need one manual
+  reinstall.
 
 ## [0.1.1] — 2026-09-10
 

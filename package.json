@@ -1,6 +1,6 @@
 {
   "name": "sheetforge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "SheetForge — open-source construction PDF review, markup and takeoff for Windows, macOS, Linux, iOS and Android.",
   "license": "Apache-2.0",

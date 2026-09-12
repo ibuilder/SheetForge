@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SheetForge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "app.sheetforge.desktop",
   "build": {
     "beforeDevCommand": "npm run dev -w @sheetforge/ui",
@@ -70,7 +70,7 @@
     "updater": {
       "active": true,
       "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1NTBEN0IyODFFRDcxQTAKUldTZ2NlMkJzdGRRTlFDejlhSGRhTmNhc01maUxOcjdCemdZZWYzTC83UW9hR21Ub1Z2K0JWOHYK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNDOUE5QkIyQzhCQkFCMTIKUldRU3E3dklzcHVhUEFxOElPWTRuWFhnZ2tkVzB5cFcxNE9hODlHendaR3VOblZyZXRNTklrL2cK",
       "endpoints": [
         "https://github.com/ibuilder/SheetForge/releases/latest/download/latest.json"
       ]
