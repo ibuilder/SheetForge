@@ -255,3 +255,12 @@ jobs:
         with:
           subject-checksums: installers.sha256
           sbom-path: SBOM.cdx.json
+
+      # The release is still a draft here, so a failure costs nothing but a re-run — and this is the
+      # last moment where that is true. It re-downloads the release and checks it as a stranger
+      # would, including the one thing no build step can: that each update signature was made by the
+      # key this application trusts. 0.1.0 and 0.1.1 shipped a public key whose private half nobody
+      # held, and every step in this workflow passed. The runbook says to run this by hand; a
+      # release that cannot self-update must not depend on somebody remembering to.
+      - name: Check the draft the way a stranger would
+        run: node scripts/verify-release.mjs "$TAG"

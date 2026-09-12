@@ -93,9 +93,21 @@ Intel) and Linux, signs the update payloads, and opens a **draft** release.
       Bytes cross to the host as a raw IPC body, and the browser suite exercises that against a
       stub written by the same person who wrote the code it is checking. This is the one seam
       nothing automated reaches, and a failure here means every export is broken.
+- [ ] **Run the release checker.** It downloads the draft and checks what a person reading a
+      releases page cannot: that every checksum matches, that each `.sig` was made by the key this
+      application actually trusts — not merely by *a* valid key — that `latest.json` names this
+      version and points at files on the release, and that each installer carries provenance from
+      this repository.
+
+      ```bash
+      node scripts/verify-release.mjs vX.Y.Z
+      ```
+
+      This is the check that would have caught 0.1.0 and 0.1.1 shipping a public key whose private
+      half nobody held. Run it again with `--published` after publishing: it then fetches every
+      `latest.json` URL anonymously, which a draft's private assets make impossible before.
 - [ ] Every expected artefact is present: `.msi`, `.exe`, `.dmg` (both architectures),
       `.AppImage`, `.deb`, `.rpm`.
-- [ ] `latest.json` lists every platform and each entry carries a signature.
 - [ ] Install on a **clean** VM per platform. Not your development machine, which has the runtimes
       already.
 - [ ] Open a project, import a drawing, draw a cloud, calibrate a page, measure something, close,
