@@ -194,6 +194,21 @@ impl Package {
     /// [`PackageError::NotAPackage`] if the manifest is missing or unreadable,
     /// [`PackageError::NewerFormat`] if it was written by a newer build.
     pub fn open(root: &Path) -> Result<Self> {
+        Self::open_within(root, ResourceLimits::default())
+    }
+
+    /// Open an existing package, refusing one past `limits`.
+    ///
+    /// A package is a directory somebody can hand you — by email, on a share, from a USB stick —
+    /// so its size and the number of files in it are untrusted input like anything else. The
+    /// threat model has always listed both ceilings and nothing compared anything with either;
+    /// opening read the manifest and went ahead. This measures the package first, and refuses one
+    /// that is past either bound before the database is opened or anything is read out of it.
+    ///
+    /// # Errors
+    /// As [`Package::open`], plus [`SecurityError::TooLarge`] or
+    /// [`SecurityError::TooManyEntries`].
+    pub fn open_within(root: &Path, limits: ResourceLimits) -> Result<Self> {
         let raw = fs::read_to_string(root.join(MANIFEST)).map_err(|_| PackageError::NotAPackage)?;
         let manifest: Manifest =
             serde_json::from_str(&raw).map_err(|_| PackageError::NotAPackage)?;
@@ -203,12 +218,13 @@ impl Package {
                 supported: PACKAGE_FORMAT,
             });
         }
+        measure(root, &limits)?;
         let store = Store::open(&root.join(DATABASE))?;
         Ok(Self {
             root: root.to_path_buf(),
             manifest,
             store,
-            limits: ResourceLimits::default(),
+            limits,
         })
     }
 
@@ -461,6 +477,52 @@ impl Package {
     }
 }
 
+/// Measure a package, refusing one past either ceiling.
+///
+/// ## Why it stops early
+///
+/// The bounds exist because the package is untrusted, so the measurement itself must be bounded:
+/// counting every file in a package built to hold a hundred million of them is the attack, not the
+/// defence. Both ceilings are checked as the walk goes, and the walk stops at the first refusal.
+///
+/// ## Why symlinks are not followed
+///
+/// `file_type` from a directory entry does not follow links, and only real directories are
+/// descended into. A package containing a link to `C:\` or `/` would otherwise make this walk the
+/// whole disk — a refusal that never arrives is as bad as no refusal. A link is still *counted*,
+/// and its own size measured, because it is an entry in the package; what is not done is reading
+/// through it.
+///
+/// Cache files are counted too. They are part of what the package costs to hold, and a package
+/// arriving with a cache directory of ten million files is precisely the case being refused.
+fn measure(root: &Path, limits: &ResourceLimits) -> Result<()> {
+    let mut pending = vec![root.to_path_buf()];
+    let mut entries: u32 = 0;
+    let mut bytes: u64 = 0;
+
+    while let Some(directory) = pending.pop() {
+        // A directory that cannot be listed is not a reason to refuse the project: it may be a
+        // permissions quirk on one subdirectory. What it must not do is silently lower the total.
+        let Ok(listing) = fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in listing {
+            let entry = entry?;
+            entries = entries.saturating_add(1);
+            limits.check_entries(entries)?;
+
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                pending.push(entry.path());
+            } else if let Ok(metadata) = entry.metadata() {
+                bytes = bytes.saturating_add(metadata.len());
+                limits.check_package(bytes)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// SHA-256 of some bytes.
 #[must_use]
 pub fn hash_bytes(bytes: &[u8]) -> ContentHash {
@@ -525,6 +587,94 @@ mod tests {
             Project::new("Riverside Tower", Some("2026-014"), None, ActorId::local()).unwrap();
         let package = Package::create(&root, &project, "0.1.0-test").unwrap();
         (dir, package)
+    }
+
+    /// The package ceiling was declared in the threat model and compared with nothing: opening read
+    /// the manifest and went ahead, whatever the package held. A package is a directory somebody
+    /// hands you, so both its size and its file count are untrusted.
+    #[test]
+    fn a_package_past_its_size_ceiling_is_refused_on_the_way_in() {
+        let (dir, package) = new_package();
+        let root = package.root().to_path_buf();
+        drop(package);
+        fs::write(root.join(SOURCES).join("big"), vec![0u8; 3 * 1024 * 1024]).unwrap();
+
+        let refusal = Package::open_within(
+            &root,
+            ResourceLimits {
+                max_package_mb: 1,
+                ..ResourceLimits::default()
+            },
+        )
+        .err()
+        .expect("a package over the ceiling must be refused");
+        assert!(
+            matches!(
+                refusal,
+                PackageError::Security(SecurityError::TooLarge {
+                    subject: "a project package",
+                    ..
+                })
+            ),
+            "{refusal:?}"
+        );
+        // The same package opens against the shipped ceilings: the bound refuses the absurd, not
+        // the ordinary.
+        assert!(
+            Package::open(&root).is_ok(),
+            "the default ceiling must admit it"
+        );
+        drop(dir);
+    }
+
+    #[test]
+    fn a_package_holding_more_files_than_the_ceiling_allows_is_refused() {
+        let (dir, package) = new_package();
+        let root = package.root().to_path_buf();
+        drop(package);
+        for index in 0..20u32 {
+            fs::write(root.join(CACHE).join(index.to_string()), b"x").unwrap();
+        }
+
+        let refusal = Package::open_within(
+            &root,
+            ResourceLimits {
+                max_archive_entries: 8,
+                ..ResourceLimits::default()
+            },
+        )
+        .err()
+        .expect("a package with too many files must be refused");
+        assert!(
+            matches!(
+                refusal,
+                PackageError::Security(SecurityError::TooManyEntries { limit: 8 })
+            ),
+            "{refusal:?}"
+        );
+        drop(dir);
+    }
+
+    /// A package carrying a link to the root of the disk must not make the measurement walk the
+    /// whole machine. The link is counted as the entry it is; nothing is read through it.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_out_of_the_package_is_counted_but_not_followed() {
+        let (dir, package) = new_package();
+        let root = package.root().to_path_buf();
+        drop(package);
+        std::os::unix::fs::symlink("/", root.join(SOURCES).join("everything")).unwrap();
+
+        // Bounded, so if the walk followed the link this would not return at all.
+        let opened = Package::open_within(
+            &root,
+            ResourceLimits {
+                max_archive_entries: 64,
+                ..ResourceLimits::default()
+            },
+        );
+        assert!(opened.is_ok(), "a link must not be walked through");
+        drop(dir);
     }
 
     #[test]

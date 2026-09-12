@@ -201,6 +201,8 @@ impl Bundle {
             limits.max_interchange_mb
         );
         let _ = writeln!(out, "Pages per document    {}", limits.max_pages);
+        let _ = writeln!(out, "Largest package       {} MB", limits.max_package_mb);
+        let _ = writeln!(out, "Files in a package    {}", limits.max_archive_entries);
 
         // Split out rather than listed with the rest. Every one of these used to appear under
         // "Limits in force" while nothing enforced it, which is the one place a support bundle
@@ -210,13 +212,11 @@ impl Bundle {
             "
 == Declared, not yet enforced =="
         );
-        let _ = writeln!(out, "Largest package       {} MB", limits.max_package_mb);
         let _ = writeln!(
             out,
             "Decompressed stream   {} MB",
             limits.max_decompressed_mb
         );
-        let _ = writeln!(out, "Archive entries       {}", limits.max_archive_entries);
         let _ = writeln!(out, "Concurrent jobs       {}", limits.max_concurrent_jobs);
         let _ = writeln!(out, "Job timeout           {} s", limits.job_timeout_secs);
     }
@@ -500,13 +500,7 @@ mod tests {
             .nth(1)
             .and_then(|rest| rest.split("== Declared, not yet enforced ==").next())
             .expect("an in-force section followed by a declared section");
-        for unenforced in [
-            "Largest package",
-            "Decompressed stream",
-            "Archive entries",
-            "Concurrent jobs",
-            "Job timeout",
-        ] {
+        for unenforced in ["Decompressed stream", "Concurrent jobs", "Job timeout"] {
             assert!(
                 !in_force.contains(unenforced),
                 "{unenforced} is listed as in force but nothing enforces it"
@@ -517,6 +511,9 @@ mod tests {
             "Largest attachment",
             "Largest import file",
             "Pages per document",
+            // Both are compared with a package on the way in — `Package::open_within`.
+            "Largest package",
+            "Files in a package",
         ] {
             assert!(
                 in_force.contains(enforced),

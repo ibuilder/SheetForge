@@ -90,6 +90,7 @@ impl From<sf_security::SecurityError> for CommandError {
             S::TooManyPages { .. } => "too-many-pages",
             S::NotAFile => "not-a-file",
             S::Unreadable => "unreadable",
+            S::TooManyEntries { .. } => "too-many-entries",
         };
         Self::new(code, error.to_string(), false)
     }

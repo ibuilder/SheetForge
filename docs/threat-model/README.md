@@ -47,6 +47,14 @@ read, so a file far over it was loaded before being refused, and a device was re
 ran out. The page count and the order of the size check are now fixed; the other two are not, and
 the diagnostics report lists them under "Declared, not yet enforced" rather than "in force".
 
+*Added 2026-09-12.* A project package is itself untrusted input — a directory arriving by email or
+on a share — and its declared size and entry ceilings were also compared with nothing: opening read
+the manifest and went ahead. A package is now measured before its database is opened and refused
+past either bound. The measurement is itself bounded: it stops at the first refusal rather than
+counting a package built to be counted forever, and it does not follow a link out of the package, so
+a package carrying a link to the root of the disk cannot turn the check into a walk of the whole
+machine.
+
 *Residual:* **stream decompression and render time are not bounded by us.** They happen inside
 pdf.js's worker, which exposes no hook for either, so a decompression bomb inside an admitted PDF,
 or a pathological content stream, is limited only by pdf.js's own defences and the size of the

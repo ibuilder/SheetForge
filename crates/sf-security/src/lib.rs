@@ -90,6 +90,17 @@ pub enum SecurityError {
     /// path, and these messages reach logs and the interface.
     #[error("that file could not be read")]
     Unreadable,
+
+    /// More files in a project package than the ceiling allows.
+    ///
+    /// Counted while measuring, and reported as soon as the ceiling is passed rather than after
+    /// counting them all — the point of the bound is not to walk a package built to be walked
+    /// forever.
+    #[error("this project holds more than {limit} files")]
+    TooManyEntries {
+        /// The ceiling that was passed.
+        limit: u32,
+    },
 }
 
 /// This crate's result alias.
@@ -129,7 +140,12 @@ pub struct ResourceLimits {
     ///
     /// The zip-bomb bound. A package entry that expands past this is refused rather than written.
     pub max_decompressed_mb: u64,
-    /// Most entries allowed in an imported package archive.
+    /// Most entries allowed in a project package that came from somewhere else.
+    ///
+    /// The field is named for an archive because that was the first case in mind, and the name is
+    /// kept because it is part of the saved configuration. It applies to a package in whatever form
+    /// it arrives: a directory of a hundred thousand files costs the same to walk as an archive of
+    /// a hundred thousand entries costs to unpack.
     pub max_archive_entries: u32,
 }
 
@@ -200,6 +216,19 @@ impl ResourceLimits {
     /// As [`ResourceLimits::check_size`].
     pub fn check_interchange(&self, bytes: u64) -> Result<()> {
         Self::check_size(bytes, self.max_interchange_mb, "an import file")
+    }
+
+    /// Check how many files a package holds against [`ResourceLimits::max_archive_entries`].
+    ///
+    /// # Errors
+    /// [`SecurityError::TooManyEntries`].
+    pub const fn check_entries(&self, entries: u32) -> Result<()> {
+        if entries > self.max_archive_entries {
+            return Err(SecurityError::TooManyEntries {
+                limit: self.max_archive_entries,
+            });
+        }
+        Ok(())
     }
 
     /// Check a document's page count against [`ResourceLimits::max_pages`].

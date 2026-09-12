@@ -439,8 +439,9 @@ pub async fn project_open(app: AppHandle) -> CommandResult<ProjectSummary> {
         let root = chosen
             .into_path()
             .map_err(|_| CommandError::invalid_request("That location cannot be used."))?;
-        let mut package = Package::open(&root)?;
-        package.set_limits(*state.limits());
+        // Measured against this install's ceilings on the way in, not after: a package is a
+        // directory somebody can hand you.
+        let mut package = Package::open_within(&root, *state.limits())?;
 
         let project = package
             .store()
@@ -1488,8 +1489,7 @@ pub async fn recent_open(app: AppHandle, id: String) -> CommandResult<ProjectSum
             ));
         }
 
-        let mut package = Package::open(&root)?;
-        package.set_limits(*state.limits());
+        let mut package = Package::open_within(&root, *state.limits())?;
         let project = package
             .store()
             .project()?
@@ -2181,8 +2181,7 @@ fn ensure_project_named(
     let package = if root.exists() {
         // Reopening the same drawing after a restart lands here, and lands back on the markups
         // made last time.
-        let mut existing = Package::open(&root)?;
-        existing.set_limits(*state.limits());
+        let existing = Package::open_within(&root, *state.limits())?;
         existing
     } else {
         let project = Project::new(&stem, None, None, state.actor().clone())?;

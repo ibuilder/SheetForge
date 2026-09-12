@@ -23,6 +23,19 @@ break that touches stored data will say so here with a migration note.
   from inside the file. A refusal with no project open is still recorded nowhere, because the trail
   lives inside the project.
 
+- **A project package is measured before it is opened.** Its size ceiling and its file-count
+  ceiling were both declared in the threat model and compared with nothing: opening a project read
+  the manifest and went ahead, whatever the directory held. A package is somebody else's directory
+  — it arrives by email, on a share, on a stick — so both are now checked before the database is
+  opened or anything is read out of it.
+
+  The measurement is bounded in the same way as the thing it protects against. It stops at the first
+  refusal rather than counting every file in a package built to hold a hundred million of them, and
+  it does not follow a link out of the package: one carrying a link to the root of the disk would
+  otherwise turn the check into a walk of the whole machine, and a refusal that never arrives is no
+  better than none. The decompressed-stream, job-timeout and concurrency ceilings remain declared
+  and unenforced, and the diagnostics report still says so.
+
 ## [0.1.2] — 2026-09-12
 
 **The first release that can update itself, and the first with build provenance.** It is still an
