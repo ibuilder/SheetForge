@@ -14,7 +14,13 @@ Nothing new. The gap between "it works" and "you can depend on it."
 - **Code signing.** An organisation certificate for Windows and an Apple Developer identity for
   macOS, with keys in an HSM or cloud signing service. Ends the SmartScreen and Gatekeeper warnings
   and is the single biggest barrier to anyone installing this at work.
-- **A hostile-PDF fuzzing corpus** wired into CI. The largest security gap today.
+- ~~**A hostile-PDF fuzzing corpus** wired into CI.~~ *Done for everything this repository parses
+  itself.* libFuzzer runs the host's parsers weekly — six targets, each checked against a stated
+  property, about 487 million executions without a crash on its first run — and the webview's
+  pdf-lib path and XFDF and markup-set imports have seeded generators in the unit suite. **What is
+  not done, and is still the largest security gap:** pdf.js, the parser that reads every document
+  properly, is fuzzed by nobody here. It is upstream, and fuzzing it meaningfully means fuzzing it
+  where it runs, in a browser.
 - **An installer smoke test in a clean VM** as a release gate, per platform. Half of this now
   exists: a bundle job builds installers on Windows, macOS and Linux weekly and on demand, which is
   what caught that the macOS and Linux bundles had never been produced by anything. Installing one

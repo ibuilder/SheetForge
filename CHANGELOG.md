@@ -58,6 +58,14 @@ break that touches stored data will say so here with a migration note.
   are held to what the domain's own derivation guarantees, but a value without a host calibration is
   still accepted: the engine owns the calibration, and refusing that would refuse every takeoff.
 
+- **The host's parsers are fuzzed.** A libFuzzer crate runs six targets weekly, and whenever it
+  changes, for five minutes each: the page counter, PDF header sniffing, path containment, name
+  checking, log redaction and markup-metadata decoding, each asserting a property rather than only
+  that nothing crashed — a page count inside its bounds, no path resolved outside the package, no
+  name that is more than one path component. The first run executed about 487 million inputs without
+  finding a crash. The page counter moved into `sf-security` so a fuzzing build could reach it.
+  pdf.js is still fuzzed by nobody here, and the security documents say so.
+
 - **A project database carrying anything SheetForge did not put there is refused.** A project
   package's database is a SQLite file somebody else wrote, and SQLite keeps triggers and views *in
   the file* and runs them inside the application's own connection, on its own reads and writes. A

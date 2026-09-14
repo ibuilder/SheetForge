@@ -58,7 +58,7 @@ machine.
 *Residual:* **stream decompression and render time are not bounded by us.** They happen inside
 pdf.js's worker, which exposes no hook for either, so a decompression bomb inside an admitted PDF,
 or a pathological content stream, is limited only by pdf.js's own defences and the size of the
-file that got through. **No fuzzing corpus yet** — the largest open gap.
+file that got through. **pdf.js is not fuzzed by this project** — the host's own parsers are, under libFuzzer (`fuzz/`), and pdf-lib has a seeded generator of damaged drawings, but the parser that reads the whole document has neither here. That is the largest open gap.
 
 ### 2. A crafted project package that writes outside itself
 

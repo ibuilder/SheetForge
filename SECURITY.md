@@ -165,8 +165,11 @@ Stated because a security document that lists only strengths is not a security d
    and it is still a large parser processing hostile input. The limits above bound the damage; they
    do not eliminate the surface.
 3. **No third-party security audit has been done.** No penetration test, no formal review.
-4. **No fuzzing corpus yet.** Hostile-input handling is covered by unit tests and bounds checks,
-   not by a fuzzer. This is the largest single gap and is first on the security roadmap.
+4. **pdf.js is not fuzzed by this project.** The host's own parsers are: the page counter, format
+   sniffing, path containment, name checking, redaction and markup decoding run under libFuzzer
+   weekly (see `fuzz/`), and pdf-lib, the webview's second PDF parser, has a seeded generator of
+   damaged drawings in the unit suite. pdf.js, which reads every document properly, has neither
+   here. That is the largest single gap.
 5. **Binaries are unsigned.** See above.
 6. **Dependency supply chain.** `cargo deny` and an npm licence check run in CI; there is no
    reproducible-build guarantee and no SBOM signing yet.
