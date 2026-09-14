@@ -56,7 +56,9 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 function run(command, args, options = {}) {
   console.log(`$ ${command} ${args.join(" ")}`);
-  return execFileSync(command, args, { stdio: ["ignore", "pipe", "inherit"], encoding: "utf8", ...options });
+  // stdin is closed unless there is something to say to the program, so nothing can wait on it.
+  const stdin = options.input === undefined ? "ignore" : "pipe";
+  return execFileSync(command, args, { stdio: [stdin, "pipe", "inherit"], encoding: "utf8", ...options });
 }
 
 /** Where tauri-plugin-log writes, per platform: the app log directory for this identifier. */
@@ -150,7 +152,11 @@ async function macos() {
 
   step("Mount the disk image and copy the application out, as a user would");
   const mount = "/tmp/sheetforge-smoke";
-  run("hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mount, image]);
+  // The image carries the licence as a click-through agreement, because the bundle names a licence
+  // file. A user reads it and agrees; hdiutil prints it and waits for the same answer, and with no
+  // one to give it the attach fails with the licence as its output. The first CI run found exactly
+  // that. Answering it here is what a user does, not a way around anything.
+  run("hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mount, image], { input: "Y\n" });
   const applications = join(homedir(), "Applications");
   run("mkdir", ["-p", applications]);
   const app = join(applications, `${productName}.app`);
