@@ -26,6 +26,8 @@
  */
 import { PDFDocument } from "pdf-lib";
 
+import { damagedDrawing, loadForCopying } from "./pdf-read";
+
 /**
  * Parse a page selection the way a person writes one.
  *
@@ -91,33 +93,31 @@ export interface Extract {
  * out the same as one measured off the issue, and rasterising would put that at the mercy of a
  * resolution setting.
  *
- * @throws if the source cannot be read, which for a PDF this application already has open means it
- *   is protected.
+ * @throws if pdf-lib cannot read the source — protected, or damaged past what it tolerates — with a
+ *   sentence saying which. See `pdf-read.ts`.
  */
 export async function extractPages(source: Uint8Array, pages: readonly number[]): Promise<Extract> {
-  let document: PDFDocument;
+  const act = "take pages out of it";
+  const document = await loadForCopying(source, act);
+
+  // Copying and saving are pdf-lib reading the source too. A drawing damaged in the right place
+  // loads and then fails here, and that failure used to reach the status bar as pdf-lib's internals.
   try {
-    // A copy, because pdf-lib takes ownership of the buffer it is handed.
-    document = await PDFDocument.load(source.slice());
-  } catch {
-    throw new Error(
-      "This drawing is protected, so pages cannot be taken out of it. Ask whoever issued it for " +
-        "an unprotected copy.",
+    const out = await PDFDocument.create();
+    // `copyPages` is given every index at once rather than one per call: it deduplicates the shared
+    // resources — fonts, images, the things that make a drawing large — across the whole batch, and
+    // calling it per page would embed a fresh copy of each for every sheet.
+    const copied = await out.copyPages(
+      document,
+      pages.map((page) => page - 1),
     );
+    for (const page of copied) out.addPage(page);
+
+    out.setTitle("Extract");
+    out.setProducer("SheetForge");
+
+    return { bytes: await out.save(), pages: copied.length };
+  } catch {
+    throw damagedDrawing(act);
   }
-
-  const out = await PDFDocument.create();
-  // `copyPages` is given every index at once rather than one per call: it deduplicates the shared
-  // resources — fonts, images, the things that make a drawing large — across the whole batch, and
-  // calling it per page would embed a fresh copy of each for every sheet.
-  const copied = await out.copyPages(
-    document,
-    pages.map((page) => page - 1),
-  );
-  for (const page of copied) out.addPage(page);
-
-  out.setTitle("Extract");
-  out.setProducer("SheetForge");
-
-  return { bytes: await out.save(), pages: copied.length };
 }

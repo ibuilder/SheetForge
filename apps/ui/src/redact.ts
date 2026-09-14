@@ -34,10 +34,14 @@ import { definePlugin, type Annotation, type Viewer } from "@massingcloud/pdf-vi
 import { PDFDocument } from "pdf-lib";
 
 import { asBlobPart } from "./bytes";
+import { damagedDrawing, loadForCopying } from "./pdf-read";
 import { MAX_PIXELS } from "./sheet-image";
 
 /** Marks a rectangle as a redaction rather than as ordinary markup. */
 const REDACTION = "sfRedaction";
+
+/** What cannot be done when pdf-lib cannot read the drawing. See `pdf-read.ts`. */
+const REDACT_ACT = "build a redacted copy from it";
 
 /**
  * Resolution the redacted pages are rasterised at.
@@ -147,17 +151,10 @@ export async function redactedCopy(
   // Encrypted PDFs are routine on issued construction drawings — an owner password restricting
   // printing or extraction. pdf.js opens them, so the drawing renders and redactions can be drawn,
   // and without this the only sign of trouble is pdf-lib's own error arriving after all the work
-  // is done. `ignoreEncryption` is deliberately *not* set: this produces a document to be handed
-  // out, and quietly stripping someone else's protection is not this tool's decision to make.
-  let source: PDFDocument;
-  try {
-    source = await PDFDocument.load(doc.bytes.slice());
-  } catch {
-    throw new Error(
-      "This drawing is protected, so a redacted copy cannot be built from it. Ask whoever issued " +
-        "it for an unprotected copy. Marking up and measuring still work.",
-    );
-  }
+  // is done. A protected drawing is refused here, before anything is copied out of it: this
+  // produces a document to be handed out, and quietly stripping someone else's protection is not
+  // this tool's decision to make. How it is recognised is in `pdf-read.ts`.
+  const source = await loadForCopying(doc.bytes, REDACT_ACT);
 
   // A new document, not an edited copy of the old one — and the difference is deliberate. What
   // lives around the pages rather than on them is left behind: the bookmarks, the title, the
@@ -184,7 +181,10 @@ export async function redactedCopy(
     if (redactions.length === 0) {
       // Untouched pages are copied, not re-rendered. They keep their vector content, their text
       // and their size, and the cost of the guarantee is charged only where it was asked for.
-      const [copied] = await out.copyPages(source, [page - 1]);
+      // pdf-lib reads the source again here, and a drawing that loaded can still fail on one page.
+      const [copied] = await out.copyPages(source, [page - 1]).catch(() => {
+        throw damagedDrawing(REDACT_ACT);
+      });
       if (copied) out.addPage(copied);
       continue;
     }

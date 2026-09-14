@@ -58,6 +58,23 @@ break that touches stored data will say so here with a migration note.
   are held to what the domain's own derivation guarantees, but a value without a host calibration is
   still accepted: the engine owns the calibration, and refusing that would refuse every takeoff.
 
+- **A damaged drawing is no longer called protected.** Taking pages out of a drawing or building a
+  redacted copy reads it a second time, with pdf-lib, and every failure to load was reported as
+  "this drawing is protected — ask whoever issued it for an unprotected copy". A generated test
+  over 150 damaged drawings found that 45 of the 69 refusals were files with flipped bytes, not
+  encryption, and that the other 24 failed after loading and reached the status bar as pdf-lib's
+  internals (`_this.catalog.Pages is not a function`). An encrypted drawing is now recognised by
+  pdf-lib's own `isEncrypted` flag and called protected — not by catching its error, which cannot be
+  recognised by type because the library's ES5 build loses the error's prototype — and anything else
+  is called damaged. Every pdf-lib step is covered, not only the load, and a protected drawing is
+  still refused before anything is copied out of it. The same test checks that no damaged drawing hangs the extract.
+
+- **The drawing engine's XFDF parser is tested.** It had no test of any kind in this repository,
+  though hostile XFDF is the threat model's named adversary. A seeded generator builds 500
+  documents from the vocabulary real ones use and the values real ones do not — pages of `1e9`,
+  rects of `NaN`, files cut off mid-attribute — and asserts no markup reaches the drawing off the
+  document or made of anything but numbers. It found nothing: the engine already refuses them.
+
 - **A project manifest is read with a ceiling.** It was the first file read from a package somebody
   else wrote, and it was read whole, before any package limit was consulted. It is now refused from
   its size before a byte is read.
