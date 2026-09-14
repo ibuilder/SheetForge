@@ -327,9 +327,10 @@ than evidence of a house style:
   filenames.~~ *Done, for drawings with a text layer.* Every drawing an import files has its title
   blocks read without being opened, its sheets recorded, and — when it is one sheet — its name
   replaced by the number and title printed on it. An import reports every file instead of stopping
-  at the first bad one. **Still to come:** reading scanned sets at import, reading the printed
-  revision, and filing a new issue of a sheet as a revision of the drawing already there rather than
-  as a second drawing of the same name. See [status](status.md).
+  at the first bad one. A drawing whose number is already a
+  drawing here is offered, by name, as a new issue of it — asked per drawing, never assumed, and
+  only when exactly one drawing matches. **Still to come:** reading scanned sets at import, and
+  reading the printed revision. See [status](status.md).
 - ~~**The sheet register as a queryable table**~~ *Done.* The engine had been reading title blocks
   all along and the host threw the result away on every save. It is kept now, with a record of how
   each value was known, and it is on screen: a Sheets panel listing the set by number, with **Find

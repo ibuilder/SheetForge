@@ -189,6 +189,8 @@ async function stubHost(
       (window as unknown as { __sfViews: unknown[] }).__sfViews = [];
       // Renames the interface asked for after reading title blocks.
       (window as unknown as { __sfRenames: unknown[] }).__sfRenames = [];
+      // Revisions the interface asked to file as new issues of drawings already in the project.
+      (window as unknown as { __sfRefiles: unknown[] }).__sfRefiles = [];
 
       // event name -> the callback ids listening for it, mirroring what the Rust side tracks.
       const listeners = new Map<string, number[]>();
@@ -403,6 +405,30 @@ async function stubHost(
               return Promise.resolve(
                 (window as unknown as { __sfImport?: unknown }).__sfImport ?? { drawings: [], refused: [] },
               );
+            case "document_matches": {
+              // Drawings a test planted as already filed under a sheet number.
+              const planted = (window as unknown as { __sfMatches?: Record<string, unknown[]> })
+                .__sfMatches;
+              return Promise.resolve(planted?.[String(args["number"]).toUpperCase()] ?? []);
+            }
+            case "revision_refile": {
+              (window as unknown as { __sfRefiles: unknown[] }).__sfRefiles.push({
+                revision: args["revision"],
+                onto: args["onto"],
+              });
+              const planted =
+                (window as unknown as { __sfMatches?: Record<string, { id: string; name: string }[]> })
+                  .__sfMatches ?? {};
+              const target = Object.values(planted)
+                .flat()
+                .find((match) => match.id === args["onto"]);
+              return Promise.resolve({
+                ...revision,
+                id: args["revision"],
+                sourceDocumentId: args["onto"],
+                name: target?.name ?? "",
+              });
+            }
             case "document_rename": {
               (window as unknown as { __sfRenames: unknown[] }).__sfRenames.push({
                 sourceDocument: args["sourceDocument"],
@@ -730,6 +756,85 @@ test.describe("importing a set", () => {
     // And the first drawing opened.
     await expect(page.locator(".sf-stage canvas").first()).toBeVisible();
     expect(errors, "no uncaught errors while importing").toEqual([]);
+  });
+});
+
+test.describe("a new issue of a sheet already in the project", () => {
+  const ARRIVED = {
+    ...REVISION,
+    id: "0192f0c1-0000-7000-8000-0000000002a1",
+    sourceDocumentId: "0192f0c1-0000-7000-8000-0000000002d1",
+    name: "scan0042",
+  };
+  const EXISTING = "0192f0c1-0000-7000-8000-0000000002d9";
+
+  test.beforeEach(async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+  });
+
+  async function importTheNewIssue(page: Page): Promise<void> {
+    await page.goto("/");
+    await page.evaluate(
+      ({ arrived, existing, bytes }) => {
+        const planted = window as unknown as Record<string, unknown>;
+        planted["__sfImport"] = { drawings: [{ revision: arrived, reopened: false }], refused: [] };
+        planted["__sfBytesById"] = { [arrived.id]: bytes };
+        planted["__sfMatches"] = {
+          "A-201": [{ id: existing, name: "A-201 SECOND FLOOR PLAN", issues: 1 }],
+        };
+      },
+      {
+        arrived: ARRIVED,
+        existing: EXISTING,
+        bytes: Array.from(titleBlockPdf([{ number: "A-201", title: "SECOND FLOOR PLAN" }])),
+      },
+    );
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    await page.getByRole("menuitem", { name: "Add drawings…" }).click();
+  }
+
+  test("asks, naming both drawings, and files it as a new issue when the reviewer says yes", async ({
+    page,
+  }) => {
+    const asked: string[] = [];
+    page.on("dialog", (dialog) => {
+      asked.push(dialog.message());
+      void dialog.accept();
+    });
+
+    await importTheNewIssue(page);
+
+    await expect(page.locator("[data-status]")).toContainText(
+      "1 filed as a new issue of a drawing already here",
+      { timeout: 30_000 },
+    );
+    expect(asked.join("\n")).toContain("A-201 is already in this project, as “A-201 SECOND FLOOR PLAN”");
+    expect(asked.join("\n")).toContain("File “scan0042” as a new issue of it?");
+    expect(
+      await page.evaluate(() => (window as unknown as { __sfRefiles: unknown[] }).__sfRefiles),
+    ).toEqual([{ revision: ARRIVED.id, onto: EXISTING }]);
+    expect(
+      await page.evaluate(() => (window as unknown as { __sfRenames: unknown[] }).__sfRenames),
+      "a drawing filed as a new issue takes the existing drawing's name, so it is not renamed",
+    ).toEqual([]);
+  });
+
+  test("keeps a separate drawing, renamed from its title block, when the reviewer says no", async ({
+    page,
+  }) => {
+    page.on("dialog", (dialog) => void dialog.dismiss());
+
+    await importTheNewIssue(page);
+
+    await expect(page.locator("[data-status]")).toContainText("1 renamed to the sheet number on it", {
+      timeout: 30_000,
+    });
+    expect(
+      await page.evaluate(() => (window as unknown as { __sfRefiles: unknown[] }).__sfRefiles),
+    ).toEqual([]);
+    expect(
+      await page.evaluate(() => (window as unknown as { __sfRenames: unknown[] }).__sfRenames),
+    ).toEqual([{ sourceDocument: ARRIVED.sourceDocumentId, name: "A-201 SECOND FLOOR PLAN" }]);
   });
 });
 

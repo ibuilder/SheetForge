@@ -269,6 +269,14 @@ export interface NewMarkupPayload {
   quantity?: HostQuantity | null;
 }
 
+/** A drawing already in the project that a new drawing's sheet number also names. */
+export interface DocumentMatch {
+  id: string;
+  name: string;
+  /** How many issues of it are already filed. */
+  issues: number;
+}
+
 /** A file an import did not file, named without its folder, and why. */
 export interface RefusedFile {
   file: string;
@@ -394,6 +402,12 @@ export const host = {
   /** Rename a drawing to the name the job knows it by — in practice, the sheet number on it. */
   documentRename: (sourceDocument: string, name: string) =>
     call<null>("document_rename", { sourceDocument, name }),
+  /** The other drawings in the project whose register shows this sheet number. */
+  documentMatches: (revision: string, number: string) =>
+    call<DocumentMatch[]>("document_matches", { revision, number }),
+  /** File a revision as a new issue of a drawing already in the project. */
+  revisionRefile: (revision: string, onto: string) =>
+    call<RevisionSummary>("revision_refile", { revision, onto }),
 
   /**
    * File a document assembled from one already in the project.

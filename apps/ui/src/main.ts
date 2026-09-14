@@ -34,7 +34,13 @@ import { describe as describeCheck, scaleCheckPlugin } from "./scale-check";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
 import { interchangePlugin } from "./interchange";
-import { describeImport, nameFromSheets, type TitleBlockOutcome } from "./import-report";
+import {
+  describeImport,
+  nameFromSheets,
+  reissueQuestion,
+  singleSheetNumber,
+  type TitleBlockOutcome,
+} from "./import-report";
 import { toHostSheet } from "./mapping";
 import { readTitleBlocks } from "./titleblock";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
@@ -783,7 +789,7 @@ async function recordTitleBlocks(
   drawings: readonly ImportedDrawing[],
 ): Promise<{ outcome: TitleBlockOutcome; renamed: Map<string, RevisionSummary> }> {
   const fresh = drawings.filter((drawing) => !drawing.reopened);
-  const outcome: TitleBlockOutcome = { read: 0, renamed: 0, unreadable: 0 };
+  const outcome: TitleBlockOutcome = { read: 0, renamed: 0, reissued: 0, unreadable: 0 };
   const renamed = new Map<string, RevisionSummary>();
 
   for (const [index, { revision }] of fresh.entries()) {
@@ -796,6 +802,18 @@ async function recordTitleBlocks(
         .filter((row) => row.number ?? row.title ?? row.discipline ?? row.revision);
       if (rows.length > 0) await host.sheetRecord(revision.id, rows);
       if (sheets.some((sheet) => sheet.number)) outcome.read += 1;
+
+      // A sheet number that is already a drawing here may be a new issue of it. Asked, never
+      // assumed, and only when exactly one drawing matches: two drawings sharing a number is a
+      // multi-building job, and choosing between them is not a guess to make on anybody's behalf.
+      const number = singleSheetNumber(sheets);
+      const matches = number ? await host.documentMatches(revision.id, number) : [];
+      const existing = matches.length === 1 ? matches[0] : undefined;
+      if (number && existing && window.confirm(reissueQuestion(number, revision.name, existing))) {
+        renamed.set(revision.id, await host.revisionRefile(revision.id, existing.id));
+        outcome.reissued += 1;
+        continue;
+      }
 
       const name = nameFromSheets(sheets);
       if (name && name !== revision.name) {

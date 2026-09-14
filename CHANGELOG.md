@@ -19,6 +19,12 @@ break that touches stored data will say so here with a migration note.
   drawing with no readable number keeps its filename too, because a guessed name is worse than a
   poor one. Drawings already in the project are left alone.
 
+  When a new drawing's sheet number is already a drawing in the project, the reviewer is asked —
+  naming both drawings — whether it is a new issue of it. On a yes it is filed as an issue of that
+  drawing rather than beside it; on a no it stays a separate drawing. It is only asked when exactly
+  one drawing matches, because two drawings sharing a number is a multi-building job, and choosing
+  between them is not a guess to make for anybody. Filing an issue under another drawing is audited.
+
   An import also no longer stops at the first bad file. Each file is filed, found already filed, or
   refused on its own, and the summary names every refused file with its reason — never its folder.
   Before, one oversized scan in the middle of a set left the files before it filed, the files after
@@ -26,8 +32,7 @@ break that touches stored data will say so here with a migration note.
 
   Not done: scanned drawings are not read at import, because the reader uses the PDF's own text and
   on-device recognition is too slow and too unreliable on title blocks to run over a whole set;
-  the printed revision is not read; and a new issue of a sheet becomes a second drawing rather than
-  a revision of the first.
+  and the printed revision is not read.
 
 ### Changed
 
