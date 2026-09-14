@@ -58,7 +58,7 @@ jobs:
           -- -max_total_time=${{ inputs.seconds || '300' }}
       - name: Keep the input that crashed it
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: crash-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}
