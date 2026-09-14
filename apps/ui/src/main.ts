@@ -399,8 +399,15 @@ async function openPdf(chrome: Chrome): Promise<void> {
   const opened = await host.pdfOpen();
   await refreshRecent();
   chrome.setProject(opened.project);
+  // A drawing filed just now has its title block read before it is shown, exactly as one arriving
+  // in a set does, so a single sheet opens under its sheet number rather than its filename. The same
+  // file dropped on the window was already renamed; opening it from the menu was not. A drawing that
+  // was already in the project keeps whatever name it has.
+  const titles = opened.reopened
+    ? undefined
+    : await recordTitleBlocks(chrome, [{ revision: opened.revision, reopened: false }]);
   chrome.setRevisions(await host.documentList());
-  await openRevision(chrome, opened.revision);
+  await openRevision(chrome, titles?.renamed.get(opened.revision.id) ?? opened.revision);
   if (opened.reopened) {
     chrome.setStatus(`${opened.revision.name} — reopened, with the markups you made on it.`);
   }

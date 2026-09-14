@@ -11,7 +11,8 @@ break that touches stored data will say so here with a migration note.
 - **Importing a set reads the sheet number off every drawing in it.** Until now the title blocks of
   an import were read only for the one drawing opened afterwards, so a set of sixty drawings arrived
   as sixty filenames with one sheet's worth of register. Every drawing an import newly files — from
-  **Add drawings** or dropped on the window — now has its title blocks read before the drawing list
+  **Add drawings**, dropped on the window, or opened with **Open PDF** — now has its title blocks
+  read before the drawing list
   is shown, its sheets recorded in the register in one call per drawing, and, when it is a single
   sheet, is renamed from `scan0042` to the number and title printed on it (`A-201 SECOND FLOOR
   PLAN`). A file holding several sheets keeps its filename, because it is not any one of them; a
@@ -25,8 +26,8 @@ break that touches stored data will say so here with a migration note.
 
   Not done: scanned drawings are not read at import, because the reader uses the PDF's own text and
   on-device recognition is too slow and too unreliable on title blocks to run over a whole set;
-  **Open PDF** on a single drawing still keeps its filename; the printed revision is not read; and a
-  new issue of a sheet becomes a second drawing rather than a revision of the first.
+  the printed revision is not read; and a new issue of a sheet becomes a second drawing rather than
+  a revision of the first.
 
 ### Changed
 

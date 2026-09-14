@@ -733,6 +733,27 @@ test.describe("importing a set", () => {
   });
 });
 
+test.describe("opening one drawing", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubHost(
+      page,
+      Array.from(titleBlockPdf([{ number: "A-201", title: "SECOND FLOOR PLAN" }])),
+    );
+  });
+
+  // Dropping one file on the window renamed it from its title block; opening the same file from
+  // the menu did not. Both now go the same way.
+  test("names a newly filed one-sheet drawing after the number on it", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Open PDF…" }).first().click();
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible({ timeout: 30_000 });
+
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __sfRenames: unknown[] }).__sfRenames))
+      .toEqual([{ sourceDocument: REVISION.sourceDocumentId, name: "A-201 SECOND FLOOR PLAN" }]);
+  });
+});
+
 test.describe("drag and drop", () => {
   test.beforeEach(async ({ page }) => {
     await stubHost(page, Array.from(testPdf()));
