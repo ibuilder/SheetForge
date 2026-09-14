@@ -1,0 +1,8 @@
+# Build output, crashing inputs and coverage reports belong to a run, not to the repository. The
+# seed corpus under corpus/ is committed; what libFuzzer adds to it during a run is not.
+target/
+artifacts/
+coverage/
+corpus/**/*
+!corpus/**/seed-*
+!corpus/*/

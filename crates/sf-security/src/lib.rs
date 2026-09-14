@@ -357,6 +357,52 @@ impl ResourceLimits {
 /// them. A small window accepts those without accepting a PDF header buried inside an executable.
 const PDF_HEADER_SEARCH_WINDOW: usize = 1_024;
 
+/// Count a document's pages from its page objects, stopping once the count passes `stop_after`.
+///
+/// This is the one piece of PDF parsing the host does itself, and it runs on every drawing before
+/// anything else reads it. It lived in the desktop command layer, which is a Tauri application that
+/// a fuzzing build cannot reasonably link; it lives here, with the other hostile-input bounds, so
+/// that it can be fuzzed. See `fuzz/`.
+///
+/// `/Type /Page` occurrences are counted, not `/Count`, because `/Count` is a claim the file makes
+/// about itself and a crafted file can claim anything. Whitespace between the tokens is legal, so
+/// the scan tolerates it.
+///
+/// Returns at least 1 and at most `stop_after + 1`: stopping just past the ceiling is what lets the
+/// caller refuse the document without scanning a file built to be scanned forever.
+#[must_use]
+pub fn count_pages(bytes: &[u8], stop_after: u32) -> u32 {
+    let mut count = 0u32;
+    let needle = b"/Type";
+    let mut index = 0;
+    while let Some(found) = bytes[index..]
+        .windows(needle.len())
+        .position(|w| w == needle)
+    {
+        let after = index + found + needle.len();
+        let rest = &bytes[after..bytes.len().min(after + 16)];
+        let trimmed: Vec<u8> = rest
+            .iter()
+            .copied()
+            .skip_while(u8::is_ascii_whitespace)
+            .collect();
+        if trimmed.starts_with(b"/Page") && !trimmed.starts_with(b"/Pages") {
+            count = count.saturating_add(1);
+        }
+        index = after;
+        if count > stop_after {
+            break;
+        }
+    }
+    if count == 0 {
+        // A linearised or object-stream PDF hides its page objects inside compressed streams, so
+        // zero here means "could not tell", not "empty". One page is the honest floor; the
+        // renderer corrects the number once it has the document open.
+        return 1;
+    }
+    count
+}
+
 /// Whether these bytes begin a PDF.
 ///
 /// A cheap structural check, not a parse. It exists to fail fast and clearly on the common cases —

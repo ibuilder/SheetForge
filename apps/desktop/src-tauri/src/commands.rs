@@ -2403,39 +2403,9 @@ fn admit_pages(limits: &sf_security::ResourceLimits, bytes: &[u8]) -> CommandRes
     Ok(pages)
 }
 
+/// The page count, stopping just past the domain's own ceiling. See [`sf_security::count_pages`].
 fn count_pages(bytes: &[u8]) -> u32 {
-    // `/Type /Page` occurrences, not `/Count`, because `/Count` is a claim the file makes about
-    // itself and a crafted file can claim anything. Whitespace between the tokens is legal, so the
-    // scan tolerates it.
-    let mut count = 0u32;
-    let needle = b"/Type";
-    let mut index = 0;
-    while let Some(found) = bytes[index..]
-        .windows(needle.len())
-        .position(|w| w == needle)
-    {
-        let after = index + found + needle.len();
-        let rest = &bytes[after..bytes.len().min(after + 16)];
-        let trimmed: Vec<u8> = rest
-            .iter()
-            .copied()
-            .skip_while(u8::is_ascii_whitespace)
-            .collect();
-        if trimmed.starts_with(b"/Page") && !trimmed.starts_with(b"/Pages") {
-            count = count.saturating_add(1);
-        }
-        index = after;
-        if count > sf_domain::DocumentRevision::MAX_PAGES {
-            break;
-        }
-    }
-    if count == 0 {
-        // A linearised or object-stream PDF hides its page objects inside compressed streams, so
-        // zero here means "could not tell", not "empty". One page is the honest floor; the
-        // renderer corrects the number once it has the document open.
-        return 1;
-    }
-    count
+    sf_security::count_pages(bytes, sf_domain::DocumentRevision::MAX_PAGES)
 }
 
 #[cfg(test)]

@@ -1,0 +1,73 @@
+# Coverage-guided fuzzing of the parsers that read outside input.
+#
+# The unit suite's property tests run a few hundred generated cases in seconds, on every push. This
+# is the other half: libFuzzer, instrumented, steering towards inputs that reach code the corpus has
+# not reached yet, for minutes per target.
+#
+# Its own workspace, deliberately. It builds with nightly and a fuzzing runtime, and none of it
+# ships: keeping it outside the main workspace keeps `cargo test`, `cargo deny` and the release
+# build from ever touching it.
+#
+# Run one target locally with `cargo +nightly fuzz run <target>` from this directory. CI runs every
+# target weekly and whenever this directory changes — see `.github/workflows/fuzz.yml`.
+[package]
+name = "sheetforge-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+sf-audit = { path = "../crates/sf-audit" }
+sf-domain = { path = "../crates/sf-domain" }
+sf-security = { path = "../crates/sf-security" }
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "pdf_page_count"
+path = "fuzz_targets/pdf_page_count.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_header"
+path = "fuzz_targets/pdf_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "contained_path"
+path = "fuzz_targets/contained_path.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "check_name"
+path = "fuzz_targets/check_name.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "redact"
+path = "fuzz_targets/redact.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markup_metadata"
+path = "fuzz_targets/markup_metadata.rs"
+test = false
+doc = false
+bench = false

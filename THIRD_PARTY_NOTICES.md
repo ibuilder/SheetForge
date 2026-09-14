@@ -64,6 +64,8 @@ The engine ships Unicode glyphs as its default icons; SheetForge replaces them a
 | `tesseract.js`, `tesseract.js-core` | Apache-2.0 |
 | `lucide-static` | ISC |
 | `tempfile` | MIT or Apache-2.0 |
+| `libfuzzer-sys`, which builds libFuzzer (`fuzz/` only) | (MIT or Apache-2.0) and NCSA, as its crates.io metadata declares |
+| `cargo-fuzz` (installed by the fuzzing workflow, not a dependency) | MIT or Apache-2.0 |
 
 Not shipped in the binary.
 

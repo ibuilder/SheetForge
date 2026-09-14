@@ -1,0 +1,65 @@
+# Coverage-guided fuzzing of the parsers that read outside input.
+#
+# The unit suite's property tests run a few hundred generated cases per boundary in seconds, on
+# every push. This is the other half: libFuzzer, instrumented, steering towards inputs that reach
+# code the corpus has not reached, for minutes per target. Too slow for every push, so it runs
+# weekly, on demand, and whenever a target or this workflow changes.
+#
+# A crash fails the job and uploads the input that caused it. It reproduces locally with
+# `cargo +nightly fuzz run <target> <file>`, from `fuzz/`.
+#
+# What this is not: a fuzzer for pdf.js or pdf-lib, which run in the webview and are upstream. The
+# host's own parsers are what is here. See docs/status.md.
+name: Fuzz
+
+on:
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds per target
+        default: "300"
+  schedule:
+    - cron: "0 4 * * 2"
+  push:
+    branches: [main]
+    paths:
+      - "fuzz/**"
+      - ".github/workflows/fuzz.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Every target reports. One crash should not hide whether the others are clean.
+      fail-fast: false
+      matrix:
+        target: [pdf_page_count, pdf_header, contained_path, check_name, redact, markup_metadata]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz -> target
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      # The tutorial sheet is this project's own generated drawing — never a customer's — and a real
+      # document is a far better starting point for the drawing targets than a handful of bytes.
+      - name: Seed the drawing targets with the tutorial sheet
+        if: startsWith(matrix.target, 'pdf_')
+        run: cp apps/desktop/src-tauri/assets/welcome.pdf "fuzz/corpus/${{ matrix.target }}/seed-welcome.pdf"
+      - name: Fuzz
+        working-directory: fuzz
+        run: >-
+          cargo +nightly fuzz run ${{ matrix.target }} corpus/${{ matrix.target }}
+          -- -max_total_time=${{ inputs.seconds || '300' }}
+      - name: Keep the input that crashed it
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: crash-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
