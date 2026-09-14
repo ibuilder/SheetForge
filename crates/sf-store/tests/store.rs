@@ -704,8 +704,10 @@ fn the_audit_trail_cannot_be_updated_or_deleted_from_even_by_raw_sql() {
 
 #[test]
 fn tampering_with_the_trail_is_detected_on_verification() {
-    // The triggers stop the easy edit; this is what happens when somebody drops the triggers
-    // first, which is the realistic attack on a local file.
+    // The triggers stop the easy edit. The realistic attack on a local file drops them first, and
+    // opening now refuses a database whose triggers are missing, so an attacker who wants the edited
+    // file to open has to put them back exactly as they were. This is that attacker, and the hash
+    // chain is what catches them.
     let mut fixture = fixture();
     for action in ["markup:create", "markup:status", "export:csv"] {
         fixture
@@ -718,11 +720,24 @@ fn tampering_with_the_trail_is_detected_on_verification() {
     drop(fixture.store);
 
     let conn = rusqlite::Connection::open(&path).unwrap();
+    let trigger: String = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE name = 'audit_events_are_immutable'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
     conn.execute_batch(
         "DROP TRIGGER audit_events_are_immutable;
          UPDATE audit_events SET action = 'markup:delete' WHERE seq = 1;",
     )
     .unwrap();
+    // Left like this, the file is refused before anything is read from it.
+    assert!(matches!(
+        Store::open(&path),
+        Err(StoreError::UnexpectedSchema)
+    ));
+    conn.execute_batch(&trigger).unwrap();
     drop(conn);
 
     let reopened = Store::open(&path).unwrap();

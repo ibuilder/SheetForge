@@ -21,7 +21,12 @@ Nothing new. The gap between "it works" and "you can depend on it."
   and seeing what the operating system says is the half CI cannot do.
 - **Performance budgets, measured**, on real hardware and a real drawing set: time to first page,
   tile latency at 800%, memory on a 200-sheet set. Then published, and failed against.
-- **Crash recovery, tested by killing the process**, not by dropping a connection.
+- ~~**Crash recovery, tested by killing the process**, not by dropping a connection.~~ *Done.* A
+  real child process commits a markup and is killed with `TerminateProcess` or `SIGKILL` — no
+  destructors, no unwinding — and the file is reopened and the markup is there
+  (`crates/sf-store/tests/crash.rs`). What it proves is that SQLite committed, not that the disk
+  did: a power cut discards what the operating system had buffered, and testing that honestly needs
+  hardware or a filesystem fault injector. That part stays a gap in [status](status.md).
 - ~~**Raw bytes for exports.**~~ *Done.* Exports crossed to the host as a JSON array of numbers,
   about five characters per byte to build, send and parse — unnoticeable for a spreadsheet, and
   150 MB of string for a 30 MB image, on the thread that draws the window. They now travel as a raw

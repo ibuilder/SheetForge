@@ -161,6 +161,46 @@ proptest! {
     }
 }
 
+proptest! {
+    /// Redaction runs on text nobody wrote for a log — an operating system's error, a library's
+    /// message — so it is tested on generated text rather than a list. Three things hold for any of
+    /// it: it does not panic; the whitespace is kept exactly, so a redacted line still reads as the
+    /// line it was; and every absolute path in it is gone.
+    #[test]
+    fn redaction_keeps_the_shape_of_any_text_and_leaves_no_absolute_path_standing(
+        words in proptest::collection::vec(
+            prop_oneof![
+                any::<String>(),
+                "/[a-z]{1,8}(/[a-zA-Z0-9._-]{1,12}){1,4}",
+                "[A-Za-z]:\\\\[A-Za-z0-9._-]{1,12}(\\\\[A-Za-z0-9._-]{1,12}){0,3}",
+                "\\\\\\\\[a-z]{1,8}\\\\[a-z]{1,8}",
+            ],
+            0..8,
+        ),
+    ) {
+        let input = words.join(" ");
+        let out = sf_audit::redact(&input);
+
+        let spacing = |text: &str| text.chars().filter(|c| c.is_whitespace()).collect::<String>();
+        prop_assert_eq!(spacing(&out), spacing(&input));
+
+        let before: Vec<&str> = input.split_whitespace().collect();
+        let after: Vec<&str> = out.split_whitespace().collect();
+        prop_assert_eq!(before.len(), after.len());
+        for (original, redacted) in before.iter().zip(&after) {
+            let bytes = original.as_bytes();
+            let absolute = original.len() > 3
+                && (original.starts_with('/')
+                    || original.starts_with("\\\\")
+                    || (bytes[0].is_ascii_alphabetic()
+                        && (original[1..].starts_with(":\\") || original[1..].starts_with(":/"))));
+            if absolute {
+                prop_assert_eq!(*redacted, "<path>", "{} survived", original);
+            }
+        }
+    }
+}
+
 /// Redaction is applied to strings that were never written for a log, so it has to survive
 /// anything.
 #[test]

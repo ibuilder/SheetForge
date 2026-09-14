@@ -1696,6 +1696,7 @@ pub fn markup_create_many(
     if markups.is_empty() {
         return Ok(Vec::new());
     }
+    admit_import(markups.len()).map_err(|error| refused_outside(&state, "markup:import", error))?;
 
     with_open(&state, |package| {
         // Every record is validated before any is written, so a bad one in the middle cannot leave
@@ -2270,6 +2271,26 @@ fn header(request: &tauri::ipc::Request<'_>, name: &str) -> CommandResult<String
     percent_decode(raw)
 }
 
+/// The most markups one import may carry.
+///
+/// Not a memory bound: by the time a command runs, the IPC layer has already read the whole
+/// request. What it bounds is the transaction. Every record is validated against the store and
+/// written in one commit on a blocking command, so a request of ten million markups would hold the
+/// database, and the window waiting on it, for as long as that took. Fifty thousand is far past a
+/// markup set a review produces — the batching was measured on a thousand.
+pub const MAX_MARKUPS_PER_IMPORT: usize = 50_000;
+
+/// Refuse an import past [`MAX_MARKUPS_PER_IMPORT`], saying how many it held.
+fn admit_import(count: usize) -> CommandResult<()> {
+    if count > MAX_MARKUPS_PER_IMPORT {
+        return Err(CommandError::invalid_request(format!(
+            "That import holds {count} markups, and at most {MAX_MARKUPS_PER_IMPORT} can be \
+             imported at once. Split the file and import it in parts."
+        )));
+    }
+    Ok(())
+}
+
 /// Reverse `encodeURIComponent`.
 ///
 /// Separate from [`header`] so it can be tested without building an invoke request: the decoding
@@ -2572,6 +2593,65 @@ mod tests {
             proptest::collection::vec(any::<u8>(), 0..64),
         ];
         proptest::collection::vec(fragment, 0..80).prop_map(|parts| parts.concat())
+    }
+
+    #[test]
+    fn an_import_past_the_markup_ceiling_is_refused_and_says_how_many() {
+        assert!(admit_import(MAX_MARKUPS_PER_IMPORT).is_ok());
+        let refusal = admit_import(MAX_MARKUPS_PER_IMPORT + 1).unwrap_err();
+        assert!(
+            refusal
+                .message
+                .contains(&(MAX_MARKUPS_PER_IMPORT + 1).to_string()),
+            "{}",
+            refusal.message
+        );
+    }
+
+    /// `encodeURIComponent`, as the interface applies it to every header it sends.
+    fn encode_uri_component(text: &str) -> String {
+        text.bytes()
+            .map(|byte| {
+                if byte.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&byte) {
+                    char::from(byte).to_string()
+                } else {
+                    format!("%{byte:02X}")
+                }
+            })
+            .collect()
+    }
+
+    proptest! {
+        /// Every raw-body command reads its name and extension from headers the interface built
+        /// with `encodeURIComponent`, and the host must read back exactly the string that was
+        /// encoded, whatever it holds: a name in Cyrillic, an emoji, a `%` that belongs to the name.
+        /// The example tests covered the cases somebody thought of.
+        #[test]
+        fn a_header_reads_back_as_exactly_what_was_encoded(text in any::<String>()) {
+            prop_assert_eq!(percent_decode(&encode_uri_component(&text)).unwrap(), text);
+        }
+
+        /// A header is also whatever a compromised webview chose to send: a stray `%`, a pair that
+        /// is not hex, an escape that decodes to half a UTF-8 character. Refused or decoded, never a
+        /// panic.
+        #[test]
+        fn any_header_is_decoded_or_refused_without_panicking(raw in any::<String>()) {
+            let _ = percent_decode(&raw);
+        }
+
+        #[test]
+        fn escapes_that_are_not_utf8_are_refused_rather_than_repaired(
+            bytes in proptest::collection::vec(0x80u8..=0xff, 1..8),
+        ) {
+            use std::fmt::Write as _;
+            let raw = bytes.iter().fold(String::new(), |mut raw, byte| {
+                let _ = write!(raw, "%{byte:02X}");
+                raw
+            });
+            if std::str::from_utf8(&bytes).is_err() {
+                prop_assert!(percent_decode(&raw).is_err());
+            }
+        }
     }
 
     proptest! {

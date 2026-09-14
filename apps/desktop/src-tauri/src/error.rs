@@ -113,6 +113,7 @@ impl From<sf_store::StoreError> for CommandError {
             S::NewerFormat { .. } => Self::new("newer-format", error.to_string(), false),
             S::AlreadyInitialised => Self::new("already-initialised", error.to_string(), false),
             S::Corrupt => Self::new("corrupt", error.to_string(), false),
+            S::UnexpectedSchema => Self::new("unexpected-schema", error.to_string(), false),
             // A rusqlite message can name the database file, so it is logged and not forwarded.
             S::Database(_) => {
                 log::error!("{}", sf_audit::redact(&error.to_string()));

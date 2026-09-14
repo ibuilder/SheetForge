@@ -58,6 +58,26 @@ break that touches stored data will say so here with a migration note.
   are held to what the domain's own derivation guarantees, but a value without a host calibration is
   still accepted: the engine owns the calibration, and refusing that would refuse every takeoff.
 
+- **A project database carrying anything SheetForge did not put there is refused.** A project
+  package's database is a SQLite file somebody else wrote, and SQLite keeps triggers and views *in
+  the file* and runs them inside the application's own connection, on its own reads and writes. A
+  package could have carried a trigger that rewrote a markup's status every time one was saved.
+  Opening now compares every table, index, trigger and view with what this build's migrations
+  produce on an empty database, by name and SQL text, and refuses any difference — including a
+  database whose audit-trail protection was dropped. The comparison is built from the shipped
+  migrations, not a hand-kept list, so a new migration cannot be forgotten by it.
+
+- **An import is bounded at fifty thousand markups.** Every record in an import is validated and
+  written in one transaction on a blocking command; a request of millions would hold the project,
+  and the window waiting on it, for as long as that took. The refusal says how many markups the
+  file held, and is written to the audit trail.
+
+- **Two text boundaries are property-tested rather than tested by example.** The header decoder on
+  every raw-body command now reads back exactly what `encodeURIComponent` produced for any string,
+  and refuses rather than repairs escapes that are not UTF-8. Log redaction, which runs on text
+  nobody wrote for a log, now keeps the whitespace of any input and leaves no absolute path
+  standing. Neither found a defect.
+
 - **A damaged drawing is no longer called protected.** Taking pages out of a drawing or building a
   redacted copy reads it a second time, with pdf-lib, and every failure to load was reported as
   "this drawing is protected — ask whoever issued it for an unprotected copy". A generated test

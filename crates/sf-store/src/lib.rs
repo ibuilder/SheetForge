@@ -62,6 +62,11 @@ pub enum StoreError {
     #[error("a stored record is not in a form this version understands")]
     Corrupt,
 
+    /// The database holds a table, index, trigger or view that this build's migrations did not
+    /// create, or one of theirs has been altered. See [`Store::open`].
+    #[error("this project's database contains something SheetForge did not put there")]
+    UnexpectedSchema,
+
     /// The row was not there.
     #[error("that {0} is not in this project")]
     NotFound(&'static str),
@@ -99,6 +104,22 @@ pub struct Store {
     conn: Connection,
 }
 
+/// A database's schema objects, each as its type, name, table and SQL text.
+type SchemaObjects = std::collections::BTreeSet<(String, String, String, Option<String>)>;
+
+/// Every schema object a database holds, apart from SQLite's own.
+fn schema_objects(conn: &Connection) -> Result<SchemaObjects> {
+    let mut statement = conn.prepare(
+        "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE substr(name, 1, 7) != 'sqlite_'",
+    )?;
+    let objects = statement
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
+        .collect::<std::result::Result<_, _>>()?;
+    Ok(objects)
+}
+
 impl Store {
     /// Open or create the database at `path`, running any outstanding migrations.
     ///
@@ -131,7 +152,40 @@ impl Store {
 
         let mut store = Self { conn };
         store.migrate()?;
+        store.check_schema()?;
         Ok(store)
+    }
+
+    /// Refuse a database carrying anything the migrations did not put there.
+    ///
+    /// A project package is a directory somebody can hand you, and its database is a SQLite file
+    /// they wrote. SQLite keeps triggers and views *in the file* and runs them inside this
+    /// connection, on this application's own reads and writes: a package could carry a trigger
+    /// that rewrites a markup's status every time one is saved, and nothing in the SQL this crate
+    /// issues would show it. The append-only audit table is protected by triggers of exactly this
+    /// kind, which is the same mechanism pointed the other way.
+    ///
+    /// So after migrating, every schema object is compared with what the same migrations produce on
+    /// an empty database — by type, name, table and SQL text — and any difference is refused. The
+    /// comparison is against a database built from the shipped migrations rather than a list kept
+    /// by hand, so a new migration cannot be forgotten here.
+    ///
+    /// SQLite's own `sqlite_*` objects are left out: it creates those itself, and whether they
+    /// exist depends on use, not on who wrote the file.
+    ///
+    /// ## What this does not cover
+    ///
+    /// Rows. A crafted database can still hold values no build of SheetForge would write, and those
+    /// are met by the typed readers and the domain's validation, one record at a time.
+    fn check_schema(&self) -> Result<()> {
+        let mut reference = Self {
+            conn: Connection::open_in_memory()?,
+        };
+        reference.migrate()?;
+        if schema_objects(&self.conn)? != schema_objects(&reference.conn)? {
+            return Err(StoreError::UnexpectedSchema);
+        }
+        Ok(())
     }
 
     /// Bring the schema up to date.
