@@ -33,6 +33,18 @@ Nothing new. The gap between "it works" and "you can depend on it."
 
 ### Done since this was written
 
+- **Refusals in the audit trail.** The engineering rules always required it and no release through
+  0.1.2 did it: the only audited refusals were capability checks a local owner can never hit. A
+  drawing over its ceiling, a document past the page count, an unusable name, a refused export —
+  each is now recorded against the act it refused, with the rule and a countable code, and never a
+  path or a filename. Not recorded: a refusal with no project open, since the trail lives in the
+  project.
+
+- **Package ceilings, enforced.** A project package is somebody else's directory, and its size and
+  file-count limits were compared with nothing. It is now measured before its database opens, by a
+  walk that stops at the first refusal and never follows a link out of the package. Decompressed
+  size, concurrency and job time remain declared only — they need a hook inside pdf.js's worker.
+
 - **The diagnostic report** ADR-0007 promised in place of telemetry. Plain text, under Project →
   Save diagnostic report: build and machine facts, the limits in force, counts from the open
   project, and the redacted tail of the log. It reports *counts rather than contents* — "14

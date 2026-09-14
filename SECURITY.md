@@ -40,10 +40,13 @@ interchange file is treated as hostile:
 
 - **Sniffed before it is written.** A renamed `.docx`, a truncated download or an HTML error page
   saved as `.pdf` is refused at the door rather than discovered by the renderer.
-- **Bounded.** Size, page count, decompressed size, archive entry count, concurrent job count and
-  per-job wall time all have configured ceilings. They are in one place —
-  [`sf-security`](crates/sf-security/src/lib.rs) — so they can be audited, and they are surfaced to
-  the interface so it can refuse a file before spending a minute reading it.
+- **Bounded.** The ceilings live in one place — [`sf-security`](crates/sf-security/src/lib.rs) —
+  so they can be audited. Four are enforced by the host: a file's size, checked before it is read;
+  a document's page count, counted from its contents; and a project package's total size and file
+  count, measured before its database is opened. Three more — decompressed stream size, concurrent
+  jobs and per-job wall time — are **declared and not enforced**: decompression and rendering happen
+  inside pdf.js's worker, which exposes no hook for either. The diagnostics report lists them
+  separately, and [status](docs/status.md) tracks the gap.
 - **Parsed off the UI thread**, in cancellable work, so a hostile document degrades into a refusal
   rather than a hang.
 - **Never trusted for its own claims.** A page count is counted, not read out of `/Count`.
@@ -137,7 +140,7 @@ place, verify the checksums published with each release. Tracked in
 
 | Concern | Where it is handled | What you must still do |
 |---|---|---|
-| Who may do what | `Role` / `Capability` in `sf-security`; checked before every act, refusals audited | Substitute your directory's answer. The built-in roles assume one person owns their own files |
+| Who may do what | `Role` / `Capability` in `sf-security`; checked before every act. Refusals are written to the audit trail when a project is open to hold them — the trail lives inside the project | Substitute your directory's answer. The built-in roles assume one person owns their own files |
 | Resource ceilings | `ResourceLimits`, one struct, serialisable | Tighten via policy if your estate needs it |
 | Data at rest | The package is a folder | Use full-disk encryption. SheetForge does not encrypt the package itself — see below |
 | Audit retention | `audit.ndjson` exports the trail portably | Ship it to your own pipeline |

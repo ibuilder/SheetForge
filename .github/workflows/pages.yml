@@ -3,7 +3,20 @@ name: Documentation site
 on:
   push:
     branches: [main]
-    paths: ["site/**", "docs/**", "README.md", ".github/workflows/pages.yml"]
+    # Every file build-site.mjs renders, not just the obvious ones. The root documents were missing,
+    # so a commit touching only CHANGELOG.md or SECURITY.md left the published copy stale.
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "scripts/build-site.mjs"
+      - ".github/workflows/pages.yml"
+      - "README.md"
+      - "SECURITY.md"
+      - "PRIVACY.md"
+      - "CONTRIBUTING.md"
+      - "CHANGELOG.md"
+      - "CODE_OF_CONDUCT.md"
+      - "THIRD_PARTY_NOTICES.md"
   workflow_dispatch:
 
 permissions:

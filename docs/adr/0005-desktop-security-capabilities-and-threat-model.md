@@ -47,6 +47,13 @@ Sniffed before anything is written; bounded on size, page count, decompressed si
 concurrent jobs and per-job time; parsed off the UI thread in cancellable work; never trusted for
 their own claims about themselves.
 
+*Note, 2026-09-13.* The decision stands; its implementation lagged it, and this record should not be
+read as saying otherwise. Refusals were not written to the audit trail by any release up to 0.1.2,
+and several ceilings were compared with nothing. Size, page count and the package's size and file
+count are now enforced, and refusals are audited whenever a project is open. Decompressed size,
+concurrent jobs and per-job time are still declared only. [Status](../status.md) is the current
+account.
+
 ### Errors carry no paths
 
 Every message that crosses the boundary, reaches a log or lands in a diagnostic bundle is built to
