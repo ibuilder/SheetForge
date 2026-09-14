@@ -269,11 +269,32 @@ export interface NewMarkupPayload {
   quantity?: HostQuantity | null;
 }
 
+/** A file an import did not file, named without its folder, and why. */
+export interface RefusedFile {
+  file: string;
+  error: CommandError;
+}
+
+/** One drawing an import filed, or found already filed. */
+export interface ImportedDrawing {
+  revision: RevisionSummary;
+  /** True when these exact bytes were already in the project. */
+  reopened: boolean;
+}
+
+/** What an import of several drawings did with each of them. */
+export interface ImportReport {
+  drawings: ImportedDrawing[];
+  refused: RefusedFile[];
+}
+
 /** What the host reports after drawings are dropped on the window. */
 export interface DroppedDrawings {
-  /** Present when the import succeeded. */
+  /** The drawings filed, or found already filed. */
   opened?: OpenedDrawing[];
-  /** Present when it did not. */
+  /** Files that were not filed, each with its reason. The others are still in `opened`. */
+  refused?: RefusedFile[];
+  /** Present when nothing could be done at all — no project, or a refused capability. */
   error?: CommandError;
 }
 
@@ -368,7 +389,11 @@ export const host = {
   pdfOpen: () => call<OpenedDrawing>("pdf_open"),
   /** Open the tutorial drawing compiled into the application. Takes no path, and needs none. */
   tutorialOpen: () => call<OpenedDrawing>("tutorial_open"),
-  documentImport: () => call<RevisionSummary[]>("document_import"),
+  /** Pick several drawings and file each of them, reporting every outcome rather than stopping. */
+  documentImport: () => call<ImportReport>("document_import"),
+  /** Rename a drawing to the name the job knows it by — in practice, the sheet number on it. */
+  documentRename: (sourceDocument: string, name: string) =>
+    call<null>("document_rename", { sourceDocument, name }),
 
   /**
    * File a document assembled from one already in the project.

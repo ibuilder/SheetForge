@@ -20,7 +20,7 @@ import "@massingcloud/pdf-viewer/style.css";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 import { HostAdapter } from "./adapter";
-import type { AppInfo, RevisionSummary } from "./bridge";
+import type { AppInfo, ImportedDrawing, ImportReport, RevisionSummary } from "./bridge";
 import { errorMessage, hasHost, host, isCommandError, onDropped } from "./bridge";
 import type { RecentProject } from "./bridge";
 import { mountChrome, type Chrome, type MenuItem } from "./chrome";
@@ -34,6 +34,9 @@ import { describe as describeCheck, scaleCheckPlugin } from "./scale-check";
 import { RESOLUTIONS, sheetAsPng, sheetsAsZip } from "./sheet-image";
 import { summaryPlugin } from "./summary";
 import { interchangePlugin } from "./interchange";
+import { describeImport, nameFromSheets, type TitleBlockOutcome } from "./import-report";
+import { toHostSheet } from "./mapping";
+import { readTitleBlocks } from "./titleblock";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { automaticChecksEnabled, runUpdateCheck, setAutomaticChecks } from "./updates";
@@ -122,14 +125,13 @@ async function start(): Promise<void> {
           return;
         }
         const opened = event.opened ?? [];
-        if (opened.length === 0) return;
-        const first = opened[0]!;
-        chrome.setProject(first.project);
-        chrome.setRevisions(await host.documentList());
-        await openRevision(chrome, first.revision);
-        if (opened.length > 1) {
-          chrome.setStatus(`Added ${opened.length} drawings. Showing ${first.revision.name}.`);
-        }
+        const refused = event.refused ?? [];
+        if (opened.length === 0 && refused.length === 0) return;
+        if (opened[0]) chrome.setProject(opened[0].project);
+        await finishImport(chrome, {
+          drawings: opened.map(({ revision, reopened }) => ({ revision, reopened })),
+          refused,
+        });
       });
     });
 
@@ -741,13 +743,65 @@ async function openProject(chrome: Chrome): Promise<void> {
 }
 
 async function importDrawings(chrome: Chrome): Promise<void> {
-  chrome.setStatus("Reading drawings…");
-  const imported = await host.documentImport();
-  const revisions = await host.documentList();
-  chrome.setRevisions(revisions);
-  chrome.setStatus(`Added ${imported.length} drawing${imported.length === 1 ? "" : "s"}.`);
-  const first = imported[0];
-  if (first) await openRevision(chrome, first);
+  chrome.setStatus("Choosing drawings…");
+  await finishImport(chrome, await host.documentImport());
+}
+
+/**
+ * Everything after the host has filed a set of drawings, whichever way they arrived.
+ *
+ * Title blocks first, so the drawing list the reviewer then sees already carries sheet numbers
+ * rather than filenames; then the list; then the first drawing, opened; and last the summary, which
+ * has to be the final word on the status line — opening a drawing writes its own.
+ */
+async function finishImport(chrome: Chrome, report: ImportReport): Promise<void> {
+  const titles = await recordTitleBlocks(chrome, report.drawings);
+  chrome.setRevisions(await host.documentList());
+  const first = report.drawings[0];
+  if (first) await openRevision(chrome, titles.renamed.get(first.revision.id) ?? first.revision);
+  chrome.setStatus(describeImport(report, titles.outcome));
+}
+
+/**
+ * Read the title blocks of every drawing an import newly filed, record its sheets, and rename a
+ * drawing that is one sheet to the number printed on it.
+ *
+ * Drawings that were already in the project are left alone: their register was read when they
+ * were filed, and one of them may have been renamed by hand since. A drawing whose title blocks
+ * cannot be read is still filed — it keeps its filename, and its sheets are read when it is opened.
+ * One document at a time, because each holds a parsed PDF until it is destroyed.
+ */
+async function recordTitleBlocks(
+  chrome: Chrome,
+  drawings: readonly ImportedDrawing[],
+): Promise<{ outcome: TitleBlockOutcome; renamed: Map<string, RevisionSummary> }> {
+  const fresh = drawings.filter((drawing) => !drawing.reopened);
+  const outcome: TitleBlockOutcome = { read: 0, renamed: 0, unreadable: 0 };
+  const renamed = new Map<string, RevisionSummary>();
+
+  for (const [index, { revision }] of fresh.entries()) {
+    chrome.setStatus(`Reading title blocks: ${index + 1} of ${fresh.length}…`);
+    try {
+      const sheets = await readTitleBlocks(new Uint8Array(await host.documentBytes(revision.id)));
+      // One call per drawing rather than one per sheet, which is what opening a drawing sends.
+      const rows = sheets
+        .map((sheet) => toHostSheet(sheet, "extracted"))
+        .filter((row) => row.number ?? row.title ?? row.discipline ?? row.revision);
+      if (rows.length > 0) await host.sheetRecord(revision.id, rows);
+      if (sheets.some((sheet) => sheet.number)) outcome.read += 1;
+
+      const name = nameFromSheets(sheets);
+      if (name && name !== revision.name) {
+        await host.documentRename(revision.sourceDocumentId, name);
+        renamed.set(revision.id, { ...revision, name });
+        outcome.renamed += 1;
+      }
+    } catch (error) {
+      console.error("SheetForge: title blocks not read:", errorMessage(error));
+      outcome.unreadable += 1;
+    }
+  }
+  return { outcome, renamed };
 }
 
 /**

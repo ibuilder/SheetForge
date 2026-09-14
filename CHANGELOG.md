@@ -6,6 +6,37 @@ break that touches stored data will say so here with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **Importing a set reads the sheet number off every drawing in it.** Until now the title blocks of
+  an import were read only for the one drawing opened afterwards, so a set of sixty drawings arrived
+  as sixty filenames with one sheet's worth of register. Every drawing an import newly files — from
+  **Add drawings** or dropped on the window — now has its title blocks read before the drawing list
+  is shown, its sheets recorded in the register in one call per drawing, and, when it is a single
+  sheet, is renamed from `scan0042` to the number and title printed on it (`A-201 SECOND FLOOR
+  PLAN`). A file holding several sheets keeps its filename, because it is not any one of them; a
+  drawing with no readable number keeps its filename too, because a guessed name is worse than a
+  poor one. Drawings already in the project are left alone.
+
+  An import also no longer stops at the first bad file. Each file is filed, found already filed, or
+  refused on its own, and the summary names every refused file with its reason — never its folder.
+  Before, one oversized scan in the middle of a set left the files before it filed, the files after
+  it not, and an error that named none of them.
+
+  Not done: scanned drawings are not read at import, because the reader uses the PDF's own text and
+  on-device recognition is too slow and too unreliable on title blocks to run over a whole set;
+  **Open PDF** on a single drawing still keeps its filename; the printed revision is not read; and a
+  new issue of a sheet becomes a second drawing rather than a revision of the first.
+
+### Changed
+
+- **Dependencies brought up to date**, as eight updates merged and tested together rather than one
+  at a time: pdf.js 6.3.289, the Tauri plugins, `uuid`, `log` and `sha2` 0.11 on the Rust side, and
+  in the tooling Vitest 5, ESLint 10.10, Playwright 1.63 and TypeScript 7, which the interface is
+  now type-checked with. `typescript-eslint` does not yet support TypeScript 7, so its type-aware
+  lint rules still run against TypeScript 6. The audit trail's hashes are unchanged by the `sha2`
+  update — the tests that pin a digest pass — and every CI action is on its current major version.
+
 ### Security
 
 - **Refusals are written to the audit trail.** The engineering rules have always required it, and

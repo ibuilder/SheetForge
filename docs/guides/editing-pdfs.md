@@ -58,7 +58,7 @@ not by filename, so a renamed copy still finds them and a genuinely different dr
 
 | Button | When you want it |
 |---|---|
-| **Add drawings** | Put more PDFs into the project that is already open — a whole set, rather than one sheet |
+| **Add drawings** | Put more PDFs into the project that is already open — a whole set, rather than one sheet. Each drawing's title blocks are read as it arrives, so the register fills straight away and a single sheet is named by the number printed on it rather than its filename. A file that cannot be added is named, with the reason, and the rest still go in |
 | **Open project** | Reopen a `.sfproj` folder directly, including one somebody sent you |
 | **New project** | Start an empty project in a location *you* choose, rather than the default. Useful when the job lives on a network share |
 

@@ -66,6 +66,49 @@ function testPdf(): Uint8Array {
   return new TextEncoder().encode(pdf);
 }
 
+/**
+ * A drawing with a title block on every page: the sheet number in the bottom-right corner, in the
+ * large type title blocks use, with the title beside it. One page per sheet given.
+ *
+ * `testPdf` puts "A-201" inside a sentence, which is exactly what the title-block reader must not
+ * take for a sheet number. This is a drawing it should read.
+ */
+function titleBlockPdf(sheets: { number: string; title: string }[]): Uint8Array {
+  // 1 the catalog, 2 the page tree, 3 the font, then a page and its content for each sheet.
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  const kids: string[] = [];
+  for (const { number, title } of sheets) {
+    const content =
+      "50 50 512 692 re S\n" +
+      `BT /F1 14 Tf 300 100 Td (${title}) Tj ET\n` +
+      `BT /F1 24 Tf 480 60 Td (${number}) Tj ET\n`;
+    const pageObject = objects.length + 1;
+    kids.push(`${pageObject} 0 R`);
+    objects.push(
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+        `/Resources << /Font << /F1 3 0 R >> >> /Contents ${pageObject + 1} 0 R >>`,
+    );
+    objects.push(`<< /Length ${content.length} >>\nstream\n${content}endstream`);
+  }
+  objects[1] = `<< /Type /Pages /Kids [${kids.join(" ")}] /Count ${sheets.length} >>`;
+
+  let pdf = "%PDF-1.7\n";
+  const offsets: number[] = [];
+  objects.forEach((body, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(pdf);
+}
+
 const REVISION = {
   id: "0192f0c1-0000-7000-8000-0000000000aa",
   sourceDocumentId: "0192f0c1-0000-7000-8000-0000000000bb",
@@ -144,6 +187,8 @@ async function stubHost(
       (window as unknown as { __sfDerived: unknown[] }).__sfDerived = [];
       (window as unknown as { __sfSheets: unknown[] }).__sfSheets = [];
       (window as unknown as { __sfViews: unknown[] }).__sfViews = [];
+      // Renames the interface asked for after reading title blocks.
+      (window as unknown as { __sfRenames: unknown[] }).__sfRenames = [];
 
       // event name -> the callback ids listening for it, mirroring what the Rust side tracks.
       const listeners = new Map<string, number[]>();
@@ -353,9 +398,25 @@ async function stubHost(
                 ],
                 excluded: { underived: 2, unconfirmed: 1 },
               });
-            case "document_bytes":
-              // The host returns raw bytes, which reach the interface as an ArrayBuffer.
-              return Promise.resolve(new Uint8Array(pdfBytes).buffer);
+            case "document_import":
+              // Whatever report a test planted: drawings filed, found already filed, and refused.
+              return Promise.resolve(
+                (window as unknown as { __sfImport?: unknown }).__sfImport ?? { drawings: [], refused: [] },
+              );
+            case "document_rename": {
+              (window as unknown as { __sfRenames: unknown[] }).__sfRenames.push({
+                sourceDocument: args["sourceDocument"],
+                name: args["name"],
+              });
+              return Promise.resolve(null);
+            }
+            case "document_bytes": {
+              // The host returns raw bytes, which reach the interface as an ArrayBuffer. A test
+              // importing several drawings plants each one's bytes under its revision id.
+              const planted = (window as unknown as { __sfBytesById?: Record<string, number[]> })
+                .__sfBytesById?.[String(args["revision"])];
+              return Promise.resolve(new Uint8Array(planted ?? pdfBytes).buffer);
+            }
             case "markup_list":
               return Promise.resolve(seeded);
             case "view_list":
@@ -563,6 +624,112 @@ test.describe("getting work back out", () => {
     ]) {
       await expect(menu.getByRole("menuitem", { name })).toBeVisible();
     }
+  });
+});
+
+test.describe("importing a set", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubHost(page, Array.from(testPdf()));
+  });
+
+  // The roadmap item: sheet numbers read from title blocks rather than filenames, for every drawing
+  // an import files — not only the one opened afterwards, which until now was the only one read.
+  test("reads every new drawing's title blocks, names a one-sheet drawing after its number, and reports every file", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/");
+
+    const single = {
+      ...REVISION,
+      id: "0192f0c1-0000-7000-8000-0000000001a1",
+      sourceDocumentId: "0192f0c1-0000-7000-8000-0000000001d1",
+      name: "scan0042",
+    };
+    const set = {
+      ...REVISION,
+      id: "0192f0c1-0000-7000-8000-0000000001a2",
+      sourceDocumentId: "0192f0c1-0000-7000-8000-0000000001d2",
+      name: "Issue C drawings",
+      pageCount: 2,
+    };
+    const already = {
+      ...REVISION,
+      id: "0192f0c1-0000-7000-8000-0000000001a3",
+      sourceDocumentId: "0192f0c1-0000-7000-8000-0000000001d3",
+      name: "A-501 DETAILS",
+    };
+
+    await page.evaluate(
+      ({ single, set, already, oneSheet, twoSheets }) => {
+        const planted = window as unknown as Record<string, unknown>;
+        planted["__sfImport"] = {
+          drawings: [
+            { revision: single, reopened: false },
+            { revision: set, reopened: false },
+            { revision: already, reopened: true },
+          ],
+          refused: [
+            {
+              file: "huge scan.pdf",
+              error: {
+                code: "too-large",
+                message: "this file is 900 MB, over the 512 MB limit for a drawing",
+                retryable: false,
+              },
+            },
+          ],
+        };
+        planted["__sfBytesById"] = { [single.id]: oneSheet, [set.id]: twoSheets };
+      },
+      {
+        single,
+        set,
+        already,
+        oneSheet: Array.from(titleBlockPdf([{ number: "A-201", title: "SECOND FLOOR PLAN" }])),
+        twoSheets: Array.from(
+          titleBlockPdf([
+            { number: "A-101", title: "SITE PLAN" },
+            { number: "A-102", title: "GROUND FLOOR PLAN" },
+          ]),
+        ),
+      },
+    );
+
+    await page.getByRole("toolbar", { name: "Project" }).getByRole("button", { name: /^Project/ }).click();
+    await page.getByRole("menuitem", { name: "Add drawings…" }).click();
+
+    const status = page.locator("[data-status]");
+    await expect(status).toContainText("1 refused — huge scan.pdf: this file is 900 MB", {
+      timeout: 30_000,
+    });
+    await expect(status).toContainText("Added 2 drawings; 1 was already in the project.");
+    await expect(status).toContainText(
+      "Sheet numbers read from 2, and 1 renamed to the sheet number on it.",
+    );
+
+    // Only the drawing that is one sheet is renamed. The set keeps its name, and the drawing that
+    // was already in the project is not touched at all.
+    const renames = await page.evaluate(
+      () => (window as unknown as { __sfRenames: unknown[] }).__sfRenames,
+    );
+    expect(renames).toEqual([
+      { sourceDocument: single.sourceDocumentId, name: "A-201 SECOND FLOOR PLAN" },
+    ]);
+
+    // Every sheet of every new drawing reached the register, as a guess rather than as confirmed.
+    const sheets = (await page.evaluate(
+      () => (window as unknown as { __sfSheets: unknown[] }).__sfSheets,
+    )) as { number: string | null; source: string }[];
+    expect(sheets.map((row) => row.number)).toEqual(
+      expect.arrayContaining(["A-201", "A-101", "A-102"]),
+    );
+    expect(sheets.every((row) => row.source === "extracted")).toBe(true);
+
+    // And the first drawing opened.
+    await expect(page.locator(".sf-stage canvas").first()).toBeVisible();
+    expect(errors, "no uncaught errors while importing").toEqual([]);
   });
 });
 
