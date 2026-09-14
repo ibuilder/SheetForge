@@ -96,3 +96,42 @@ jobs:
             target/release/bundle/**/*.deb
             target/release/bundle/**/*.rpm
             target/release/bundle/**/*.AppImage
+
+  # Building an installer is not installing one. This takes what the job above produced to a fresh
+  # runner of the same platform, installs it the way a user would, starts it, waits for the Rust
+  # side to log that it came up, and uninstalls it. See scripts/smoke-install.mjs for what that does
+  # and does not prove — what the operating system says about an unsigned binary on a real desktop
+  # is still the human half, on the release runbook's checklist.
+  smoke:
+    name: Install and launch (${{ matrix.label }})
+    needs: bundle
+    # Each platform on its own: a failed macOS bundle has no artifact to test, and that should not
+    # stop Windows and Linux being tested.
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows
+            os: windows-latest
+          - label: macOS
+            os: macos-latest
+          - label: Linux
+            os: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v5
+        with:
+          name: bundle-${{ matrix.label }}
+          path: bundle
+      - name: A display for Linux
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - name: Install, launch, confirm, uninstall
+        run: node scripts/smoke-install.mjs bundle

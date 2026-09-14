@@ -56,6 +56,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             app.manage(AppState::new());
+            // One line at startup, carrying the version and nothing else. It is how the installer
+            // smoke test knows the Rust side of an installed build came up: a process that is
+            // merely still running could be a window that never got this far.
+            log::info!("SheetForge {} started", app.package_info().version);
             #[cfg(desktop)]
             {
                 // Signed, checked updates. The public key lives in `tauri.conf.json`; the private
