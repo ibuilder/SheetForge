@@ -108,6 +108,12 @@ Intel) and Linux, signs the update payloads, and opens a **draft** release.
       `latest.json` URL anonymously, which a draft's private assets make impossible before.
 - [ ] Every expected artefact is present: `.msi`, `.exe`, `.dmg` (both architectures),
       `.AppImage`, `.deb`, `.rpm`.
+- [ ] The release run's **Install and launch the draft** jobs are green. Each installed this
+      draft's installer on a fresh runner — Windows, Apple-silicon macOS and Linux — started it,
+      confirmed it logged the version it started as, and uninstalled it; checksums and provenance
+      are not published until they pass. They cannot see what the operating system says about an
+      unsigned binary on a real desktop, or anything past startup, and they do not cover the Intel
+      macOS build. That is what the next item is for.
 - [ ] Install on a **clean** VM per platform. Not your development machine, which has the runtimes
       already.
 - [ ] Open a project, import a drawing, draw a cloud, calibrate a page, measure something, close,
@@ -160,5 +166,7 @@ with instructions. People's drawings matter more than the project's appearance.
 
 - **Code signing** with an organisation certificate (Windows) and an Apple Developer identity
   (macOS). Until then, installers warn and the release notes must say so.
-- **A clean-VM smoke test as an automated gate**, rather than the manual checklist above.
+- ~~**A clean-VM smoke test as an automated gate**~~ *Done, for install, start and uninstall on
+  fresh CI runners* — the gate above. The manual clean-VM install stays on the checklist for what a
+  runner cannot show.
 - **Reproducible builds** and a signed SBOM.

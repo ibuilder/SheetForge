@@ -21,10 +21,14 @@ Nothing new. The gap between "it works" and "you can depend on it."
   not done, and is still the largest security gap:** pdf.js, the parser that reads every document
   properly, is fuzzed by nobody here. It is upstream, and fuzzing it meaningfully means fuzzing it
   where it runs, in a browser.
-- **An installer smoke test in a clean VM** as a release gate, per platform. Half of this now
-  exists: a bundle job builds installers on Windows, macOS and Linux weekly and on demand, which is
-  what caught that the macOS and Linux bundles had never been produced by anything. Installing one
-  and seeing what the operating system says is the half CI cannot do.
+- ~~**An installer smoke test in a clean VM** as a release gate, per platform.~~ *Done, for what CI
+  can see.* Every bundle is installed on a fresh runner of its own platform — NSIS silently per user
+  on Windows, the disk image on macOS, `apt` on Linux — started, confirmed to have logged that it
+  came up, and uninstalled. It runs after the weekly bundle build and as a gate on every release
+  draft, before checksums and provenance are published. Its first run found that the macOS disk
+  image stops at its licence agreement and waits for an answer. **Still the human half:** what
+  SmartScreen and Gatekeeper say about an unsigned binary on a real desktop, and whether anything
+  works past startup, on the runbook's checklist. The Intel macOS build is not smoke-tested.
 - **Performance budgets, measured**, on real hardware and a real drawing set: time to first page,
   tile latency at 800%, memory on a 200-sheet set. Then published, and failed against.
 - ~~**Crash recovery, tested by killing the process**, not by dropping a connection.~~ *Done.* A

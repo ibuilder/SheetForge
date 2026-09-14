@@ -58,6 +58,17 @@ break that touches stored data will say so here with a migration note.
   are held to what the domain's own derivation guarantees, but a value without a host calibration is
   still accepted: the engine owns the calibration, and refusing that would refuse every takeoff.
 
+- **Every installer is installed, started and removed on a fresh machine before a release.** A new
+  job takes each platform's bundle to a fresh GitHub runner, installs it as a user would — NSIS
+  silently on Windows, the disk image on macOS, `apt` on Linux, which also proves the package
+  declares the libraries it needs — starts it, waits for the application to log the version it
+  started as, checks it is still running, and uninstalls it. It runs after the weekly bundle build,
+  and on every release draft before checksums and provenance are published. Its first run passed on
+  Windows and Linux and failed on macOS, where the disk image's licence agreement waits for an
+  answer; with that answered, all three pass. The application now writes that one startup line to
+  its log, carrying the version and nothing else. A runner is not a real desktop: what the operating
+  system says about an unsigned binary, and anything past startup, is still checked by hand.
+
 - **The host's parsers are fuzzed.** A libFuzzer crate runs six targets weekly, and whenever it
   changes, for five minutes each: the page counter, PDF header sniffing, path containment, name
   checking, log redaction and markup-metadata decoding, each asserting a property rather than only

@@ -165,9 +165,54 @@ jobs:
   # The order is deliberate. The SBOM is made first so it is always among the files hashed; were it
   # uploaded afterwards, a re-run would hash the previous run's copy and a first run would not, and
   # the same release would get two different checksum files.
+  # A release gate, and the half of the clean-machine check CI can do. Each platform's installer is
+  # downloaded from the draft this run just made, installed on a fresh runner, started, confirmed to
+  # have logged that it came up, and removed — see scripts/smoke-install.mjs. Checksums and
+  # provenance are not published for a release that does not install and start, so a red job here
+  # is visible on the draft before anybody considers publishing it.
+  #
+  # Apple silicon only on macOS: the runner is arm64, and the Intel build would be tested under
+  # translation, which is not what an Intel Mac runs. That build is still covered by the human
+  # checklist in docs/runbooks/release.md.
+  smoke:
+    name: Install and launch the draft (${{ matrix.label }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows
+            os: windows-latest
+            pattern: "*-setup.exe"
+          - label: macOS (Apple silicon)
+            os: macos-latest
+            pattern: "*_aarch64.dmg"
+          - label: Linux
+            os: ubuntu-22.04
+            pattern: "*.deb"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Download the installer from the draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "${{ github.event.inputs.tag || github.ref_name }}" --pattern "${{ matrix.pattern }}" --dir bundle
+      - name: A display for Linux
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - name: Install, launch, confirm, uninstall
+        run: node scripts/smoke-install.mjs bundle
+
   provenance:
     name: Publish checksums, SBOM and provenance
-    needs: build
+    needs: [build, smoke]
     runs-on: ubuntu-latest
     # Job-level permissions replace the workflow's, so `contents: write` is restated. The other
     # three are what `actions/attest` needs to mint a signing identity and record the attestation.
