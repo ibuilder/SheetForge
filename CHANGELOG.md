@@ -36,6 +36,18 @@ break that touches stored data will say so here with a migration note.
   better than none. The decompressed-stream, job-timeout and concurrency ceilings remain declared
   and unenforced, and the diagnostics report still says so.
 
+  Writes obey the same two ceilings, so a project the application built is always one it can open.
+  Without that, nine drawings each under the 512 MB drawing limit would together pass the 4 GB
+  package limit, and the next open would refuse the user's own work. A file that would overfill a
+  project is refused before it is written, with a sentence about the project rather than one calling
+  a 40 MB photo "this file of 4 GB", and a margin is kept below each ceiling for the database to
+  grow into. A package part of which cannot be measured — a folder that cannot be listed — is now
+  refused rather than counted as smaller than it is.
+
+- **Every declared version is checked to agree.** 0.1.2 was cut with the interface package still at
+  0.1.1. Seven fields across six files declare the version and no tool reads another's, so CI now
+  fails when they disagree.
+
 ## [0.1.2] — 2026-09-12
 
 **The first release that can update itself, and the first with build provenance.** It is still an

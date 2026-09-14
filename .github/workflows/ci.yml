@@ -45,6 +45,10 @@ jobs:
       # generator is deterministic — no date, no random — so any difference is a real one.
       - name: The tutorial sheet matches its generator
         run: npm run check:welcome
+      # 0.1.2 was cut with the interface package still at 0.1.1. Six files declare the version and
+      # no tool reads another's, so agreement is checked rather than remembered.
+      - name: Every declared version agrees
+        run: npm run check:versions
 
   browser:
     name: Browser

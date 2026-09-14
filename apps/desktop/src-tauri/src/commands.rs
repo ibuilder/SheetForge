@@ -299,6 +299,23 @@ fn audit(package: &mut Package, actor: &ActorId, action: &str, outcome: Outcome,
     }
 }
 
+/// The audit action for an export, naming its format only when what was sent is a format.
+///
+/// The extension is a header from the webview, and on the refusal path it arrives unvalidated —
+/// refusing a malformed name is why that path exists. The audit table cannot be updated or deleted
+/// from, so an action is permanent: a crafted "extension" carrying a path would put a path in the
+/// trail for good, and a megabyte of one would put a megabyte row there. It would also reach the
+/// local log, unredacted, if the append failed. Only a short alphanumeric extension is named.
+fn export_action(extension: &str) -> String {
+    let is_format = (1..=10).contains(&extension.len())
+        && extension.bytes().all(|byte| byte.is_ascii_alphanumeric());
+    if is_format {
+        format!("export:{extension}")
+    } else {
+        "export:unrecognised".to_owned()
+    }
+}
+
 /// Record a refusal, and hand it back to be returned.
 ///
 /// The rules require refusals to be audited, and until now almost none were. The two paths that did
@@ -1950,7 +1967,7 @@ pub async fn export_save(app: AppHandle, request: tauri::ipc::Request<'_>) -> Co
         // and an attempt at one that the rules turned away is worth as much to a review as one that
         // went through.
         sf_security::check_name(&file_name)
-            .map_err(|error| refused_outside(&state, &format!("export:{extension}"), error))?;
+            .map_err(|error| refused_outside(&state, &export_action(&extension), error))?;
 
         let chosen = app
             .dialog()
@@ -1979,7 +1996,7 @@ pub async fn export_save(app: AppHandle, request: tauri::ipc::Request<'_>) -> Co
             audit(
                 package,
                 state.actor(),
-                &format!("export:{extension}"),
+                &export_action(&extension),
                 Outcome::Allowed,
                 Record::new().with("bytes", &size.to_string()),
             );
@@ -2670,6 +2687,29 @@ mod tests {
             refused.code, "too-many-pages",
             "a lying /Count must not admit it"
         );
+    }
+
+    #[test]
+    fn an_export_is_audited_under_its_format_and_never_under_what_the_interface_sent() {
+        assert_eq!(export_action("pdf"), "export:pdf");
+        assert_eq!(export_action("xlsx"), "export:xlsx");
+        let enormous = "x".repeat(1_000_000);
+        for hostile in [
+            "",
+            "pdf/../../Users/someone/Clients/Acme bid",
+            r"pdf\..\secret",
+            "p d f",
+            "pdf\n",
+            "pdfé",
+            enormous.as_str(),
+        ] {
+            assert_eq!(
+                export_action(hostile),
+                "export:unrecognised",
+                "{:?} must not reach the audit trail",
+                hostile.chars().take(40).collect::<String>()
+            );
+        }
     }
 
     /// A refusal has to reach the trail, not only the caller.

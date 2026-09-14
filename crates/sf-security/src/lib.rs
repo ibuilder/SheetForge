@@ -101,6 +101,17 @@ pub enum SecurityError {
         /// The ceiling that was passed.
         limit: u32,
     },
+
+    /// Filing one more file would take a project package past its size ceiling.
+    ///
+    /// Separate from [`SecurityError::TooLarge`], whose sentence is about *this file*: a 40 MB photo
+    /// refused because the project is nearly full would otherwise be reported as a file of several
+    /// gigabytes, which is true of nothing the user is holding.
+    #[error("this project is near its {limit_mb} MB limit, and there is no room to add this")]
+    PackageFull {
+        /// The package ceiling.
+        limit_mb: u64,
+    },
 }
 
 /// This crate's result alias.

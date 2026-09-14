@@ -146,7 +146,23 @@ pub struct Package {
     manifest: Manifest,
     store: Store,
     limits: ResourceLimits,
+    /// What the package holds on disk: measured when it is opened or created, and kept current by
+    /// every file this type writes. See [`Package::admit_file`].
+    footprint: Footprint,
 }
+
+/// What a package holds on disk.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Footprint {
+    bytes: u64,
+    entries: u32,
+}
+
+/// The most room a write leaves below the size ceiling, for the database to grow into.
+const WRITE_HEADROOM_BYTES: u64 = 64 * 1024 * 1024;
+
+/// The most room a write leaves below the entry ceiling, for the database's journal files.
+const WRITE_HEADROOM_ENTRIES: u32 = 16;
 
 impl Package {
     /// Create a package at `root` and write the project into it.
@@ -174,13 +190,15 @@ impl Package {
                 .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             sources: Vec::new(),
         };
-        let package = Self {
+        let mut package = Self {
             root: root.to_path_buf(),
             manifest,
             store,
             limits: ResourceLimits::default(),
+            footprint: Footprint::default(),
         };
         package.write_manifest()?;
+        package.footprint = measure(root, &package.limits)?;
         Ok(package)
     }
 
@@ -218,13 +236,14 @@ impl Package {
                 supported: PACKAGE_FORMAT,
             });
         }
-        measure(root, &limits)?;
+        let footprint = measure(root, &limits)?;
         let store = Store::open(&root.join(DATABASE))?;
         Ok(Self {
             root: root.to_path_buf(),
             manifest,
             store,
             limits,
+            footprint,
         })
     }
 
@@ -262,6 +281,52 @@ impl Package {
         self.limits = limits;
     }
 
+    /// Refuse a new file that would take the package past a ceiling it is opened against.
+    ///
+    /// Opening measures a package and refuses one past its size or its file count. That is right
+    /// for a package from somebody else, and a lock-out if writing did not obey the same bounds:
+    /// nine drawings, each under the 512 MB drawing ceiling, are over the 4 GB package ceiling
+    /// together, and nothing compared the total until the next open refused the user's own
+    /// project. So every file this type writes is admitted against both bounds first. Anything the
+    /// application builds, it can open.
+    ///
+    /// ## Why a margin
+    ///
+    /// Markups, calibrations and the audit trail grow the database, and SQLite puts its journal
+    /// beside it, without passing through here. A package filled to exactly the ceiling would
+    /// refuse to open after its next markup. So files are refused a margin short of each ceiling:
+    /// a sixteenth of it, capped, so that a tightened policy ceiling is not swallowed by the margin.
+    fn admit_file(&self, len: u64) -> Result<()> {
+        let ceiling_bytes = self.limits.max_package_mb.saturating_mul(1024 * 1024);
+        let headroom_bytes = (ceiling_bytes / 16).min(WRITE_HEADROOM_BYTES);
+        let bytes = self
+            .footprint
+            .bytes
+            .saturating_add(len)
+            .saturating_add(headroom_bytes);
+        if bytes > ceiling_bytes {
+            return Err(SecurityError::PackageFull {
+                limit_mb: self.limits.max_package_mb,
+            }
+            .into());
+        }
+
+        let headroom_entries = (self.limits.max_archive_entries / 16).min(WRITE_HEADROOM_ENTRIES);
+        let entries = self
+            .footprint
+            .entries
+            .saturating_add(1)
+            .saturating_add(headroom_entries);
+        self.limits.check_entries(entries)?;
+        Ok(())
+    }
+
+    /// Count a file this type has just written.
+    const fn held(&mut self, len: u64) {
+        self.footprint.bytes = self.footprint.bytes.saturating_add(len);
+        self.footprint.entries = self.footprint.entries.saturating_add(1);
+    }
+
     /// File a drawing in the package, returning its content hash.
     ///
     /// Idempotent: importing the same bytes twice stores one file and returns the same hash, which
@@ -285,7 +350,9 @@ impl Package {
             // check — identical bytes produce this filename by construction.
             return Ok(hash);
         }
+        self.admit_file(bytes.len() as u64)?;
         write_atomically(&destination, bytes)?;
+        self.held(bytes.len() as u64);
 
         if !self
             .manifest
@@ -329,7 +396,9 @@ impl Package {
         if destination.exists() {
             return Ok(hash);
         }
+        self.admit_file(bytes.len() as u64)?;
         write_atomically(&destination, bytes)?;
+        self.held(bytes.len() as u64);
         Ok(hash)
     }
 
@@ -495,32 +564,30 @@ impl Package {
 ///
 /// Cache files are counted too. They are part of what the package costs to hold, and a package
 /// arriving with a cache directory of ten million files is precisely the case being refused.
-fn measure(root: &Path, limits: &ResourceLimits) -> Result<()> {
+fn measure(root: &Path, limits: &ResourceLimits) -> Result<Footprint> {
     let mut pending = vec![root.to_path_buf()];
     let mut entries: u32 = 0;
     let mut bytes: u64 = 0;
 
     while let Some(directory) = pending.pop() {
-        // A directory that cannot be listed is not a reason to refuse the project: it may be a
-        // permissions quirk on one subdirectory. What it must not do is silently lower the total.
-        let Ok(listing) = fs::read_dir(&directory) else {
-            continue;
-        };
-        for entry in listing {
+        // Refused, not skipped. Skipping a directory that cannot be listed, or a file whose size
+        // cannot be read, lowers the total silently, and a package part of which could not be
+        // measured has not been shown to be inside its bounds. An earlier version skipped both,
+        // beneath a comment saying the total must not be lowered.
+        for entry in fs::read_dir(&directory)? {
             let entry = entry?;
             entries = entries.saturating_add(1);
             limits.check_entries(entries)?;
 
-            let file_type = entry.file_type()?;
-            if file_type.is_dir() {
+            if entry.file_type()?.is_dir() {
                 pending.push(entry.path());
-            } else if let Ok(metadata) = entry.metadata() {
-                bytes = bytes.saturating_add(metadata.len());
+            } else {
+                bytes = bytes.saturating_add(entry.metadata()?.len());
                 limits.check_package(bytes)?;
             }
         }
     }
-    Ok(())
+    Ok(Footprint { bytes, entries })
 }
 
 /// SHA-256 of some bytes.
@@ -623,6 +690,82 @@ mod tests {
         assert!(
             Package::open(&root).is_ok(),
             "the default ceiling must admit it"
+        );
+        drop(dir);
+    }
+
+    /// The other half of the package ceiling: a project the application built has to be one it can
+    /// open. Each drawing here is far under the drawing ceiling; together they would pass the
+    /// package ceiling, and before writes were admitted against it the next open refused the
+    /// user's own project with no way back in.
+    #[test]
+    fn a_file_that_would_overfill_the_package_is_refused_before_it_is_written() {
+        let (_dir, mut package) = new_package();
+        let limits = ResourceLimits {
+            max_package_mb: 16,
+            ..ResourceLimits::default()
+        };
+        package.set_limits(limits);
+        // 5.5 MB each, distinct bytes. Two fit under 16 MB with the margin and the database; a
+        // third would not, whatever size the database happens to be.
+        let drawing = |fill: u8| {
+            let mut bytes = b"%PDF-1.7\n".to_vec();
+            bytes.resize(5 * 1024 * 1024 + 512 * 1024, fill);
+            bytes
+        };
+
+        package
+            .import_source(&drawing(b'a'))
+            .expect("the first fits");
+        package
+            .import_source(&drawing(b'b'))
+            .expect("the second fits");
+        let refusal = package
+            .import_source(&drawing(b'c'))
+            .expect_err("the third would overfill the package");
+        assert!(
+            matches!(
+                refusal,
+                PackageError::Security(SecurityError::PackageFull { limit_mb: 16 })
+            ),
+            "{refusal:?}"
+        );
+        assert_eq!(
+            fs::read_dir(package.root().join(SOURCES)).unwrap().count(),
+            2,
+            "nothing is written for a refused file"
+        );
+
+        let root = package.root().to_path_buf();
+        drop(package);
+        assert!(
+            Package::open_within(&root, limits).is_ok(),
+            "a package the application built must open under the ceiling it was built under"
+        );
+    }
+
+    /// Measuring skipped what it could not read, lowering the total beneath a comment saying the
+    /// total must not be lowered. A package that cannot all be measured is now refused.
+    #[cfg(unix)]
+    #[test]
+    fn a_package_that_cannot_all_be_measured_is_refused_rather_than_undercounted() {
+        use std::os::unix::fs::PermissionsExt;
+        let (dir, package) = new_package();
+        let root = package.root().to_path_buf();
+        drop(package);
+        let hidden = root.join(CACHE);
+        fs::set_permissions(&hidden, fs::Permissions::from_mode(0o000)).unwrap();
+        // Root lists anything, and some CI containers run as root: the premise does not hold there.
+        if fs::read_dir(&hidden).is_ok() {
+            fs::set_permissions(&hidden, fs::Permissions::from_mode(0o755)).unwrap();
+            return;
+        }
+
+        let opened = Package::open(&root);
+        fs::set_permissions(&hidden, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            matches!(opened, Err(PackageError::Io(_))),
+            "a package part of which could not be measured must not open"
         );
         drop(dir);
     }
