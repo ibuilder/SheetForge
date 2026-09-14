@@ -341,6 +341,55 @@ impl Store {
         Ok(())
     }
 
+    /// One logical document.
+    ///
+    /// # Errors
+    /// [`StoreError::NotFound`] if there is no such document.
+    pub fn source_document(&self, id: SourceDocumentId) -> Result<SourceDocument> {
+        self.conn
+            .query_row(
+                "SELECT id, project_id, name, discipline, created_at
+                 FROM source_documents WHERE id = ?1",
+                params![id.to_string()],
+                |row| {
+                    let id: String = row.get(0)?;
+                    let project_id: String = row.get(1)?;
+                    let name: String = row.get(2)?;
+                    let discipline: Option<String> = row.get(3)?;
+                    let created_at: String = row.get(4)?;
+                    Ok((|| {
+                        Ok(SourceDocument {
+                            id: SourceDocumentId::from_str(&id)?,
+                            project_id: ProjectId::from_str(&project_id)?,
+                            name,
+                            discipline,
+                            created_at: parse_stamp(&created_at)?,
+                        })
+                    })())
+                },
+            )
+            .optional()?
+            .ok_or(StoreError::NotFound("drawing"))?
+    }
+
+    /// Persist a document's new name, as the domain validated it.
+    ///
+    /// Only the name. The id is what revisions, markups, sheets and the audit trail refer to, so a
+    /// renamed drawing disturbs nothing that points at it.
+    ///
+    /// # Errors
+    /// [`StoreError::NotFound`] if there is no such document.
+    pub fn rename_source_document(&self, document: &SourceDocument) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE source_documents SET name = ?1 WHERE id = ?2",
+            params![document.name, document.id.to_string()],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound("drawing"));
+        }
+        Ok(())
+    }
+
     /// Record an imported revision.
     ///
     /// # Errors

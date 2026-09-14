@@ -125,6 +125,21 @@ impl SourceDocument {
             created_at: crate::now(),
         })
     }
+
+    /// Rename it, validating the name exactly as [`SourceDocument::new`] does.
+    ///
+    /// A drawing is filed under its filename because that is all the host knows when the file
+    /// arrives, and a filename is the least reliable name a drawing has: `scan0042.pdf`,
+    /// `A201 rev C final FINAL.pdf`. Once its title block has been read, the sheet number printed
+    /// on the drawing is the name the job actually uses, and this is how it gets there. The id does
+    /// not change, so nothing that refers to the document notices.
+    ///
+    /// # Errors
+    /// If the name is blank or over [`SourceDocument::MAX_NAME`], in which case the old name stays.
+    pub fn rename(&mut self, name: &str) -> Result<()> {
+        self.name = bounded_text(name, "document name", Self::MAX_NAME)?;
+        Ok(())
+    }
 }
 
 /// One imported issue of a source document.
@@ -281,6 +296,29 @@ impl DocumentRevision {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_document_renamed_to_its_sheet_number_keeps_its_identity() {
+        let mut document = SourceDocument::new(ProjectId::new(), "scan0042", None).unwrap();
+        let id = document.id.to_string();
+
+        document.rename("  A-201 SECOND FLOOR PLAN ").unwrap();
+        assert_eq!(document.name, "A-201 SECOND FLOOR PLAN");
+        assert_eq!(
+            document.id.to_string(),
+            id,
+            "a rename is not a new document"
+        );
+
+        assert!(document.rename("   ").is_err());
+        assert!(document
+            .rename(&"x".repeat(SourceDocument::MAX_NAME + 1))
+            .is_err());
+        assert_eq!(
+            document.name, "A-201 SECOND FLOOR PLAN",
+            "a refused rename keeps the name it had"
+        );
+    }
 
     fn hash_of(byte: u8) -> ContentHash {
         ContentHash::from_bytes([byte; 32])

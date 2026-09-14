@@ -545,15 +545,50 @@ pub async fn project_verify(app: AppHandle) -> CommandResult<VerifyReport> {
     .map_err(|_| CommandError::internal())?
 }
 
+/// A file an import did not file, and why.
+///
+/// Named by the file's own name, which is what the drawing would have been called, and never by
+/// its path: the interface is told what to go and look at, not where the host found it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefusedFile {
+    /// The file's name, without the folder it was in.
+    pub file: String,
+    /// Why it was refused, in the same words and code as any other refusal.
+    pub error: CommandError,
+}
+
+/// One drawing an import filed, or found already filed.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedDrawing {
+    /// The drawing.
+    pub revision: RevisionDto,
+    /// True when these exact bytes were already in the project, so nothing new was filed.
+    pub reopened: bool,
+}
+
+/// What an import of several drawings did with each of them.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportReport {
+    /// The drawings now in the project, in the order they were chosen.
+    pub drawings: Vec<ImportedDrawing>,
+    /// The files that were not filed, each with its reason.
+    pub refused: Vec<RefusedFile>,
+}
+
 /// Import one or more PDFs. Opens a native picker on this side.
 ///
 /// Each file is size-checked and sniffed before anything is written, filed under its content hash,
-/// and recorded as a revision of a document named for the file's stem.
+/// and recorded as a revision of a document named for the file's stem — which the interface then
+/// replaces with the sheet number, once it has read the title block.
 ///
 /// # Errors
-/// [`CommandError::cancelled`], or the first file that fails a bound.
+/// [`CommandError::cancelled`], or a failure that is not about any one file. A file that fails a
+/// bound is reported in the [`ImportReport`], and the others are still filed.
 #[tauri::command]
-pub async fn document_import(app: AppHandle) -> CommandResult<Vec<RevisionDto>> {
+pub async fn document_import(app: AppHandle) -> CommandResult<ImportReport> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         state.require(Capability::DocumentImport)?;
@@ -566,16 +601,17 @@ pub async fn document_import(app: AppHandle) -> CommandResult<Vec<RevisionDto>> 
             .blocking_pick_files()
             .ok_or_else(CommandError::cancelled)?;
 
+        let paths = chosen
+            .into_iter()
+            .map(|file| {
+                file.into_path()
+                    .map_err(|_| CommandError::invalid_request("That file cannot be read."))
+            })
+            .collect::<CommandResult<Vec<_>>>()?;
+
         with_open(&state, |package| {
-            let mut imported = Vec::with_capacity(chosen.len());
-            for file in chosen {
-                let path = file
-                    .into_path()
-                    .map_err(|_| CommandError::invalid_request("That file cannot be read."))?;
-                let (revision, _) = file_drawing(package, state.actor(), &path)?;
-                imported.push(revision);
-            }
-            Ok(imported)
+            let (drawings, refused) = file_each(package, state.actor(), &paths);
+            Ok(ImportReport { drawings, refused })
         })
     })
     .await
@@ -611,11 +647,14 @@ pub async fn pdf_open(app: AppHandle) -> CommandResult<OpenedDrawing> {
             .into_path()
             .map_err(|_| CommandError::invalid_request("That file cannot be read."))?;
 
-        // Everything past the dialog is shared with drag-and-drop, so the two cannot drift.
-        import_paths(&app, &[path], &version)?
-            .into_iter()
-            .next()
-            .ok_or_else(CommandError::cancelled)
+        // Everything past the dialog is shared with drag-and-drop, so the two cannot drift. One file
+        // was chosen, so a refusal of it is this command's answer rather than a line in a report.
+        let (opened, refused) = import_paths(&app, &[path], &version)?;
+        match (opened.into_iter().next(), refused.into_iter().next()) {
+            (Some(drawing), _) => Ok(drawing),
+            (None, Some(refusal)) => Err(refusal.error),
+            (None, None) => Err(CommandError::cancelled()),
+        }
     })
     .await
     .map_err(|_| CommandError::internal())?
@@ -2059,7 +2098,21 @@ fn file_bytes(
     let admitted = admit_pages(package.limits(), &bytes);
     let page_count = admitted
         .map_err(|error| refused(package, actor, "document:import", error, Record::new()))?;
-    let hash = package.import_source(&bytes)?;
+    // Sniffed on the way in. A file that is not a PDF is a refusal like any other and is recorded
+    // as one; a filesystem failure is not a refusal, and is not recorded as one.
+    let hash = match package.import_source(&bytes) {
+        Ok(hash) => hash,
+        Err(sf_package::PackageError::Security(refusal)) => {
+            return Err(refused(
+                package,
+                actor,
+                "document:import",
+                refusal,
+                Record::new(),
+            ));
+        }
+        Err(other) => return Err(other.into()),
+    };
 
     if let Some(existing) = package.store().revision_by_hash(hash)? {
         let document = package
@@ -2142,7 +2195,7 @@ pub fn import_paths(
     app: &AppHandle,
     paths: &[std::path::PathBuf],
     version: &str,
-) -> CommandResult<Vec<OpenedDrawing>> {
+) -> CommandResult<(Vec<OpenedDrawing>, Vec<RefusedFile>)> {
     let state = app.state::<AppState>();
     state.require(Capability::DocumentImport)?;
 
@@ -2150,20 +2203,89 @@ pub fn import_paths(
     ensure_project_for(app, &state, first, version)?;
 
     with_open(&state, |package| {
-        let mut opened = Vec::with_capacity(paths.len());
-        for path in paths {
-            let (revision, reopened) = file_drawing(package, state.actor(), path)?;
-            let project = package
-                .store()
-                .project()?
-                .ok_or_else(CommandError::no_project)?;
-            opened.push(OpenedDrawing {
+        let (drawings, refused) = file_each(package, state.actor(), paths);
+        let project = package
+            .store()
+            .project()?
+            .ok_or_else(CommandError::no_project)?;
+        let opened = drawings
+            .into_iter()
+            .map(|drawing| OpenedDrawing {
                 project: ProjectSummary::of(package, &project),
-                revision,
-                reopened,
-            });
+                revision: drawing.revision,
+                reopened: drawing.reopened,
+            })
+            .collect();
+        Ok((opened, refused))
+    })
+}
+
+/// File each of several drawings on its own, so that one bad file cannot stop the rest.
+///
+/// Both routes that take several files used to stop at the first one that failed a bound — after
+/// every file before it had already been filed, and with nothing telling the interface which of
+/// them had gone in. A set of sixty sheets with one oversized scan in the middle arrived as
+/// twenty-nine drawings and an error message naming none of them. Here each file is its own act:
+/// filed, found already filed, or refused with its reason, and every outcome is reported.
+fn file_each(
+    package: &mut Package,
+    actor: &ActorId,
+    paths: &[std::path::PathBuf],
+) -> (Vec<ImportedDrawing>, Vec<RefusedFile>) {
+    let mut drawings = Vec::with_capacity(paths.len());
+    let mut refused = Vec::new();
+    for path in paths {
+        match file_drawing(package, actor, path) {
+            Ok((revision, reopened)) => drawings.push(ImportedDrawing { revision, reopened }),
+            Err(error) => refused.push(RefusedFile {
+                file: shown_name(path),
+                error,
+            }),
         }
-        Ok(opened)
+    }
+    (drawings, refused)
+}
+
+/// A file's name, for showing to the person who chose it: the name alone, never where it was.
+fn shown_name(path: &std::path::Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("a file")
+        .to_owned()
+}
+
+/// Rename a drawing to the name the job knows it by.
+///
+/// What an import calls once it has read a drawing's title block: the drawing was filed under its
+/// filename, and the sheet number printed on it is the better name. The id does not change, so
+/// every markup, revision and sheet that refers to the drawing is untouched.
+///
+/// Audited without either name. A drawing's name is read off the document, and the rule is that
+/// nothing from inside a document reaches a log; which drawing was renamed, and by whom, is what a
+/// review needs.
+///
+/// # Errors
+/// A capability refusal, a malformed reference, a name the domain refuses, or a drawing that is
+/// not in this project.
+#[tauri::command]
+pub fn document_rename(app: AppHandle, source_document: String, name: String) -> CommandResult<()> {
+    let state = app.state::<AppState>();
+    state.require(Capability::DocumentImport)?;
+    let id = sf_domain::SourceDocumentId::from_str(&source_document)
+        .map_err(|_| CommandError::invalid_request("That drawing reference is not valid."))?;
+
+    with_open(&state, |package| {
+        let mut document = package.store().source_document(id)?;
+        document.rename(&name)?;
+        package.store().rename_source_document(&document)?;
+        audit(
+            package,
+            state.actor(),
+            "document:rename",
+            Outcome::Allowed,
+            Record::new().subject("source-document", &source_document),
+        );
+        Ok(())
     })
 }
 
@@ -2759,6 +2881,77 @@ mod tests {
                 hostile.chars().take(40).collect::<String>()
             );
         }
+    }
+
+    /// One bad file in a set must not stop the rest, and every outcome has to be reported.
+    ///
+    /// Both multi-file routes used to stop at the first refusal, after the files before it had
+    /// already been filed, and tell the interface nothing about which had gone in.
+    #[test]
+    fn a_set_with_bad_files_in_it_files_the_rest_and_says_which_were_refused() {
+        let root = tempfile::tempdir().unwrap();
+        let project = sf_domain::Project::new("Batch", None, None, ActorId::local()).unwrap();
+        let mut package =
+            Package::create(&root.path().join("batch"), &project, "0.1.0-test").unwrap();
+        package.set_limits(sf_security::ResourceLimits {
+            max_pages: 2,
+            ..sf_security::ResourceLimits::default()
+        });
+        let actor = ActorId::local();
+
+        let chosen = root.path().join("chosen");
+        std::fs::create_dir(&chosen).unwrap();
+        let write = |name: &str, bytes: &[u8]| {
+            let path = chosen.join(name);
+            std::fs::write(&path, bytes).unwrap();
+            path
+        };
+        let drawing: &[u8] = b"%PDF-1.7\n1 0 obj<</Type /Page>>endobj\n%%EOF\n";
+        let paths = [
+            write("A-201.pdf", drawing),
+            write("not a drawing.pdf", b"PK\x03\x04 a renamed archive"),
+            write("A-201 copy.pdf", drawing),
+            write(
+                "too many pages.pdf",
+                b"%PDF-1.7 /Type /Page /Type /Page /Type /Page",
+            ),
+        ];
+
+        let (drawings, refused) = file_each(&mut package, &actor, &paths);
+
+        assert_eq!(drawings.len(), 2);
+        assert_eq!(drawings[0].revision.name, "A-201");
+        assert!(!drawings[0].reopened);
+        assert!(
+            drawings[1].reopened,
+            "the same bytes under another name are the drawing already filed"
+        );
+        let refusals: Vec<(&str, &str)> = refused
+            .iter()
+            .map(|refusal| (refusal.file.as_str(), refusal.error.code))
+            .collect();
+        assert_eq!(
+            refusals,
+            [
+                ("not a drawing.pdf", "wrong-format"),
+                ("too many pages.pdf", "too-many-pages")
+            ]
+        );
+        let folder = chosen.to_str().unwrap();
+        for refusal in &refused {
+            assert!(
+                !refusal.error.message.contains(folder),
+                "a refusal must not carry a path"
+            );
+        }
+        let denied = package
+            .store()
+            .audit_events()
+            .unwrap()
+            .into_iter()
+            .filter(|event| event.outcome == Outcome::Denied)
+            .count();
+        assert_eq!(denied, 2, "both refusals are in the trail");
     }
 
     /// A refusal has to reach the trail, not only the caller.

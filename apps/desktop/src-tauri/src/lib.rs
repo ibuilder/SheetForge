@@ -29,6 +29,16 @@ pub mod state;
 use state::AppState;
 use tauri::{Emitter, Manager};
 
+/// What the interface is told about a drop: what was filed, what was refused, or why nothing was.
+fn dropped_payload(
+    outcome: error::CommandResult<(Vec<commands::OpenedDrawing>, Vec<commands::RefusedFile>)>,
+) -> serde_json::Value {
+    match outcome {
+        Ok((opened, refused)) => serde_json::json!({ "opened": opened, "refused": refused }),
+        Err(error) => serde_json::json!({ "error": error }),
+    }
+}
+
 /// Build and run the application.
 ///
 /// # Panics
@@ -103,10 +113,8 @@ pub fn run() {
                     // Off the event thread: importing hashes and copies files, and blocking here
                     // freezes the window while it happens.
                     tauri::async_runtime::spawn_blocking(move || {
-                        let payload = match commands::import_paths(&handle, &drawings, &version) {
-                            Ok(opened) => serde_json::json!({ "opened": opened }),
-                            Err(error) => serde_json::json!({ "error": error }),
-                        };
+                        let payload =
+                            dropped_payload(commands::import_paths(&handle, &drawings, &version));
                         if let Err(error) = handle.emit("sheetforge://dropped", payload) {
                             log::error!("could not report a drop to the interface: {error}");
                         }
@@ -131,6 +139,7 @@ pub fn run() {
             commands::tutorial_open,
             commands::document_import,
             commands::document_derive,
+            commands::document_rename,
             commands::document_list,
             commands::document_bytes,
             commands::markup_list,
