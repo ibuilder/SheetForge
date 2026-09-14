@@ -140,6 +140,8 @@ pub fn run() {
             commands::document_import,
             commands::document_derive,
             commands::document_rename,
+            commands::document_matches,
+            commands::revision_refile,
             commands::document_list,
             commands::document_bytes,
             commands::markup_list,

@@ -181,6 +181,60 @@ pub struct DocumentRevision {
 }
 
 impl DocumentRevision {
+    /// Re-file this issue under another document: the drawing it turned out to be a new issue of.
+    ///
+    /// An import files every drawing as a document of its own, because when a file arrives nothing
+    /// is known about it but its name. Once its title block has been read, a drawing numbered
+    /// `A-201` may be the next issue of the `A-201` already in the project, and the reviewer has
+    /// said it is. This is that move: the revision keeps its id, its bytes, its markups and its
+    /// sheets, and changes only which document it is an issue of.
+    ///
+    /// Three refusals, each guarding a way the move could lose or corrupt something:
+    ///
+    /// - **Another project's document.** A revision and its document have to agree on the project,
+    ///   or the drawing belongs to two jobs at once.
+    /// - **The document it is already filed under.** Nothing would change, and saying so beats a
+    ///   silent no-op that looks like success.
+    /// - **A current document holding other issues too.** The document it leaves is removed, so
+    ///   only one holding this issue alone can be folded into another; anything else would strand
+    ///   the other issues under a document about to be deleted.
+    ///
+    /// Returns the document it was filed under, for the caller to remove once the move is stored.
+    ///
+    /// # Errors
+    /// [`DomainError::OutOfRange`] for any of the three, leaving the revision unchanged.
+    pub fn refile_onto(
+        &mut self,
+        onto: &SourceDocument,
+        issues_of_current: usize,
+    ) -> Result<SourceDocumentId> {
+        if onto.project_id != self.project_id {
+            return Err(DomainError::OutOfRange {
+                field: "document",
+                reason: "a drawing cannot be filed as an issue of a drawing in another project"
+                    .into(),
+            });
+        }
+        if onto.id == self.source_document_id {
+            return Err(DomainError::OutOfRange {
+                field: "document",
+                reason: "this is already an issue of that drawing".into(),
+            });
+        }
+        if issues_of_current != 1 {
+            return Err(DomainError::OutOfRange {
+                field: "document",
+                reason: format!(
+                    "the drawing this is filed under holds {issues_of_current} issues, and moving \
+                     one would strand the others"
+                ),
+            });
+        }
+        let previous = self.source_document_id;
+        self.source_document_id = onto.id;
+        Ok(previous)
+    }
+
     /// A hard ceiling on pages in one imported file.
     ///
     /// Not a performance limit — the viewer is lazy and handles long sets — but a hostile-input
@@ -317,6 +371,57 @@ mod tests {
         assert_eq!(
             document.name, "A-201 SECOND FLOOR PLAN",
             "a refused rename keeps the name it had"
+        );
+    }
+
+    #[test]
+    fn a_new_issue_is_refiled_onto_the_drawing_it_is_an_issue_of() {
+        let project = ProjectId::new();
+        let existing = SourceDocument::new(project, "A-201 SECOND FLOOR PLAN", None).unwrap();
+        let arrived = SourceDocument::new(project, "scan0042", None).unwrap();
+        let mut issue = DocumentRevision::new(
+            project,
+            arrived.id,
+            None,
+            hash_of(0x01),
+            1024,
+            1,
+            ActorId::local(),
+        )
+        .unwrap();
+
+        let previous = issue.refile_onto(&existing, 1).unwrap();
+        assert_eq!(previous, arrived.id);
+        assert_eq!(issue.source_document_id, existing.id);
+    }
+
+    #[test]
+    fn an_issue_is_not_refiled_across_projects_onto_itself_or_away_from_other_issues() {
+        let project = ProjectId::new();
+        let arrived = SourceDocument::new(project, "scan0042", None).unwrap();
+        let issue = || {
+            DocumentRevision::new(
+                project,
+                arrived.id,
+                None,
+                hash_of(0x02),
+                1024,
+                1,
+                ActorId::local(),
+            )
+            .unwrap()
+        };
+
+        let elsewhere = SourceDocument::new(ProjectId::new(), "A-201", None).unwrap();
+        assert!(issue().refile_onto(&elsewhere, 1).is_err());
+        assert!(issue().refile_onto(&arrived, 1).is_err());
+
+        let existing = SourceDocument::new(project, "A-201", None).unwrap();
+        let mut stranding = issue();
+        assert!(stranding.refile_onto(&existing, 2).is_err());
+        assert_eq!(
+            stranding.source_document_id, arrived.id,
+            "a refused move changes nothing"
         );
     }
 

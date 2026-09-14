@@ -2254,6 +2254,120 @@ fn shown_name(path: &std::path::Path) -> String {
         .to_owned()
 }
 
+/// A drawing already in the project that a new drawing's sheet number also names.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentMatch {
+    /// Its id — what a new issue would be filed under.
+    pub id: String,
+    /// Its name, so the reviewer can see which drawing they would be adding an issue to.
+    pub name: String,
+    /// How many issues of it are already filed.
+    pub issues: usize,
+}
+
+/// The drawings already in the project whose register shows a sheet number, other than the one the
+/// given revision is filed under.
+///
+/// What an import asks after reading a new drawing's title block, before offering to file it as a
+/// new issue. The interface only offers when there is exactly one: two drawings sharing a number is
+/// a multi-building job, and choosing between them is not a guess to make on the reviewer's behalf.
+///
+/// # Errors
+/// A capability refusal, a malformed reference, a number that is blank or longer than the register
+/// allows, or a revision not in this project.
+#[tauri::command]
+pub fn document_matches(
+    app: AppHandle,
+    revision: String,
+    number: String,
+) -> CommandResult<Vec<DocumentMatch>> {
+    let state = app.state::<AppState>();
+    state.require(Capability::ProjectRead)?;
+    let id = revision_id(&revision)?;
+    // A sheet number read off a title block, about to become a query parameter. Bounded as the
+    // register bounds it.
+    let number = number.trim();
+    if number.is_empty() || number.chars().count() > sf_domain::Sheet::MAX_NUMBER {
+        return Err(CommandError::invalid_request("That is not a sheet number."));
+    }
+
+    with_open(&state, |package| {
+        let store = package.store();
+        let filed = store.revision(id)?;
+        store
+            .documents_with_sheet_number(filed.project_id, number, filed.source_document_id)?
+            .into_iter()
+            .map(|document| -> CommandResult<DocumentMatch> {
+                Ok(DocumentMatch {
+                    id: document.id.to_string(),
+                    issues: store.revisions_of(document.id)?.len(),
+                    name: document.name,
+                })
+            })
+            .collect()
+    })
+}
+
+/// File a newly imported drawing as a new issue of a drawing already in the project.
+///
+/// The reviewer's answer to "A-201 is already in this project — is this a new issue of it?". The
+/// revision keeps its id, its bytes, its markups and its sheets; only the drawing it is an issue of
+/// changes, and the empty drawing the import made for it is removed. The domain refuses a move
+/// across projects, onto the drawing it is already under, or away from a drawing holding other
+/// issues.
+///
+/// Audited, because which drawing a revision is an issue of is what a dispute about "what was this
+/// markup made against?" turns on. By id, never by name.
+///
+/// # Errors
+/// A capability refusal, a malformed reference, a move the domain refuses, or a revision or
+/// drawing not in this project.
+#[tauri::command]
+pub fn revision_refile(
+    app: AppHandle,
+    revision: String,
+    onto: String,
+) -> CommandResult<RevisionDto> {
+    let state = app.state::<AppState>();
+    state.require(Capability::DocumentImport)?;
+    let id = revision_id(&revision)?;
+    let onto_id = sf_domain::SourceDocumentId::from_str(&onto)
+        .map_err(|_| CommandError::invalid_request("That drawing reference is not valid."))?;
+
+    with_open(&state, |package| {
+        let mut issue = package.store().revision(id)?;
+        let target = package.store().source_document(onto_id)?;
+        let issues = package
+            .store()
+            .revisions_of(issue.source_document_id)?
+            .len();
+        let previous = issue.refile_onto(&target, issues)?;
+        package.store_mut().refile_revision(&issue, previous)?;
+        audit(
+            package,
+            state.actor(),
+            "document:reissue",
+            Outcome::Allowed,
+            Record::new()
+                .subject("document-revision", &issue.id.to_string())
+                .with("from", &previous.to_string())
+                .with("onto", &onto_id.to_string()),
+        );
+        Ok(RevisionDto {
+            id: issue.id.to_string(),
+            source_document_id: target.id.to_string(),
+            name: target.name,
+            revision_label: issue.revision_label,
+            page_count: issue.page_count,
+            short_hash: issue.content_sha256.short(),
+            imported_at: issue
+                .imported_at
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        })
+    })
+}
+
 /// Rename a drawing to the name the job knows it by.
 ///
 /// What an import calls once it has read a drawing's title block: the drawing was filed under its

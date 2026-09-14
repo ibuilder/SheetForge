@@ -104,6 +104,25 @@ pub struct Store {
     conn: Connection,
 }
 
+/// A source document from its row, in the column order every query that reads one selects:
+/// id, project, name, discipline, created.
+fn read_source_document(row: &rusqlite::Row<'_>) -> rusqlite::Result<Result<SourceDocument>> {
+    let id: String = row.get(0)?;
+    let project_id: String = row.get(1)?;
+    let name: String = row.get(2)?;
+    let discipline: Option<String> = row.get(3)?;
+    let created_at: String = row.get(4)?;
+    Ok((|| {
+        Ok(SourceDocument {
+            id: SourceDocumentId::from_str(&id)?,
+            project_id: ProjectId::from_str(&project_id)?,
+            name,
+            discipline,
+            created_at: parse_stamp(&created_at)?,
+        })
+    })())
+}
+
 /// A database's schema objects, each as its type, name, table and SQL text.
 type SchemaObjects = std::collections::BTreeSet<(String, String, String, Option<String>)>;
 
@@ -387,6 +406,74 @@ impl Store {
         if changed == 0 {
             return Err(StoreError::NotFound("drawing"));
         }
+        Ok(())
+    }
+
+    /// The other drawings in a project whose register shows a sheet number, ignoring case.
+    ///
+    /// What an import asks once it has read a new drawing's sheet number: is that number already a
+    /// drawing here? The register is searched rather than drawing names, because a name is free
+    /// text a person can change, and the register records what was read off the title block.
+    ///
+    /// # Errors
+    /// If the query fails.
+    pub fn documents_with_sheet_number(
+        &self,
+        project: ProjectId,
+        number: &str,
+        except: SourceDocumentId,
+    ) -> Result<Vec<SourceDocument>> {
+        let mut statement = self.conn.prepare(
+            "SELECT DISTINCT d.id, d.project_id, d.name, d.discipline, d.created_at
+             FROM sheets s
+             JOIN document_revisions r ON r.id = s.document_revision_id
+             JOIN source_documents d ON d.id = r.source_document_id
+             WHERE s.project_id = ?1 AND s.number = ?2 COLLATE NOCASE AND d.id <> ?3
+             ORDER BY d.created_at, d.id",
+        )?;
+        let rows = statement.query_map(
+            params![project.to_string(), number, except.to_string()],
+            read_source_document,
+        )?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .collect()
+    }
+
+    /// Store a revision re-filed under another document, and remove the document it left.
+    ///
+    /// One transaction, and in this order because of the schema. A revision's document is a
+    /// foreign key that cascades on delete: removing the emptied document before moving the
+    /// revision would delete the revision with it, and its markups and sheets with that. The domain
+    /// has already checked the document being left held this revision alone
+    /// ([`DocumentRevision::refile_onto`]); the delete is still conditioned on it holding nothing,
+    /// so that a check made a moment earlier is never the only thing between a stale caller and
+    /// somebody's markups. If anything is still filed under it, it stays.
+    ///
+    /// # Errors
+    /// [`StoreError::NotFound`] if the revision is not stored, in which case nothing changes.
+    pub fn refile_revision(
+        &mut self,
+        revision: &DocumentRevision,
+        previous: SourceDocumentId,
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        let moved = tx.execute(
+            "UPDATE document_revisions SET source_document_id = ?1 WHERE id = ?2",
+            params![
+                revision.source_document_id.to_string(),
+                revision.id.to_string()
+            ],
+        )?;
+        if moved == 0 {
+            return Err(StoreError::NotFound("drawing revision"));
+        }
+        tx.execute(
+            "DELETE FROM source_documents WHERE id = ?1
+               AND NOT EXISTS (SELECT 1 FROM document_revisions WHERE source_document_id = ?1)",
+            params![previous.to_string()],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
