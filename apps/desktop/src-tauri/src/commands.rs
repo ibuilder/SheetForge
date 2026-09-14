@@ -911,7 +911,7 @@ pub fn sheet_record(
 
         for sheet in &sheets {
             let source = sf_domain::SheetSource::from_str(&sheet.source)?;
-            let mut row = sf_domain::Sheet::new(
+            let row = sf_domain::Sheet::new(
                 document.project_id,
                 document.id,
                 sheet.page,
@@ -919,9 +919,8 @@ pub fn sheet_record(
                 sheet.number.as_deref(),
                 sheet.title.as_deref(),
                 source,
-            )?;
-            row.discipline.clone_from(&sheet.discipline);
-            row.revision.clone_from(&sheet.revision);
+            )?
+            .with_details(sheet.discipline.as_deref(), sheet.revision.as_deref())?;
 
             // A page nothing could be read from is not written. Storing a blank per page turns the
             // register into a list of nothing, and an absent row and an empty one mean the same.
@@ -1022,15 +1021,15 @@ pub fn view_replace(app: AppHandle, revision: String, views: Vec<ViewDto>) -> Co
         let mut records = Vec::with_capacity(views.len());
 
         for view in &views {
-            let mut record = sf_domain::SavedView::new(
+            let record = sf_domain::SavedView::new(
                 &document,
                 &view.name,
                 view.page,
                 view.zoom,
                 (view.center_x, view.center_y),
                 view.rotation,
-            )?;
-            record.filter.clone_from(&view.filter);
+            )?
+            .with_filter(view.filter.as_deref())?;
             records.push(record);
         }
 

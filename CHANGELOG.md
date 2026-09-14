@@ -44,6 +44,24 @@ break that touches stored data will say so here with a migration note.
   grow into. A package part of which cannot be measured — a folder that cannot be listed — is now
   refused rather than counted as smaller than it is.
 
+- **A damaged markup set no longer empties the drawing.** Loading a set replaced the drawing's
+  markups first and read the rest of the file afterwards, so a set with a broken calibration entry
+  threw after the markups were already gone — no message, and nothing to undo. Every entry is now
+  checked before anything is replaced, and if the engine still refuses part of a set the drawing
+  gets its markups back. A seeded test generates four hundred damaged sets and fails if any of them
+  leaves a drawing with a mixture of old and new markups.
+
+- **Fields that were stored without a bound now have one.** A sheet's discipline and printed
+  revision, a saved view's filter, and a measured quantity's unit and precision were assigned after
+  validation had run, so the interface — or a title block misread as noise — could put text of any
+  length into the project. Each is now bounded in the domain like the fields beside it. Quantities
+  are held to what the domain's own derivation guarantees, but a value without a host calibration is
+  still accepted: the engine owns the calibration, and refusing that would refuse every takeoff.
+
+- **A project manifest is read with a ceiling.** It was the first file read from a package somebody
+  else wrote, and it was read whole, before any package limit was consulted. It is now refused from
+  its size before a byte is read.
+
 - **Every declared version is checked to agree.** 0.1.2 was cut with the interface package still at
   0.1.1. Seven fields across six files declare the version and no tool reads another's, so CI now
   fails when they disagree.

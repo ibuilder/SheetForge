@@ -141,26 +141,83 @@ export async function loadMarkupSet(viewer: Viewer, deps: InterchangeDeps): Prom
     return;
   }
 
-  const incoming = set.annotations as Annotation[];
-  const current = viewer.store.all().length;
+  // Every entry is checked before anything is replaced. The markups used to be reset first and the
+  // calibrations read afterwards, so a set with `calibrations: [null]` threw on `null.page` after
+  // the drawing's markups were already gone: half a load, no message, and nothing to undo it with.
+  const calibrations = Array.isArray(set.calibrations) ? set.calibrations : [];
+  const sheets = Array.isArray(set.sheets) ? set.sheets : [];
   if (
-    current > 0 &&
+    !set.annotations.every(isAnnotationShaped) ||
+    !calibrations.every(isCalibrationShaped) ||
+    !sheets.every(isSheetShaped)
+  ) {
+    deps.status("That markup set is damaged. Nothing was loaded.");
+    return;
+  }
+
+  const incoming = set.annotations as Annotation[];
+  const previous = viewer.store.all();
+  if (
+    previous.length > 0 &&
     !deps.confirm(
-      `Loading this set replaces the ${current} markup${current === 1 ? "" : "s"} on this drawing ` +
-        `with the ${incoming.length} in the file.\n\nReplace them?`,
+      `Loading this set replaces the ${previous.length} markup${previous.length === 1 ? "" : "s"} ` +
+        `on this drawing with the ${incoming.length} in the file.\n\nReplace them?`,
     )
   ) {
     deps.status("Nothing was loaded. The drawing's markups are unchanged.");
     return;
   }
 
-  viewer.store.reset(incoming);
-  for (const calibration of Array.isArray(set.calibrations) ? (set.calibrations as Calibration[]) : []) {
-    viewer.store.setCalibration(calibration, calibration.page);
-  }
-  for (const sheet of Array.isArray(set.sheets) ? (set.sheets as SheetMeta[]) : []) {
-    viewer.store.setSheet(sheet);
+  // The shapes above are what this code relies on, not everything the engine does. If the engine
+  // still refuses part of the set, the drawing gets its markups back rather than keeping half.
+  try {
+    viewer.store.reset(incoming);
+    for (const calibration of calibrations as Calibration[]) {
+      viewer.store.setCalibration(calibration, calibration.page);
+    }
+    for (const sheet of sheets as SheetMeta[]) {
+      viewer.store.setSheet(sheet);
+    }
+  } catch {
+    viewer.store.reset(previous);
+    viewer.redraw();
+    deps.status("That markup set could not be loaded. The drawing's markups are unchanged.");
+    return;
   }
   viewer.redraw();
   deps.status(`Loaded ${incoming.length} markup${incoming.length === 1 ? "" : "s"}.`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const isPage = (value: unknown, first: number): boolean =>
+  Number.isInteger(value) && (value as number) >= first;
+
+/** The fields the store is handed an annotation by. The rest is the engine's to judge. */
+function isAnnotationShaped(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.kind === "string" &&
+    isPage(value.page, 1) &&
+    Array.isArray(value.points)
+  );
+}
+
+/** Page `0` is the document default, so it is allowed here where it is not for a markup. */
+function isCalibrationShaped(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isPage(value.page, 0) &&
+    typeof value.unitsPerPoint === "number" &&
+    Number.isFinite(value.unitsPerPoint) &&
+    value.unitsPerPoint > 0 &&
+    typeof value.unit === "string"
+  );
+}
+
+function isSheetShaped(value: unknown): boolean {
+  return isRecord(value) && typeof value.sheetId === "string" && isPage(value.page, 1);
 }

@@ -64,6 +64,12 @@ impl SavedView {
     /// that cannot be rendered at all.
     pub const MAX_ZOOM: f64 = 64.0;
 
+    /// The longest the engine's filter may be, in characters.
+    ///
+    /// A filter is a handful of kinds, statuses and disciplines. Sixteen thousand characters is
+    /// room for every value the engine has, several times over.
+    pub const MAX_FILTER: usize = 16_000;
+
     /// Record a view.
     ///
     /// Takes the document rather than its ids and page count separately, so those three cannot
@@ -127,6 +133,19 @@ impl SavedView {
             filter: None,
         })
     }
+
+    /// Attach the engine's filter, bounded.
+    ///
+    /// Opaque to the domain, deliberately, but opaque is not unbounded. It used to be assigned onto
+    /// the view after `new` had checked everything else, so a payload of any size was stored, and
+    /// handed back on every list of views.
+    ///
+    /// # Errors
+    /// [`DomainError::TooLong`] past [`SavedView::MAX_FILTER`].
+    pub fn with_filter(mut self, filter: Option<&str>) -> Result<Self> {
+        self.filter = optional_text(filter, "view filter", Self::MAX_FILTER)?;
+        Ok(self)
+    }
 }
 
 #[cfg(test)]
@@ -149,6 +168,22 @@ mod tests {
 
     fn view(zoom: f64, center: (f64, f64), page: u32) -> Result<SavedView> {
         SavedView::new(&document(), "Clash at F/4", page, zoom, center, 0)
+    }
+
+    #[test]
+    fn a_filter_is_opaque_but_not_unbounded() {
+        let filter = r#"{"kinds":["cloud"],"status":["open"]}"#;
+        let kept = view(1.0, (0.0, 0.0), 1)
+            .unwrap()
+            .with_filter(Some(filter))
+            .unwrap();
+        assert_eq!(kept.filter.as_deref(), Some(filter));
+
+        let enormous = "x".repeat(SavedView::MAX_FILTER + 1);
+        assert!(view(1.0, (0.0, 0.0), 1)
+            .unwrap()
+            .with_filter(Some(&enormous))
+            .is_err());
     }
 
     #[test]

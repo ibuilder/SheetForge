@@ -318,7 +318,7 @@ impl Markup {
             status: MarkupStatus::default(),
             geometry,
             metadata: metadata.validated()?,
-            quantity,
+            quantity: quantity.map(Quantity::validated).transpose()?,
             // Starts at 1, not 0: a stored version of 0 and "no version recorded" are then
             // distinguishable in a wire payload where the field is optional.
             version: 1,
@@ -358,6 +358,10 @@ impl Markup {
             Some(metadata) => Some(metadata.validated()?),
             None => None,
         };
+        let next_quantity = match patch.quantity {
+            Some(Some(quantity)) => Some(Some(quantity.validated()?)),
+            unchanged_or_cleared => unchanged_or_cleared,
+        };
         if let Some(status) = next_status {
             self.status = status;
         }
@@ -367,7 +371,7 @@ impl Markup {
         if let Some(geometry) = patch.geometry {
             self.geometry = geometry;
         }
-        if let Some(quantity) = patch.quantity {
+        if let Some(quantity) = next_quantity {
             self.quantity = quantity;
         }
 
@@ -460,6 +464,32 @@ mod tests {
         let err = a_markup(MarkupKind::Measurement, None).unwrap_err();
         assert!(err.to_string().contains("quantity"), "got: {err}");
         assert!(a_markup(MarkupKind::Measurement, Some(a_quantity())).is_ok());
+    }
+
+    /// `Quantity::validated` is tested on its own. This holds the two doors it guards to it, because
+    /// a check nobody calls protects nothing, and removing the call from either would pass the
+    /// quantity's own test.
+    #[test]
+    fn a_quantity_that_could_not_have_been_derived_is_refused_on_creation_and_on_edit() {
+        let mut too_precise = a_quantity();
+        too_precise.precision = Quantity::MAX_PRECISION + 1;
+        assert!(a_markup(MarkupKind::Measurement, Some(too_precise.clone())).is_err());
+
+        let mut markup = a_markup(MarkupKind::Measurement, Some(a_quantity())).unwrap();
+        let version = markup.version;
+        let refused = markup.apply(
+            MarkupPatch {
+                geometry: None,
+                metadata: None,
+                status: None,
+                quantity: Some(Some(too_precise)),
+            },
+            version,
+            ActorId::local(),
+        );
+        assert!(refused.is_err());
+        assert_eq!(markup.version, version, "a refused edit changes nothing");
+        assert_eq!(markup.quantity.map(|quantity| quantity.precision), Some(2));
     }
 
     #[test]

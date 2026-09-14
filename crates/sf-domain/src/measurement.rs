@@ -226,6 +226,48 @@ impl Quantity {
     /// Largest accepted display precision. Beyond this the digits are noise from an f64.
     pub const MAX_PRECISION: u8 = 6;
 
+    /// The longest a unit may be, in characters: `ft`, `m²`, `count`, `LF of 2x4 stud`.
+    pub const MAX_UNIT: usize = 32;
+
+    /// Check a quantity that arrived whole, rather than being derived here.
+    ///
+    /// [`Quantity::derive`] refuses a magnitude that is not a number and a display more precise
+    /// than an f64 can mean. A quantity from the interface arrives already built, because the
+    /// engine measured it, and it was stored with neither check and no bound on its unit. This holds
+    /// it to what `derive` guarantees, without re-deriving it.
+    ///
+    /// ## What it does not refuse
+    ///
+    /// A value with no calibration id. The host does not hold the engine's calibration, so that is
+    /// the normal shape of every measurement the interface sends, not a forgery. Refusing it would
+    /// refuse every takeoff.
+    ///
+    /// # Errors
+    /// [`DomainError::OutOfRange`] for a number that is not finite or an over-precise display, and
+    /// [`DomainError::TooLong`] for an over-long unit.
+    pub fn validated(self) -> Result<Self> {
+        let value_is_a_number = self.value.is_none_or(f64::is_finite);
+        if !self.raw_page_magnitude.is_finite() || !value_is_a_number {
+            return Err(DomainError::OutOfRange {
+                field: "quantity",
+                reason: "a measured value must be a number".into(),
+            });
+        }
+        if self.precision > Self::MAX_PRECISION {
+            return Err(DomainError::OutOfRange {
+                field: "precision",
+                reason: format!("at most {} decimal places", Self::MAX_PRECISION),
+            });
+        }
+        if self.unit.chars().count() > Self::MAX_UNIT {
+            return Err(DomainError::TooLong {
+                field: "unit",
+                max: Self::MAX_UNIT,
+            });
+        }
+        Ok(self)
+    }
+
     /// Derive a quantity from a page-space magnitude and the page's calibration.
     ///
     /// Passing `None` for the calibration is legitimate and common — a markup drawn before the page
@@ -555,5 +597,45 @@ mod tests {
         assert_eq!(MeasureKind::PolylineLength.scale_exponent(), 1);
         assert_eq!(MeasureKind::Area.scale_exponent(), 2);
         assert_eq!(MeasureKind::Volume.scale_exponent(), 3);
+    }
+}
+
+#[cfg(test)]
+mod arrived_whole {
+    use super::*;
+
+    fn measured() -> Quantity {
+        Quantity::derive(MeasureKind::Angle, 45.0, 1, None, 2).unwrap()
+    }
+
+    #[test]
+    fn a_quantity_from_the_interface_is_held_to_what_derive_would_produce() {
+        assert!(measured().validated().is_ok());
+
+        // The engine's normal shape: a value, and no calibration id the host could know.
+        let mut from_engine = measured();
+        from_engine.calibration_id = None;
+        from_engine.value = Some(12.5);
+        from_engine.unit = "ft".into();
+        assert!(
+            from_engine.validated().is_ok(),
+            "every takeoff arrives like this"
+        );
+
+        let mut too_precise = measured();
+        too_precise.precision = Quantity::MAX_PRECISION + 1;
+        assert!(too_precise.validated().is_err());
+
+        let mut long_unit = measured();
+        long_unit.unit = "x".repeat(Quantity::MAX_UNIT + 1);
+        assert!(long_unit.validated().is_err());
+
+        let mut not_a_number = measured();
+        not_a_number.value = Some(f64::INFINITY);
+        assert!(not_a_number.validated().is_err());
+
+        let mut no_magnitude = measured();
+        no_magnitude.raw_page_magnitude = f64::NAN;
+        assert!(no_magnitude.validated().is_err());
     }
 }

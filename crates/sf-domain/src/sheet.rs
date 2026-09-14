@@ -135,6 +135,12 @@ impl Sheet {
     /// The longest a sheet title is allowed to be.
     pub const MAX_TITLE: usize = 200;
 
+    /// The longest a discipline may be: `Architectural`, `Fire Protection`, a client's own code.
+    pub const MAX_DISCIPLINE: usize = 64;
+
+    /// The longest a printed revision may be: `P3`, `Rev 12A`, `C02 For Construction`.
+    pub const MAX_REVISION: usize = 32;
+
     /// Record what a page is.
     ///
     /// # Errors
@@ -176,6 +182,25 @@ impl Sheet {
         })
     }
 
+    /// Add the discipline and revision, bounded like the rest of the row.
+    ///
+    /// Separate from [`Sheet::new`] because the title-block reader finds them separately, and often
+    /// not at all. They used to be assigned onto the row after `new` had checked everything else,
+    /// so the two fields read off a hostile document by a heuristic were the two with no bound: a
+    /// title block misread as a megabyte of noise went into the register unrefused.
+    ///
+    /// # Errors
+    /// [`DomainError::TooLong`] if either is over its bound.
+    pub fn with_details(
+        mut self,
+        discipline: Option<&str>,
+        revision: Option<&str>,
+    ) -> Result<Self> {
+        self.discipline = optional_text(discipline, "discipline", Self::MAX_DISCIPLINE)?;
+        self.revision = optional_text(revision, "sheet revision", Self::MAX_REVISION)?;
+        Ok(self)
+    }
+
     /// Whether this row says anything at all.
     ///
     /// A page the heuristic could read nothing from produces an empty row, and storing thousands of
@@ -195,6 +220,33 @@ mod tests {
 
     fn ids() -> (ProjectId, DocumentRevisionId) {
         (ProjectId::new(), DocumentRevisionId::new())
+    }
+
+    #[test]
+    fn a_discipline_or_revision_read_as_noise_is_refused_like_the_rest_of_the_row() {
+        let sheet = || {
+            let (project, revision) = ids();
+            Sheet::new(
+                project,
+                revision,
+                1,
+                1,
+                Some("A-201"),
+                None,
+                SheetSource::Extracted,
+            )
+            .unwrap()
+        };
+        let long_discipline = "x".repeat(Sheet::MAX_DISCIPLINE + 1);
+        assert!(sheet().with_details(Some(&long_discipline), None).is_err());
+        let long_revision = "x".repeat(Sheet::MAX_REVISION + 1);
+        assert!(sheet().with_details(None, Some(&long_revision)).is_err());
+
+        let read = sheet()
+            .with_details(Some(" Architectural "), Some(" "))
+            .unwrap();
+        assert_eq!(read.discipline.as_deref(), Some("Architectural"));
+        assert_eq!(read.revision, None, "a blank revision is no revision");
     }
 
     #[test]

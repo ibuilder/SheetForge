@@ -61,6 +61,13 @@ const ATTACHMENTS: &str = "attachments";
 const CACHE: &str = "cache";
 const AUDIT_EXPORT: &str = "audit.ndjson";
 
+/// The largest manifest read, in MB.
+///
+/// A manifest lists a hash and a size per drawing, about a hundred bytes each. Sixteen megabytes is
+/// room for well over a hundred thousand drawings, past the package's own entry ceiling, so nothing
+/// a real package holds comes near it.
+const MAX_MANIFEST_MB: u64 = 16;
+
 /// What went wrong with a package.
 #[derive(Debug, Error)]
 pub enum PackageError {
@@ -227,9 +234,21 @@ impl Package {
     /// As [`Package::open`], plus [`SecurityError::TooLarge`] or
     /// [`SecurityError::TooManyEntries`].
     pub fn open_within(root: &Path, limits: ResourceLimits) -> Result<Self> {
-        let raw = fs::read_to_string(root.join(MANIFEST)).map_err(|_| PackageError::NotAPackage)?;
+        // Bounded, and before anything else is read. The manifest is the first thing taken from a
+        // package somebody else wrote, and it was read whole: a manifest.json of ten gigabytes was
+        // loaded into memory to discover it was not a manifest, before any package ceiling was
+        // consulted.
+        let raw = ResourceLimits::read_bounded(
+            &root.join(MANIFEST),
+            MAX_MANIFEST_MB,
+            "a project manifest",
+        )
+        .map_err(|error| match error {
+            SecurityError::TooLarge { .. } => PackageError::Security(error),
+            _ => PackageError::NotAPackage,
+        })?;
         let manifest: Manifest =
-            serde_json::from_str(&raw).map_err(|_| PackageError::NotAPackage)?;
+            serde_json::from_slice(&raw).map_err(|_| PackageError::NotAPackage)?;
         if manifest.format > PACKAGE_FORMAT {
             return Err(PackageError::NewerFormat {
                 found: manifest.format,
@@ -1010,6 +1029,26 @@ mod tests {
         )
         .map_or(0, Iterator::count);
         assert_eq!(attachments, 0, "a refused attachment left bytes behind");
+    }
+
+    #[test]
+    fn a_manifest_too_large_to_be_one_is_refused_before_it_is_read() {
+        let (_dir, package) = new_package();
+        let root = package.root().to_path_buf();
+        drop(package);
+        // Extended rather than written: the size is what is refused, and the check meets it from
+        // the file's metadata, before a byte is read.
+        let file = fs::File::create(root.join(MANIFEST)).unwrap();
+        file.set_len((MAX_MANIFEST_MB + 1) * 1024 * 1024).unwrap();
+        drop(file);
+
+        assert!(matches!(
+            Package::open(&root).err(),
+            Some(PackageError::Security(SecurityError::TooLarge {
+                subject: "a project manifest",
+                ..
+            }))
+        ));
     }
 
     #[test]
