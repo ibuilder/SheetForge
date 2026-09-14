@@ -39,7 +39,7 @@ jobs:
       matrix:
         target: [pdf_page_count, pdf_header, contained_path, check_name, redact, markup_metadata]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:

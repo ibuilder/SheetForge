@@ -45,7 +45,7 @@ jobs:
             args: ""
             rust-target: ""
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -192,7 +192,7 @@ jobs:
             os: ubuntu-22.04
             pattern: "*.deb"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
       - uses: actions/setup-node@v5
@@ -228,7 +228,7 @@ jobs:
       # Byte order, not the runner's locale, so the file sorts identically wherever it is made.
       LC_ALL: C
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref_name }}
       - uses: actions/setup-node@v5
